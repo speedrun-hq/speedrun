@@ -2,24 +2,24 @@ import Link from 'next/link';
 
 const Navigation = () => {
   return (
-    <nav className="bg-white shadow-sm">
+    <nav className="bg-black border-b-4 border-primary-500">
       <div className="container mx-auto px-4">
         <div className="flex justify-between h-16 items-center">
-          <Link href="/" className="text-xl font-bold text-gray-800">
-            ZetaFast
+          <Link href="/" className="arcade-text text-xl text-primary-500 hover:text-primary-400">
+            ZETAFAST
           </Link>
           <div className="flex space-x-4">
             <Link
               href="/intents"
-              className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+              className="arcade-text text-primary-500 hover:text-primary-400 px-3 py-2 text-sm"
             >
-              Intents
+              HIGH SCORES
             </Link>
             <Link
               href="/create"
-              className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md text-sm font-medium"
+              className="arcade-btn"
             >
-              Create Intent
+              NEW GAME
             </Link>
           </div>
         </div>

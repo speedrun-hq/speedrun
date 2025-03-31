@@ -94,6 +94,9 @@ frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 
+# API specific
+api/zetafast
+
 # Environment variables
 .env
 .env.*
