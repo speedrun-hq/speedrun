@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
-import { Chain, CreateIntentRequest } from '../types';
-import { intentService } from '../services/api';
+'use client';
 
-const CHAINS: Chain[] = ['ethereum', 'base', 'zetachain'];
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { CreateIntentRequest } from '@/types';
+import { intentService } from '@/services/api';
 
-export const CreateIntentForm: React.FC = () => {
+const CHAINS = ['ethereum', 'base', 'zetachain'] as const;
+
+export default function CreateIntentForm() {
+  const router = useRouter();
   const [formData, setFormData] = useState<CreateIntentRequest>({
     source_chain: 'ethereum',
     source_address: '',
-    target_chain: 'zetachain',
+    target_chain: 'base',
     target_address: '',
     amount: '',
   });
@@ -23,17 +27,14 @@ export const CreateIntentForm: React.FC = () => {
     setSuccess(false);
 
     try {
-      await intentService.create(formData);
+      await intentService.createIntent(formData);
       setSuccess(true);
-      setFormData({
-        source_chain: 'ethereum',
-        source_address: '',
-        target_chain: 'zetachain',
-        target_address: '',
-        amount: '',
-      });
+      setTimeout(() => {
+        router.push('/intents');
+      }, 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create intent');
+      setError('Failed to create intent');
+      console.error('Error creating intent:', err);
     } finally {
       setLoading(false);
     }
@@ -41,125 +42,130 @@ export const CreateIntentForm: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   return (
-    <div className="card">
-      <h2 className="text-2xl font-bold mb-6">Create New Intent</h2>
-      
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-md">
-          {error}
-        </div>
-      )}
-      
-      {success && (
-        <div className="mb-4 p-4 bg-green-50 text-green-700 rounded-md">
-          Intent created successfully!
-        </div>
-      )}
+    <div className="max-w-2xl mx-auto">
+      <div className="card">
+        <div className="px-4 py-5 sm:p-6">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">Create New Intent</h3>
+          <form onSubmit={handleSubmit} className="mt-5 space-y-6">
+            <div>
+              <label htmlFor="source_chain" className="block text-sm font-medium text-gray-700">
+                Source Chain
+              </label>
+              <select
+                id="source_chain"
+                name="source_chain"
+                value={formData.source_chain}
+                onChange={handleChange}
+                className="select"
+              >
+                {CHAINS.map(chain => (
+                  <option key={chain} value={chain}>
+                    {chain.charAt(0).toUpperCase() + chain.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="source_chain" className="block text-sm font-medium text-gray-700">
-            Source Chain
-          </label>
-          <select
-            id="source_chain"
-            name="source_chain"
-            value={formData.source_chain}
-            onChange={handleChange}
-            className="input mt-1"
-          >
-            {CHAINS.map((chain) => (
-              <option key={chain} value={chain}>
-                {chain.charAt(0).toUpperCase() + chain.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div>
+              <label htmlFor="source_address" className="block text-sm font-medium text-gray-700">
+                Source Address
+              </label>
+              <input
+                type="text"
+                id="source_address"
+                name="source_address"
+                value={formData.source_address}
+                onChange={handleChange}
+                required
+                className="input"
+                placeholder="0x..."
+              />
+            </div>
 
-        <div>
-          <label htmlFor="source_address" className="block text-sm font-medium text-gray-700">
-            Source Address
-          </label>
-          <input
-            type="text"
-            id="source_address"
-            name="source_address"
-            value={formData.source_address}
-            onChange={handleChange}
-            className="input mt-1"
-            placeholder="0x..."
-            required
-          />
-        </div>
+            <div>
+              <label htmlFor="target_chain" className="block text-sm font-medium text-gray-700">
+                Target Chain
+              </label>
+              <select
+                id="target_chain"
+                name="target_chain"
+                value={formData.target_chain}
+                onChange={handleChange}
+                className="select"
+              >
+                {CHAINS.map(chain => (
+                  <option key={chain} value={chain}>
+                    {chain.charAt(0).toUpperCase() + chain.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div>
-          <label htmlFor="target_chain" className="block text-sm font-medium text-gray-700">
-            Target Chain
-          </label>
-          <select
-            id="target_chain"
-            name="target_chain"
-            value={formData.target_chain}
-            onChange={handleChange}
-            className="input mt-1"
-          >
-            {CHAINS.map((chain) => (
-              <option key={chain} value={chain}>
-                {chain.charAt(0).toUpperCase() + chain.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div>
+              <label htmlFor="target_address" className="block text-sm font-medium text-gray-700">
+                Target Address
+              </label>
+              <input
+                type="text"
+                id="target_address"
+                name="target_address"
+                value={formData.target_address}
+                onChange={handleChange}
+                required
+                className="input"
+                placeholder="0x..."
+              />
+            </div>
 
-        <div>
-          <label htmlFor="target_address" className="block text-sm font-medium text-gray-700">
-            Target Address
-          </label>
-          <input
-            type="text"
-            id="target_address"
-            name="target_address"
-            value={formData.target_address}
-            onChange={handleChange}
-            className="input mt-1"
-            placeholder="0x..."
-            required
-          />
-        </div>
+            <div>
+              <label htmlFor="amount" className="block text-sm font-medium text-gray-700">
+                Amount (USDC)
+              </label>
+              <input
+                type="number"
+                id="amount"
+                name="amount"
+                value={formData.amount}
+                onChange={handleChange}
+                required
+                min="0"
+                step="0.01"
+                className="input"
+                placeholder="0.00"
+              />
+            </div>
 
-        <div>
-          <label htmlFor="amount" className="block text-sm font-medium text-gray-700">
-            Amount (USDC)
-          </label>
-          <input
-            type="number"
-            id="amount"
-            name="amount"
-            value={formData.amount}
-            onChange={handleChange}
-            className="input mt-1"
-            placeholder="1000000"
-            required
-            min="0"
-            step="1"
-          />
-          <p className="mt-1 text-sm text-gray-500">
-            Amount in USDC (6 decimal places). Example: 1 USDC = 1000000
-          </p>
-        </div>
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="btn btn-primary w-full"
-        >
-          {loading ? 'Creating...' : 'Create Intent'}
-        </button>
-      </form>
+            {success && (
+              <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                <p className="text-sm text-green-800">Intent created successfully! Redirecting...</p>
+              </div>
+            )}
+
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Creating...' : 'Create Intent'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
-}; 
+} 

@@ -14,55 +14,70 @@ API_BINARY_PATH=api/$(BINARY_NAME)
 # Build flags
 LDFLAGS=-ldflags "-w -s"
 
+# Docker commands
+DOCKER_COMPOSE=docker compose
+
 # Default target
 .DEFAULT_GOAL := build
 
-.PHONY: all build clean test run-api deps lint migrate dev docs check help install-all start-all
+.PHONY: all build clean test run-api deps lint migrate dev docs check help install-all start-all docker-db-start docker-db-stop docker-db-logs docker-db-clean
 
 all: build
 
 build:
-	$(GOBUILD) $(LDFLAGS) -o $(API_BINARY_PATH) ./api
+	cd api && $(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) .
 	cd frontend && npm run build
 
 clean:
-	$(GOCLEAN)
-	rm -f $(API_BINARY_PATH)
+	cd api && $(GOCLEAN)
+	rm -f api/$(BINARY_NAME)
 	cd frontend && rm -rf build node_modules
+	rm -rf node_modules
 
 test:
-	$(GOTEST) -v ./...
+	cd api && $(GOTEST) -v ./...
 	cd frontend && npm test
 
 run-api:
-	$(GOBUILD) $(LDFLAGS) -o $(API_BINARY_PATH) ./api
-	./$(API_BINARY_PATH)
+	cd api && $(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) .
+	cd api && ./$(BINARY_NAME)
 
 deps:
-	$(GOGET) ./...
+	cd api && $(GOGET) ./...
+	cd api && $(GOMOD) download
+	cd api && $(GOMOD) verify
 	cd frontend && npm install
+	npm install concurrently
 
 lint:
-	golangci-lint run
+	cd api && golangci-lint run
 	cd frontend && npm run lint
 
 migrate:
-	$(GOBUILD) -o $(API_BINARY_PATH) ./api
-	./$(API_BINARY_PATH) migrate
+	cd api && $(GOBUILD) -o $(BINARY_NAME) .
 
-dev:
-	$(GOCMD) run ./api/main.go
+# Docker targets
+docker-db-start:
+	$(DOCKER_COMPOSE) up -d postgres
+	@echo "Waiting for database to be ready..."
+	@until docker exec zetafast_postgres pg_isready -U zetafast; do sleep 1; done
+	@echo "Database is ready!"
 
-docs:
-	swag init -g api/main.go
+docker-db-stop:
+	$(DOCKER_COMPOSE) stop postgres
 
-check: lint test
+docker-db-logs:
+	$(DOCKER_COMPOSE) logs -f postgres
 
-install-all:
-	npm run install-all
+docker-db-clean:
+	$(DOCKER_COMPOSE) down -v
 
-start-all:
-	npm run dev
+# Start all services with Docker database
+start-all: docker-db-start
+	GO_ENV=production npx concurrently "cd frontend && npm run dev" "cd api && go run main.go"
+
+# Install all dependencies
+install-all: deps
 
 help:
 	@echo "Available commands:"
@@ -77,4 +92,8 @@ help:
 	@echo "  make docs       - Generate API documentation"
 	@echo "  make check      - Run linters and tests"
 	@echo "  make install-all- Install all dependencies"
-	@echo "  make start-all  - Start both API and frontend in development mode" 
+	@echo "  make start-all  - Start both API and frontend in development mode"
+	@echo "  make docker-db-start - Start the Docker database"
+	@echo "  make docker-db-stop - Stop the Docker database"
+	@echo "  make docker-db-logs - View Docker database logs"
+	@echo "  make docker-db-clean - Clean Docker database" 

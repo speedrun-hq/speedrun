@@ -3,11 +3,14 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/zeta-chain/zetafast/api/config"
 	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/handlers"
+	"github.com/zeta-chain/zetafast/api/services"
 )
 
 func main() {
@@ -18,17 +21,38 @@ func main() {
 	}
 
 	// Initialize database
-	database, err := db.NewDB(cfg.DatabaseURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+	var database db.Database
+	if os.Getenv("GO_ENV") == "development" {
+		log.Println("Using mock database for development")
+		database = services.NewMockDB()
+	} else {
+		database, err = db.NewDB(cfg.DatabaseURL)
+		if err != nil {
+			log.Fatalf("Failed to connect to database: %v", err)
+		}
+		// Initialize schema
+		if err := database.(*db.DB).InitSchema(); err != nil {
+			log.Fatalf("Failed to initialize database schema: %v", err)
+		}
 	}
 	defer database.Close()
 
 	// Initialize handlers
-	handlers.InitHandlers(database)
+	handlers.InitIntentHandlers(database)
 
-	// Initialize router
+	// Initialize router with trailing slash handling
 	router := gin.Default()
+	router.RemoveExtraSlash = true // Prevent automatic trailing slash redirects
+
+	// Configure CORS
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * 60 * 60, // 12 hours
+	}))
 
 	// Add middleware
 	router.Use(gin.Logger())
@@ -58,16 +82,16 @@ func initializeRoutes(router *gin.Engine) {
 		// Intent routes
 		intents := v1.Group("/intents")
 		{
-			intents.POST("/", handlers.CreateIntent)
-			intents.GET("/:id", handlers.GetIntent)
-			intents.GET("/", handlers.ListIntents)
+			intents.POST("", handlers.CreateIntent) // No trailing slash
+			intents.GET("/:id", handlers.GetIntent) // Keep trailing slash for parameterized routes
+			intents.GET("", handlers.ListIntents)   // No trailing slash
 		}
 
 		// Fulfillment routes
 		fulfillments := v1.Group("/fulfillments")
 		{
-			fulfillments.POST("/", handlers.CreateFulfillment)
-			fulfillments.GET("/:id", handlers.GetFulfillment)
+			fulfillments.POST("", handlers.CreateFulfillment) // No trailing slash
+			fulfillments.GET("/:id", handlers.GetFulfillment) // Keep trailing slash for parameterized routes
 		}
 	}
 }

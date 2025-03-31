@@ -1,15 +1,5 @@
 {
-  "name": "zetafast",
-  "version": "1.0.0",
-  "description": "ZetaFast - Cross-chain USDC Transfer Service",
-  "scripts": {
-    "start": "concurrently \"make run-api\" \"cd frontend && npm start\"",
-    "install-all": "npm install && cd frontend && npm install",
-    "build": "cd frontend && npm run build",
-    "test": "concurrently \"make test\" \"cd frontend && npm test\"",
-    "dev": "concurrently \"make run-api\" \"cd frontend && npm start\""
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+  "dependencies": {
+    "concurrently": "^9.1.2"
   }
 }

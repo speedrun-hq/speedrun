@@ -10,11 +10,11 @@ import (
 
 // FulfillmentService handles business logic for fulfillments
 type FulfillmentService struct {
-	db *db.DB
+	db db.Database
 }
 
 // NewFulfillmentService creates a new fulfillment service
-func NewFulfillmentService(db *db.DB) *FulfillmentService {
+func NewFulfillmentService(db db.Database) *FulfillmentService {
 	return &FulfillmentService{db: db}
 }
 

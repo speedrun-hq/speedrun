@@ -185,3 +185,47 @@ func ValidateFulfillmentRequest(req *models.CreateFulfillmentRequest) error {
 
 	return nil
 }
+
+// ValidateIntentRequest validates a create intent request
+func ValidateIntentRequest(req *models.CreateIntentRequest) error {
+	if req == nil {
+		return errors.New("request cannot be nil")
+	}
+
+	// Validate source chain
+	if err := ValidateChain(req.SourceChain); err != nil {
+		return err
+	}
+
+	// Validate destination chain
+	if err := ValidateChain(req.DestinationChain); err != nil {
+		return err
+	}
+
+	// Validate token
+	if req.Token != "USDC" {
+		return errors.New("only USDC token is supported")
+	}
+
+	// Validate amount
+	if err := ValidateAmount(req.Amount); err != nil {
+		return err
+	}
+
+	// Validate recipient address
+	if err := ValidateAddress(req.Recipient); err != nil {
+		return err
+	}
+
+	// Validate intent fee
+	if err := ValidateAmount(req.IntentFee); err != nil {
+		return err
+	}
+
+	// Validate source and destination chains are different
+	if req.SourceChain == req.DestinationChain {
+		return errors.New("source and destination chains must be different")
+	}
+
+	return nil
+}

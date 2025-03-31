@@ -2,37 +2,58 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zeta-chain/zetafast/api/db"
+	"github.com/zeta-chain/zetafast/api/models"
+	"github.com/zeta-chain/zetafast/api/utils"
 )
 
-// CreateIntentRequest represents the request body for creating a new intent
-type CreateIntentRequest struct {
-	SourceChain      string `json:"source_chain" binding:"required"`
-	DestinationChain string `json:"destination_chain" binding:"required"`
-	Token            string `json:"token" binding:"required"`
-	Amount           string `json:"amount" binding:"required"`
-	Recipient        string `json:"recipient" binding:"required"`
-	IntentFee        string `json:"intent_fee" binding:"required"`
+var database db.Database
+
+// InitIntentHandlers initializes the intent handlers with required dependencies
+func InitIntentHandlers(db db.Database) {
+	database = db
 }
 
 // CreateIntent handles the creation of a new transfer intent
 func CreateIntent(c *gin.Context) {
-	var req CreateIntentRequest
+	var req models.CreateIntentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// TODO: Implement intent creation logic
-	// 1. Validate chains and token
-	// 2. Create CCTX
-	// 3. Register intent in database
-	// 4. Return intent ID
+	// Validate request
+	if err := utils.ValidateIntentRequest(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create intent
+	intent := &models.Intent{
+		ID:               utils.GenerateID(),
+		SourceChain:      req.SourceChain,
+		DestinationChain: req.DestinationChain,
+		Token:            req.Token,
+		Amount:           req.Amount,
+		Recipient:        req.Recipient,
+		IntentFee:        req.IntentFee,
+		Status:           models.IntentStatusPending,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+
+	// Store intent in database
+	if err := database.CreateIntent(intent); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "Intent created successfully",
-		// "intent_id": intentID,
+		"intent":  intent,
 	})
 }
 
@@ -44,25 +65,32 @@ func GetIntent(c *gin.Context) {
 		return
 	}
 
-	// TODO: Implement intent retrieval logic
-	// 1. Fetch intent from database
-	// 2. Return intent details
+	intent, err := database.GetIntent(intentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Intent retrieved successfully",
-		// "intent": intent,
+		"intent": intent,
 	})
 }
 
 // ListIntents retrieves a list of intents with optional filtering
 func ListIntents(c *gin.Context) {
-	// TODO: Implement intent listing logic
-	// 1. Parse query parameters for filtering
-	// 2. Fetch intents from database
-	// 3. Return paginated list
+	page := 1
+	limit := 10
+
+	intents, total, err := database.ListIntents(page, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Intents retrieved successfully",
-		// "intents": intents,
+		"intents": intents,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
 	})
 }

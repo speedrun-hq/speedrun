@@ -1,55 +1,68 @@
-import axios from 'axios';
-import { Intent, Fulfillment, CreateIntentRequest, CreateFulfillmentRequest } from '../types';
+import { Intent, Fulfillment, CreateIntentRequest, CreateFulfillmentRequest } from '@/types';
+import { ApiError } from '@/utils/errors';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080/api/v1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+class ApiService {
+  private async fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
 
-// Add API key to requests
-api.interceptors.request.use((config) => {
-  const apiKey = process.env.REACT_APP_API_KEY;
-  if (apiKey) {
-    config.headers.Authorization = `Bearer ${apiKey}`;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new ApiError(
+          data.error || 'An error occurred',
+          response.status,
+          data.code
+        );
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      if (error instanceof Error) {
+        throw new ApiError(error.message);
+      }
+      throw new ApiError('An unexpected error occurred');
+    }
   }
-  return config;
-});
 
-export const intentService = {
-  create: async (data: CreateIntentRequest): Promise<Intent> => {
-    const response = await api.post('/intents', data);
-    return response.data.intent;
-  },
+  // Intent endpoints
+  async listIntents(page: number, limit: number): Promise<{ intents: Intent[]; total: number }> {
+    return this.fetchApi(`/intents?page=${page}&limit=${limit}`);
+  }
 
-  get: async (id: string): Promise<Intent> => {
-    const response = await api.get(`/intents/${id}`);
-    return response.data.intent;
-  },
+  async getIntent(id: string): Promise<Intent> {
+    return this.fetchApi(`/intents/${id}`);
+  }
 
-  list: async (params?: {
-    status?: string;
-    source_chain?: string;
-    target_chain?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{ intents: Intent[]; total: number; page: number; limit: number }> => {
-    const response = await api.get('/intents', { params });
-    return response.data;
-  },
-};
+  async createIntent(data: CreateIntentRequest): Promise<Intent> {
+    return this.fetchApi('/intents', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
 
-export const fulfillmentService = {
-  create: async (data: CreateFulfillmentRequest): Promise<Fulfillment> => {
-    const response = await api.post('/fulfillments', data);
-    return response.data.fulfillment;
-  },
+  // Fulfillment endpoints
+  async createFulfillment(data: CreateFulfillmentRequest): Promise<Fulfillment> {
+    return this.fetchApi('/fulfillments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
 
-  get: async (id: string): Promise<Fulfillment> => {
-    const response = await api.get(`/fulfillments/${id}`);
-    return response.data.fulfillment;
-  },
-}; 
+  async getFulfillment(id: string): Promise<Fulfillment> {
+    return this.fetchApi(`/fulfillments/${id}`);
+  }
+}
+
+export const apiService = new ApiService(); 

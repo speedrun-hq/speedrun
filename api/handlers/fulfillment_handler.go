@@ -13,7 +13,7 @@ import (
 var fulfillmentService *services.FulfillmentService
 
 // InitHandlers initializes the handlers with required dependencies
-func InitHandlers(database *db.DB) {
+func InitHandlers(database db.Database) {
 	fulfillmentService = services.NewFulfillmentService(database)
 }
 
