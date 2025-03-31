@@ -25,8 +25,11 @@ go.sum
 *.swo
 .DS_Store
 
-# Frontend specific
+# Node modules
+node_modules/
 frontend/node_modules/
+
+# Frontend specific
 frontend/.pnp
 frontend/.pnp.js
 frontend/coverage/
