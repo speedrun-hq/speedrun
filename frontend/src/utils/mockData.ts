@@ -4,7 +4,7 @@ const MOCK_INTENTS: Intent[] = [
   {
     id: '1',
     source_chain: 'base',
-    destination_chain: 'zetachain',
+    destination_chain: 'arbitrum',
     token: 'USDC',
     amount: '100.00',
     recipient: '0x1234567890123456789012345678901234567890',
@@ -15,7 +15,7 @@ const MOCK_INTENTS: Intent[] = [
   },
   {
     id: '2',
-    source_chain: 'ethereum',
+    source_chain: 'arbitrum',
     destination_chain: 'base',
     token: 'USDC',
     amount: '250.50',
@@ -28,7 +28,7 @@ const MOCK_INTENTS: Intent[] = [
   {
     id: '3',
     source_chain: 'base',
-    destination_chain: 'zetachain',
+    destination_chain: 'arbitrum',
     token: 'USDC',
     amount: '75.25',
     recipient: '0xabcdef1234567890abcdef1234567890abcdef12',

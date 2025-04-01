@@ -32,7 +32,7 @@ func LoadConfig() (*Config, error) {
 		DatabaseURL:      getEnvOrDefault("DATABASE_URL", "postgresql://localhost:5432/zetafast?sslmode=disable"),
 		ZetaChainRPCURL:  getEnvOrDefault("ZETACHAIN_RPC_URL", "https://zetachain-athens-evm.blockpi.network/v1/rpc/public"),
 		ZetaChainChainID: getEnvOrDefault("ZETACHAIN_CHAIN_ID", "7001"),
-		SupportedChains:  []string{"ethereum", "base", "zetachain"}, // Updated supported chains
+		SupportedChains:  []string{"base", "arbitrum"}, // Only supporting Base and Arbitrum chains
 	}
 
 	return config, nil

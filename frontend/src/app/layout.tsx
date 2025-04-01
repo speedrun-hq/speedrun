@@ -3,8 +3,8 @@ import './globals.css';
 import Navigation from '@/components/Navigation';
 
 export const metadata: Metadata = {
-  title: 'ZetaFast',
-  description: 'Cross-chain USDC Transfer Service',
+  title: 'Speedrun',
+  description: 'Fast Cross-Chain Transfers Powered by Speedrunners',
 };
 
 export default function RootLayout({
