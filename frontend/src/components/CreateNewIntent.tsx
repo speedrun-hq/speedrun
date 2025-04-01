@@ -5,6 +5,12 @@ import { TokenSelector } from './TokenSelector';
 import { FormInput } from './FormInput';
 import ErrorMessage from '@/components/ErrorMessage';
 import { useIntentForm } from '@/hooks/useIntentForm';
+import { base, arbitrum } from 'wagmi/chains';
+
+// Helper function to convert chain name to ID
+const getChainId = (chainName: 'BASE' | 'ARBITRUM'): number => {
+  return chainName === 'BASE' ? base.id : arbitrum.id;
+};
 
 export default function CreateNewIntent() {
   const {
@@ -59,8 +65,8 @@ export default function CreateNewIntent() {
           <div>
             <label className="block text-[hsl(var(--yellow))] mb-2 font-mono">SOURCE CHAIN</label>
             <ChainSelector
-              value={formState.sourceChain}
-              onChange={updateSourceChain}
+              value={getChainId(formState.sourceChain)}
+              onChange={(value) => updateSourceChain(value === base.id ? 'BASE' : 'ARBITRUM')}
               label="SELECT SOURCE CHAIN"
               disabled={formState.isSubmitting}
             />
@@ -69,8 +75,8 @@ export default function CreateNewIntent() {
           <div>
             <label className="block text-[hsl(var(--yellow))] mb-2 font-mono">DESTINATION CHAIN</label>
             <ChainSelector
-              value={formState.destinationChain}
-              onChange={updateDestinationChain}
+              value={getChainId(formState.destinationChain)}
+              onChange={(value) => updateDestinationChain(value === base.id ? 'BASE' : 'ARBITRUM')}
               label="SELECT DESTINATION CHAIN"
               disabled={formState.isSubmitting}
             />

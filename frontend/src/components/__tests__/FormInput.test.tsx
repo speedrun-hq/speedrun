@@ -70,7 +70,7 @@ describe('FormInput', () => {
 
   it('applies custom className', () => {
     const customClass = 'my-custom-class';
-    render(<FormInput className={customClass} />);
+    render(<FormInput value="" onChange={jest.fn()} className={customClass} />);
     const input = screen.getByRole('textbox');
     expect(input.className).toContain(customClass);
   });
