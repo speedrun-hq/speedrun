@@ -18,6 +18,10 @@ ZetaFast is a novel cross-chain transfer system that leverages ZetaChain's infra
 
 ### Core Components
 
+1. **Smart Contracts**
+   - Intent-based transfers witht routing on ZetaChain
+   - Smart contracts for each supported VMs
+
 1. **Web Interface (React)**
    - Transfer initiation form
    - Real-time status tracking
