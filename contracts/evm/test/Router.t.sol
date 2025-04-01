@@ -353,7 +353,7 @@ contract RouterTest is Test {
         address intentContract = makeAddr("intentContract");
         uint256 targetChain = 2;
         uint256 amount = 1000 ether;
-        uint256 tip = 300 ether; // Increased tip to account for slippage from all three swaps
+        uint256 tip = 300 ether;
         uint256 gasFee = 50 ether;
         bytes32 intentId = keccak256("test-intent");
         bytes memory receiverBytes = abi.encodePacked(makeAddr("receiver"));
