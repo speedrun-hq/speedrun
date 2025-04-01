@@ -56,9 +56,23 @@ module.exports = {
           800: 'hsl(var(--yellow) / 0.9)',
           900: 'hsl(var(--yellow) / 1)',
         },
+        'neon-green': '#00ff00',
       },
       fontFamily: {
         arcade: ['"Press Start 2P"', 'cursive'],
+      },
+      animation: {
+        'neon-pulse': 'neon-pulse 2s ease-in-out infinite',
+      },
+      keyframes: {
+        'neon-pulse': {
+          '0%, 100%': {
+            textShadow: '0 0 7px #00ff00, 0 0 10px #00ff00, 0 0 21px #00ff00',
+          },
+          '50%': {
+            textShadow: '0 0 10px #00ff00, 0 0 15px #00ff00, 0 0 30px #00ff00',
+          },
+        },
       },
     },
   },

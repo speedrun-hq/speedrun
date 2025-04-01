@@ -1,7 +1,7 @@
 'use client';
 
-import CreateIntentForm from '@/components/CreateIntentForm';
+import { CreateNewIntentWrapper } from '@/components/CreateNewIntentWrapper';
 
 export default function CreateIntentPage() {
-  return <CreateIntentForm />;
+  return <CreateNewIntentWrapper />;
 } 

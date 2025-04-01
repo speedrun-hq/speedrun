@@ -81,7 +81,7 @@ func ValidateAmount(amount string) error {
 	}
 
 	// Check if amount is positive
-	if value.Sign() <= 0 {
+	if value.Sign() < 0 {
 		return errors.New("amount must be positive")
 	}
 
