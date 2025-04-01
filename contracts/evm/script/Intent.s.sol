@@ -11,11 +11,17 @@ contract IntentScript is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
+        // Get gateway and router addresses from environment variables
+        address gateway = vm.envAddress("GATEWAY_ADDRESS");
+        address router = vm.envAddress("ROUTER_ADDRESS");
+
         // Deploy Intent contract
         Intent intent = new Intent();
-        intent.initialize();
+        intent.initialize(gateway, router);
 
         console2.log("Intent deployed to:", address(intent));
+        console2.log("Gateway address:", gateway);
+        console2.log("Router address:", router);
 
         vm.stopBroadcast();
     }

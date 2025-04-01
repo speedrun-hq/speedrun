@@ -9,19 +9,25 @@ contract IntentTest is Test {
     address public owner;
     address public user1;
     address public user2;
+    address public gateway;
+    address public router;
 
     function setUp() public {
         owner = address(this);
         user1 = makeAddr("user1");
         user2 = makeAddr("user2");
+        gateway = makeAddr("gateway");
+        router = makeAddr("router");
 
         // Deploy Intent contract
         intent = new Intent();
-        intent.initialize();
+        intent.initialize(gateway, router);
     }
 
     function test_Initialization() public {
         assertEq(intent.owner(), owner);
+        assertEq(intent.gateway(), gateway);
+        assertEq(intent.router(), router);
     }
 
     // TODO: Add more tests for:
