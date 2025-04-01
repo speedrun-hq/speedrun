@@ -353,7 +353,7 @@ contract RouterTest is Test {
         address intentContract = makeAddr("intentContract");
         uint256 targetChain = 2;
         uint256 amount = 1000 ether;
-        uint256 tip = 300 ether;
+        uint256 tip = 300 ether; // Increased tip to account for slippage from all three swaps
         uint256 gasFee = 50 ether;
         bytes32 intentId = keccak256("test-intent");
         bytes memory receiverBytes = abi.encodePacked(makeAddr("receiver"));
@@ -391,21 +391,25 @@ contract RouterTest is Test {
             receiverBytes
         );
 
-        // Setup message context
+        // Set up intent contract for source chain
+        vm.prank(owner);
+        router.setIntentContract(1, intentContract);
+
+        // Create message context with senderEVM matching the intent contract
         IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
             sender: abi.encodePacked(makeAddr("sender")),
-            senderEVM: makeAddr("senderEVM"),
+            senderEVM: intentContract,
             chainID: 1
         });
 
         // Setup token associations
         vm.mockCall(
             address(router),
-            abi.encodeWithSelector(Router.getTokenAssociation.selector, address(inputToken), targetChain),
+            abi.encodeWithSelector(router.getTokenAssociation.selector, address(inputToken), targetChain),
             abi.encode(makeAddr("targetAsset"), address(targetZRC20), targetChain)
         );
 
-        // Setup intent contract first
+        // Setup intent contract for target chain
         router.setIntentContract(targetChain, intentContract);
 
         // Setup gas fee info

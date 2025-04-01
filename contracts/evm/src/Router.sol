@@ -180,6 +180,9 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         uint256 amount,
         bytes calldata message
     ) external onlyGateway {
+        // Verify the call is coming from the intent contract for this chain
+        require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
+
         // Decode intent payload
         PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(message);
 
