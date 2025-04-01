@@ -36,15 +36,15 @@ const IntentList: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'text-primary-500 border-primary-500';
       case 'completed':
-        return 'bg-green-100 text-green-800';
+        return 'text-secondary-500 border-secondary-500';
       case 'failed':
-        return 'bg-red-100 text-red-800';
+        return 'text-accent-500 border-accent-500';
       case 'cancelled':
-        return 'bg-gray-100 text-gray-800';
+        return 'text-gray-500 border-gray-500';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'text-gray-500 border-gray-500';
     }
   };
 
@@ -55,7 +55,7 @@ const IntentList: React.FC = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="arcade-text text-primary-500 animate-pulse">LOADING...</div>
       </div>
     );
   }
@@ -66,31 +66,32 @@ const IntentList: React.FC = () => {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Transfer Intents</h2>
+      <h2 className="arcade-text text-2xl mb-6 text-center text-primary-500">HIGH SCORES</h2>
       {intents.length === 0 ? (
-        <p className="text-gray-500">No intents found</p>
+        <p className="arcade-text text-gray-500 text-center">NO RECORDS FOUND</p>
       ) : (
-        <div className="space-y-4">
-          {intents.map((intent) => (
+        <div className="arcade-container">
+          {intents.map((intent, index) => (
             <div
               key={intent.id}
-              className="p-4 border rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              className="arcade-card"
             >
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-medium">ID: {intent.id}</p>
-                  <p className="text-sm text-gray-600">
+                <div className="space-y-2">
+                  <p className="arcade-text text-sm text-primary-500">#{index + 1}</p>
+                  <p className="arcade-text text-xs text-primary-500">ID: {intent.id}</p>
+                  <p className="arcade-text text-xs text-primary-500">
                     {intent.source_chain} → {intent.destination_chain}
                   </p>
-                  <p className="text-sm text-gray-600">
-                    Amount: {intent.amount} {intent.token}
+                  <p className="arcade-text text-xs text-primary-500">
+                    AMOUNT: {intent.amount} {intent.token}
                   </p>
-                  <p className="text-sm text-gray-500">
-                    Created: {formatDate(intent.created_at)}
+                  <p className="arcade-text text-xs text-gray-500">
+                    {formatDate(intent.created_at)}
                   </p>
                 </div>
-                <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(intent.status)}`}>
-                  {intent.status}
+                <span className={`arcade-status ${getStatusColor(intent.status)} border-2`}>
+                  {intent.status.toUpperCase()}
                 </span>
               </div>
             </div>
@@ -100,20 +101,20 @@ const IntentList: React.FC = () => {
 
       {/* Pagination */}
       {total > ITEMS_PER_PAGE && (
-        <div className="mt-6 flex justify-center space-x-2">
+        <div className="flex justify-center space-x-4 mt-6">
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-4 py-2 border rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="arcade-btn disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Previous
+            PREV
           </button>
           <button
             onClick={() => setPage(p => p + 1)}
             disabled={page * ITEMS_PER_PAGE >= total}
-            className="px-4 py-2 border rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="arcade-btn disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Next
+            NEXT
           </button>
         </div>
       )}

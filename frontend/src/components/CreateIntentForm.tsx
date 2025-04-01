@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CreateIntentRequest } from '@/types';
-import { intentService } from '@/services/api';
+import { apiService } from '@/services/api';
+import { ApiError } from '@/utils/errors';
 
 const CHAINS = ['ethereum', 'base', 'zetachain'] as const;
 
@@ -11,13 +12,14 @@ export default function CreateIntentForm() {
   const router = useRouter();
   const [formData, setFormData] = useState<CreateIntentRequest>({
     source_chain: 'ethereum',
-    source_address: '',
-    target_chain: 'base',
-    target_address: '',
+    destination_chain: 'base',
+    token: 'USDC',
     amount: '',
+    recipient: '',
+    intent_fee: '0',
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
   const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,13 +29,19 @@ export default function CreateIntentForm() {
     setSuccess(false);
 
     try {
-      await intentService.createIntent(formData);
+      await apiService.createIntent(formData);
       setSuccess(true);
       setTimeout(() => {
         router.push('/intents');
       }, 2000);
     } catch (err) {
-      setError('Failed to create intent');
+      if (err instanceof ApiError) {
+        setError(err);
+      } else if (err instanceof Error) {
+        setError(new ApiError(err.message));
+      } else {
+        setError(new ApiError('An unexpected error occurred'));
+      }
       console.error('Error creating intent:', err);
     } finally {
       setLoading(false);
@@ -50,83 +58,67 @@ export default function CreateIntentForm() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="card">
+      <div className="arcade-container">
         <div className="px-4 py-5 sm:p-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">Create New Intent</h3>
+          <h3 className="arcade-text text-lg text-center text-primary-500 mb-6">CREATE NEW INTENT</h3>
           <form onSubmit={handleSubmit} className="mt-5 space-y-6">
             <div>
-              <label htmlFor="source_chain" className="block text-sm font-medium text-gray-700">
-                Source Chain
+              <label htmlFor="source_chain" className="arcade-text block text-xs text-primary-500 mb-2">
+                SOURCE CHAIN
               </label>
               <select
                 id="source_chain"
                 name="source_chain"
                 value={formData.source_chain}
                 onChange={handleChange}
-                className="select"
+                className="arcade-select"
               >
                 {CHAINS.map(chain => (
                   <option key={chain} value={chain}>
-                    {chain.charAt(0).toUpperCase() + chain.slice(1)}
+                    {chain.toUpperCase()}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label htmlFor="source_address" className="block text-sm font-medium text-gray-700">
-                Source Address
-              </label>
-              <input
-                type="text"
-                id="source_address"
-                name="source_address"
-                value={formData.source_address}
-                onChange={handleChange}
-                required
-                className="input"
-                placeholder="0x..."
-              />
-            </div>
-
-            <div>
-              <label htmlFor="target_chain" className="block text-sm font-medium text-gray-700">
-                Target Chain
+              <label htmlFor="destination_chain" className="arcade-text block text-xs text-primary-500 mb-2">
+                DESTINATION CHAIN
               </label>
               <select
-                id="target_chain"
-                name="target_chain"
-                value={formData.target_chain}
+                id="destination_chain"
+                name="destination_chain"
+                value={formData.destination_chain}
                 onChange={handleChange}
-                className="select"
+                className="arcade-select"
               >
                 {CHAINS.map(chain => (
                   <option key={chain} value={chain}>
-                    {chain.charAt(0).toUpperCase() + chain.slice(1)}
+                    {chain.toUpperCase()}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label htmlFor="target_address" className="block text-sm font-medium text-gray-700">
-                Target Address
+              <label htmlFor="recipient" className="arcade-text block text-xs text-primary-500 mb-2">
+                RECIPIENT ADDRESS
               </label>
               <input
                 type="text"
-                id="target_address"
-                name="target_address"
-                value={formData.target_address}
+                id="recipient"
+                name="recipient"
+                value={formData.recipient}
                 onChange={handleChange}
                 required
-                className="input"
+                className="arcade-input"
                 placeholder="0x..."
               />
             </div>
 
             <div>
-              <label htmlFor="amount" className="block text-sm font-medium text-gray-700">
-                Amount (USDC)
+              <label htmlFor="amount" className="arcade-text block text-xs text-primary-500 mb-2">
+                AMOUNT (USDC)
               </label>
               <input
                 type="number"
@@ -137,20 +129,38 @@ export default function CreateIntentForm() {
                 required
                 min="0"
                 step="0.01"
-                className="input"
+                className="arcade-input"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="intent_fee" className="arcade-text block text-xs text-primary-500 mb-2">
+                INTENT FEE
+              </label>
+              <input
+                type="number"
+                id="intent_fee"
+                name="intent_fee"
+                value={formData.intent_fee}
+                onChange={handleChange}
+                required
+                min="0"
+                step="0.01"
+                className="arcade-input"
                 placeholder="0.00"
               />
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <p className="text-sm text-red-800">{error}</p>
+              <div className="arcade-text bg-red-900/50 border-2 border-red-500 p-4 text-red-500">
+                <p className="text-xs">{error.message}</p>
               </div>
             )}
 
             {success && (
-              <div className="bg-green-50 border border-green-200 rounded-md p-4">
-                <p className="text-sm text-green-800">Intent created successfully! Redirecting...</p>
+              <div className="arcade-text bg-green-900/50 border-2 border-green-500 p-4 text-green-500">
+                <p className="text-xs">INTENT CREATED SUCCESSFULLY! REDIRECTING...</p>
               </div>
             )}
 
@@ -158,9 +168,9 @@ export default function CreateIntentForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                className="arcade-btn w-full mt-6"
               >
-                {loading ? 'Creating...' : 'Create Intent'}
+                {loading ? 'PROCESSING...' : 'START TRANSFER'}
               </button>
             </div>
           </form>

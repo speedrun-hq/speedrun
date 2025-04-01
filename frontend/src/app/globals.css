@@ -1,11 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --primary: 142 100% 50%;
+    --secondary: 0 100% 50%;
+    --accent: 240 100% 50%;
+    --yellow: 60 100% 50%;
   }
 }
 
@@ -32,5 +38,50 @@
 
   .select {
     @apply mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md;
+  }
+
+  .arcade-text {
+    font-family: 'Press Start 2P', cursive;
+    text-shadow: 0 0 10px hsl(var(--primary));
+  }
+
+  .arcade-container {
+    @apply bg-black border-4 border-primary-500 p-4 rounded-lg;
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.2);
+  }
+
+  .arcade-card {
+    @apply bg-black border-2 border-primary-500 p-4 mb-4;
+    box-shadow: 0 0 10px hsl(var(--primary) / 0.1);
+  }
+
+  .arcade-btn {
+    @apply inline-flex items-center px-4 py-2 border-2 border-primary-500 text-sm font-medium rounded-none;
+    font-family: 'Press Start 2P', cursive;
+    text-shadow: 0 0 5px hsl(var(--primary));
+    background: black;
+    color: hsl(var(--primary));
+    transition: all 0.2s;
+  }
+
+  .arcade-btn:hover {
+    background: hsl(var(--primary));
+    color: black;
+    box-shadow: 0 0 15px hsl(var(--primary));
+  }
+
+  .arcade-input {
+    @apply mt-1 block w-full bg-black border-2 border-primary-500 text-primary-500 p-2;
+    font-family: 'Press Start 2P', cursive;
+  }
+
+  .arcade-select {
+    @apply mt-1 block w-full bg-black border-2 border-primary-500 text-primary-500 p-2;
+    font-family: 'Press Start 2P', cursive;
+  }
+
+  .arcade-status {
+    @apply px-2 py-1 text-xs font-bold;
+    font-family: 'Press Start 2P', cursive;
   }
 } 
