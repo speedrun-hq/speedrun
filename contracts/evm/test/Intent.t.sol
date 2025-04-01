@@ -31,6 +31,14 @@ contract IntentTest is Test {
         uint256 salt
     );
 
+    // Define the event for intent fulfillment
+    event IntentFulfilled(
+        bytes32 indexed intentId,
+        address indexed asset,
+        uint256 amount,
+        address indexed receiver
+    );
+
     function setUp() public {
         owner = address(this);
         user1 = makeAddr("user1");
@@ -150,8 +158,159 @@ contract IntentTest is Test {
         );
     }
 
+    function test_Fulfill() public {
+        // First create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Transfer tokens to the intent contract for fulfillment
+        token.mint(address(intent), amount);
+
+        // Expect the IntentFulfilled event
+        vm.expectEmit(true, true, false, true);
+        emit IntentFulfilled(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+
+        // Call fulfill
+        vm.prank(user1);
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+
+        // Verify fulfillment was registered
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        assertEq(intent.fulfillments(fulfillmentIndex), user1);
+
+        // Verify tokens were transferred
+        assertEq(token.balanceOf(user2), amount);
+    }
+
+    function test_FulfillAlreadyFulfilled() public {
+        // First create and fulfill an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Transfer tokens to the intent contract for fulfillment
+        token.mint(address(intent), amount);
+
+        // First fulfillment
+        vm.prank(user1);
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+
+        // Try to fulfill again with same parameters and expect revert
+        vm.prank(user1);
+        vm.expectRevert("Intent already fulfilled with these parameters");
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+    }
+
+    function test_FulfillWithDifferentParameters() public {
+        // First create and fulfill an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Transfer tokens to the intent contract for both fulfillments
+        token.mint(address(intent), amount + (amount + 1 ether));
+
+        // First fulfillment
+        vm.prank(user1);
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+
+        // Try to fulfill with different amount
+        vm.prank(user1);
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount + 1 ether,
+            user2
+        );
+
+        // Verify both fulfillments were registered
+        bytes32 fulfillmentIndex1 = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        bytes32 fulfillmentIndex2 = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount + 1 ether,
+            user2
+        );
+        assertEq(intent.fulfillments(fulfillmentIndex1), user1);
+        assertEq(intent.fulfillments(fulfillmentIndex2), user1);
+
+        // Verify tokens were transferred for both fulfillments
+        assertEq(token.balanceOf(user2), amount + (amount + 1 ether));
+    }
+
     // TODO: Add more tests for:
-    // - fulfill
     // - complete
     // - onCall
     // - onRevert

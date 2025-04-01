@@ -53,4 +53,26 @@ library PayloadUtils {
             receiver: receiver
         });
     }
+
+    /**
+     * @dev Computes a unique index for a fulfillment
+     * @param intentId The ID of the intent
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     * @return The computed fulfillment index
+     */
+    function computeFulfillmentIndex(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver
+    ) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(
+            intentId,
+            asset,
+            amount,
+            receiver
+        ));
+    }
 } 

@@ -22,6 +22,20 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Router contract address on ZetaChain
     address public router;
 
+    // Mapping to track fulfillments
+    mapping(bytes32 => address) public fulfillments;
+
+    // Struct to track settlement status
+    struct Settlement {
+        bool settled;
+        bool fulfilled;
+        uint256 paidTip;
+        address fulfiller;
+    }
+
+    // Mapping to track settlements
+    mapping(bytes32 => Settlement) public settlements;
+
     // Event emitted when a new intent is created
     event IntentInitiated(
         bytes32 indexed intentId,
@@ -31,6 +45,14 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bytes receiver,
         uint256 tip,
         uint256 salt
+    );
+
+    // Event emitted when an intent is fulfilled
+    event IntentFulfilled(
+        bytes32 indexed intentId,
+        address indexed asset,
+        uint256 amount,
+        address indexed receiver
     );
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -90,7 +112,7 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             receiver
         );
 
-        // Create empty revert options
+        // Create revert options
         IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
             revertAddress: msg.sender, // in case of revert, the funds are directly sent back to the sender
             callOnRevert: false,
@@ -122,8 +144,86 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return intentId;
     }
 
+    /**
+     * @dev Fulfills an intent by transferring tokens to the receiver
+     * @param intentId The ID of the intent to fulfill
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     */
+    function fulfill(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver
+    ) external {
+        // Compute the fulfillment index
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+
+        // Check if intent is already fulfilled with these parameters
+        require(fulfillments[fulfillmentIndex] == address(0), "Intent already fulfilled with these parameters");
+
+        // Transfer tokens from this contract to the receiver
+        IERC20(asset).transfer(receiver, amount);
+
+        // Register the fulfillment
+        fulfillments[fulfillmentIndex] = msg.sender;
+
+        // Emit event
+        emit IntentFulfilled(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+    }
+
+    /**
+     * @dev Internal function to settle an intent
+     * @param intentId The ID of the intent to settle
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     * @param tip Tip for the fulfiller
+     */
+    function _settle(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver,
+        uint256 tip
+    ) internal {
+        // Compute the fulfillment index
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+
+        // Get the fulfiller if it exists
+        address fulfiller = fulfillments[fulfillmentIndex];
+        bool fulfilled = fulfiller != address(0);
+
+        // Create settlement record
+        Settlement storage settlement = settlements[fulfillmentIndex];
+        settlement.settled = true;
+        settlement.fulfilled = fulfilled;
+        settlement.fulfiller = fulfiller;
+
+        // If there's a fulfiller, transfer the tip
+        if (fulfilled) {
+            IERC20(asset).transfer(fulfiller, amount + tip);
+            settlement.paidTip = tip;
+        }
+    }
+
     // TODO: Add intent management functions
-    // - fulfill
     // - complete
     // - onCall
     // - onRevert
