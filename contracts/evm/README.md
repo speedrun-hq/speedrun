@@ -94,6 +94,7 @@ forge script script/Router.s.sol \
 Deploy the intent contract on Base:
 ```
 export ROUTER_ADDRESS=<router>
+export GATEWAY_ADDRESS="0x48B9AACC350b20147001f88821d31731Ba4C30ed"
 
 forge script script/intent.s.sol \
   --rpc-url https://mainnet.base.org \
@@ -103,6 +104,7 @@ forge script script/intent.s.sol \
 Deploy the intent contract on Arbitrum:
 ```
 export ROUTER_ADDRESS=<router>
+export GATEWAY_ADDRESS="0x1C53e188Bc2E471f9D4A4762CFf843d32C2C8549"
 
 forge script script/intent.s.sol \
   --rpc-url https://arb1.arbitrum.io/rpc \

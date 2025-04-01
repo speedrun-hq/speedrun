@@ -14,6 +14,7 @@ contract IntentScript is Script {
 
         // Get environment variables
         address router = vm.envAddress("ROUTER_ADDRESS");
+        address gateway = vm.envAddress("GATEWAY_ADDRESS");
 
         // Deploy implementation
         Intent implementation = new Intent();
@@ -21,6 +22,7 @@ contract IntentScript is Script {
         // Prepare initialization data
         bytes memory initData = abi.encodeWithSelector(
             Intent.initialize.selector,
+            gateway,
             router
         );
 
@@ -36,6 +38,7 @@ contract IntentScript is Script {
         console2.log("Implementation at:", address(implementation));
         console2.log("Proxy at:", address(proxy));
         console2.log("Initialized with:");
+        console2.log("- Gateway:", gateway);
         console2.log("- Router:", router);
 
         vm.stopBroadcast();
