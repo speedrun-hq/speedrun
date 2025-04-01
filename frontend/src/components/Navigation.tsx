@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ConnectWallet } from './ConnectWallet';
 
 const Navigation = () => {
   return (
@@ -21,6 +22,7 @@ const Navigation = () => {
             >
               NEW RUN
             </Link>
+            <ConnectWallet />
           </div>
         </div>
       </div>
