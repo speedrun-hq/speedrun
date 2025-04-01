@@ -25,7 +25,7 @@ export default function Home() {
             onClick={() => setShowMore(!showMore)}
             className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500"
           >
-            {showMore ? 'SHOW LESS' : 'SHOW MORE'}
+            {showMore ? 'SHOW LESS' : 'ABOUT SPEEDRUN'}
           </button>
         </div>
 
