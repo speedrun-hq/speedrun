@@ -36,6 +36,11 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Mapping to track settlements
     mapping(bytes32 => Settlement) public settlements;
 
+    // Struct for message context
+    struct MessageContext {
+        address sender;
+    }
+
     // Event emitted when a new intent is created
     event IntentInitiated(
         bytes32 indexed intentId,
@@ -58,6 +63,12 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
+    }
+
+    // Modifier to restrict function access to gateway only
+    modifier onlyGateway() {
+        require(msg.sender == gateway, "Only gateway can call this function");
+        _;
     }
 
     function initialize(address _gateway, address _router) public initializer {
@@ -190,6 +201,7 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @param amount Amount to transfer
      * @param receiver Receiver address
      * @param tip Tip for the fulfiller
+     * @return fulfilled Whether the intent was fulfilled
      */
     function _settle(
         bytes32 intentId,
@@ -197,7 +209,7 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 amount,
         address receiver,
         uint256 tip
-    ) internal {
+    ) internal returns (bool) {
         // Compute the fulfillment index
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
             intentId,
@@ -216,15 +228,47 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         settlement.fulfilled = fulfilled;
         settlement.fulfiller = fulfiller;
 
-        // If there's a fulfiller, transfer the tip
+        // If there's a fulfiller, transfer the tip to them
+        // Otherwise, transfer amount + tip to the receiver
         if (fulfilled) {
             IERC20(asset).transfer(fulfiller, amount + tip);
             settlement.paidTip = tip;
+        } else {
+            IERC20(asset).transfer(receiver, amount + tip);
         }
+
+        return fulfilled;
+    }
+
+    /**
+     * @dev Handles incoming cross-chain messages
+     * @param context Message context containing sender information
+     * @param message Encoded settlement payload
+     * @return Empty bytes array
+     */
+    function onCall(MessageContext calldata context, bytes calldata message) external payable onlyGateway returns (bytes memory) {
+        // Verify sender is the router
+        require(context.sender == router, "Invalid sender");
+
+        // Decode settlement payload
+        PayloadUtils.SettlementPayload memory payload = PayloadUtils.decodeSettlementPayload(message);
+
+        // Transfer tokens from gateway to this contract
+        IERC20(payload.asset).transferFrom(gateway, address(this), payload.amount + payload.tip);
+
+        // Settle the intent
+        _settle(
+            payload.intentId,
+            payload.asset,
+            payload.amount,
+            payload.receiver,
+            payload.tip
+        );
+
+        return "";
     }
 
     // TODO: Add intent management functions
     // - complete
-    // - onCall
     // - onRevert
 } 

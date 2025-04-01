@@ -310,6 +310,183 @@ contract IntentTest is Test {
         assertEq(token.balanceOf(user2), amount + (amount + 1 ether));
     }
 
+    function test_OnCallWithFulfillment() public {
+        // First create and fulfill an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Store initial balance
+        uint256 initialBalance = token.balanceOf(user1);
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Account for tokens spent during initiate
+        initialBalance -= (amount + tip);
+
+        // Transfer tokens to the intent contract for fulfillment
+        token.mint(address(intent), amount);
+
+        // Fulfill the intent
+        vm.prank(user1);
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+
+        // Prepare settlement payload
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,
+            address(token),
+            user2,
+            tip
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+
+        // Call onCall through gateway
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+
+        // Verify settlement record
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
+        assertTrue(settled);
+        assertTrue(fulfilled);
+        assertEq(paidTip, tip);
+        assertEq(fulfiller, user1);
+
+        // Verify tokens were transferred to fulfiller (amount + tip)
+        assertEq(token.balanceOf(user1), initialBalance + amount + tip);
+    }
+
+    function test_OnCallWithoutFulfillment() public {
+        // Create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Prepare settlement payload
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,
+            address(token),
+            user2,
+            tip
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+
+        // Call onCall through gateway
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+
+        // Verify settlement record
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
+        assertTrue(settled);
+        assertFalse(fulfilled);
+        assertEq(paidTip, 0);
+        assertEq(fulfiller, address(0));
+
+        // Verify tokens were transferred to receiver (amount + tip)
+        assertEq(token.balanceOf(user2), amount + tip);
+    }
+
+    function test_OnCallInvalidSender() public {
+        // Create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Prepare settlement payload
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,
+            address(token),
+            user2,
+            tip
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+
+        // Call onCall through gateway with invalid sender
+        vm.prank(address(gateway));
+        vm.expectRevert("Invalid sender");
+        intent.onCall(
+            Intent.MessageContext({
+                sender: address(0x123) // Invalid sender
+            }),
+            settlementPayload
+        );
+    }
+
     // TODO: Add more tests for:
     // - complete
     // - onCall

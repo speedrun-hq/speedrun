@@ -55,6 +55,57 @@ library PayloadUtils {
     }
 
     /**
+     * @dev Struct for settlement payload
+     */
+    struct SettlementPayload {
+        bytes32 intentId;
+        uint256 amount;
+        address asset;
+        address receiver;
+        uint256 tip;
+    }
+
+    /**
+     * @dev Encodes settlement data into a payload
+     */
+    function encodeSettlementPayload(
+        bytes32 intentId,
+        uint256 amount,
+        address asset,
+        address receiver,
+        uint256 tip
+    ) internal pure returns (bytes memory) {
+        return abi.encode(
+            intentId,
+            amount,
+            asset,
+            receiver,
+            tip
+        );
+    }
+
+    /**
+     * @dev Decodes settlement payload back into data
+     */
+    function decodeSettlementPayload(bytes memory payload) internal pure returns (SettlementPayload memory) {
+        (
+            bytes32 intentId,
+            uint256 amount,
+            address asset,
+            address receiver,
+            uint256 tip
+        ) = abi.decode(payload, (bytes32, uint256, address, address, uint256));
+
+        return SettlementPayload({
+            intentId: intentId,
+            amount: amount,
+            asset: asset,
+            receiver: receiver,
+            tip: tip
+        });
+    }
+
+    /**
      * @dev Computes a unique index for a fulfillment
      * @param intentId The ID of the intent
      * @param asset The ERC20 token address
