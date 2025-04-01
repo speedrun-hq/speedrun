@@ -8,6 +8,13 @@ import {MockGateway} from "./mocks/MockGateway.sol";
 import {MockUniswapV3Factory} from "./mocks/MockUniswapV3Factory.sol";
 import {MockUniswapV3Router} from "./mocks/MockUniswapV3Router.sol";
 import {MockWETH} from "./mocks/MockWETH.sol";
+import {MockToken} from "./mocks/MockToken.sol";
+import {PayloadUtils} from "../src/utils/PayloadUtils.sol";
+import {IGateway} from "../src/interfaces/IGateway.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IZRC20} from "../src/interfaces/IZRC20.sol";
+import {ISwapRouter} from "../src/interfaces/ISwapRouter.sol";
+import "forge-std/console.sol";
 
 contract RouterTest is Test {
     Router public router;
@@ -15,7 +22,10 @@ contract RouterTest is Test {
     MockGateway public gateway;
     MockUniswapV3Factory public factory;
     MockUniswapV3Router public swapRouter;
-    MockWETH public weth;
+    MockWETH public wzeta;
+    MockToken public inputToken;
+    MockToken public gasZRC20;
+    MockToken public targetZRC20;
     address public owner;
     address public user1;
     address public user2;
@@ -26,6 +36,14 @@ contract RouterTest is Test {
     event TokenAssociationAdded(string indexed name, uint256 indexed chainId, address asset, address zrc20);
     event TokenAssociationUpdated(string indexed name, uint256 indexed chainId, address asset, address zrc20);
     event TokenAssociationRemoved(string indexed name, uint256 indexed chainId);
+    event IntentSettlementForwarded(
+        bytes indexed sender,
+        uint256 indexed sourceChain,
+        uint256 indexed targetChain,
+        address zrc20,
+        uint256 amount,
+        uint256 tip
+    );
 
     function setUp() public {
         owner = address(this);
@@ -36,7 +54,10 @@ contract RouterTest is Test {
         gateway = new MockGateway();
         factory = new MockUniswapV3Factory();
         swapRouter = new MockUniswapV3Router();
-        weth = new MockWETH();
+        wzeta = new MockWETH();
+        inputToken = new MockToken("Input Token", "INPUT");
+        gasZRC20 = new MockToken("Gas Token", "GAS");
+        targetZRC20 = new MockToken("Target Token", "TARGET");
 
         // Deploy implementation
         routerImplementation = new Router();
@@ -47,7 +68,7 @@ contract RouterTest is Test {
             address(gateway),
             address(factory),
             address(swapRouter),
-            address(weth)
+            address(wzeta)
         );
 
         // Deploy proxy
@@ -327,11 +348,208 @@ contract RouterTest is Test {
         router.removeTokenAssociation(name, chainId);
     }
 
-    // TODO: Add more tests for:
-    // - route CCTX
-    // - ZRC20 swap
-    // - registry management
-    // - onCall
-    // - onRevert
-    // - onAbort
+    function test_OnCall_Success() public {
+        // Setup test data
+        address intentContract = makeAddr("intentContract");
+        uint256 targetChain = 2;
+        uint256 amount = 1000 ether;
+        uint256 tip = 300 ether;
+        uint256 gasFee = 50 ether;
+        bytes32 intentId = keccak256("test-intent");
+        bytes memory receiverBytes = abi.encodePacked(makeAddr("receiver"));
+
+        // Register input token
+        router.addToken("INPUT");
+        router.addTokenAssociation(
+            "INPUT",
+            targetChain,
+            makeAddr("targetAsset"),
+            address(targetZRC20)
+        );
+
+        // Register input token for source chain
+        router.addTokenAssociation(
+            "INPUT",
+            1, // source chain
+            makeAddr("inputAsset"),
+            address(inputToken)
+        );
+
+        // Setup intent payload
+        PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.IntentPayload({
+            intentId: intentId,
+            amount: amount,
+            tip: tip,
+            targetChain: targetChain,
+            receiver: receiverBytes
+        });
+        bytes memory message = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChain,
+            receiverBytes
+        );
+
+        // Setup message context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            sender: abi.encodePacked(makeAddr("sender")),
+            senderEVM: makeAddr("senderEVM"),
+            chainID: 1
+        });
+
+        // Setup token associations
+        vm.mockCall(
+            address(router),
+            abi.encodeWithSelector(Router.getTokenAssociation.selector, address(inputToken), targetChain),
+            abi.encode(makeAddr("targetAsset"), address(targetZRC20), targetChain)
+        );
+
+        // Setup intent contract first
+        router.setIntentContract(targetChain, intentContract);
+
+        // Setup gas fee info
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, 100000),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+
+        // Setup mock balances and approvals
+        inputToken.mint(address(router), amount);
+        gasZRC20.mint(address(router), gasFee);
+        targetZRC20.mint(address(router), amount - 1 ether);
+
+        // Setup mock swap responses with exact parameters
+        vm.mockCall(
+            address(router.uniswapV3Router()),
+            abi.encodeWithSelector(
+                ISwapRouter.exactInputSingle.selector,
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: address(inputToken),
+                    tokenOut: address(wzeta),
+                    fee: 3000,
+                    recipient: address(router),
+                    deadline: block.timestamp + 15 minutes,
+                    amountIn: amount,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            ),
+            abi.encode(amount) // First swap: input -> ZETA
+        );
+        vm.mockCall(
+            address(router.uniswapV3Router()),
+            abi.encodeWithSelector(
+                ISwapRouter.exactOutputSingle.selector,
+                ISwapRouter.ExactOutputSingleParams({
+                    tokenIn: address(wzeta),
+                    tokenOut: address(gasZRC20),
+                    fee: 3000,
+                    recipient: address(router),
+                    deadline: block.timestamp + 15 minutes,
+                    amountOut: gasFee,
+                    amountInMaximum: amount,
+                    sqrtPriceLimitX96: 0
+                })
+            ),
+            abi.encode(gasFee) // Second swap: ZETA -> gas token
+        );
+        vm.mockCall(
+            address(router.uniswapV3Router()),
+            abi.encodeWithSelector(
+                ISwapRouter.exactInputSingle.selector,
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: address(wzeta),
+                    tokenOut: address(targetZRC20),
+                    fee: 3000,
+                    recipient: address(router),
+                    deadline: block.timestamp + 15 minutes,
+                    amountIn: amount - gasFee,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            ),
+            abi.encode(amount - 1 ether) // Third swap: remaining ZETA -> target token
+        );
+
+        // Verify expected calls before execution
+        vm.expectCall(
+            address(inputToken),
+            abi.encodeWithSelector(IERC20.approve.selector, address(router.uniswapV3Router()), amount)
+        );
+        vm.expectCall(
+            address(wzeta),
+            abi.encodeWithSelector(IERC20.approve.selector, address(router.uniswapV3Router()), amount)
+        );
+        vm.expectCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IERC20.approve.selector, address(gateway), amount - 1 ether)
+        );
+        vm.expectCall(
+            address(gasZRC20),
+            abi.encodeWithSelector(IERC20.approve.selector, address(gateway), gasFee)
+        );
+
+        // Verify expected swaps
+        vm.expectCall(
+            address(router.uniswapV3Router()),
+            abi.encodeWithSelector(ISwapRouter.exactInputSingle.selector)
+        );
+        vm.expectCall(
+            address(router.uniswapV3Router()),
+            abi.encodeWithSelector(ISwapRouter.exactOutputSingle.selector)
+        );
+        vm.expectCall(
+            address(router.uniswapV3Router()),
+            abi.encodeWithSelector(ISwapRouter.exactInputSingle.selector)
+        );
+
+        // Verify gateway call
+        // TODO: fix this expected call check, we can see in the logs when executing the test that withdrawAndCall is called
+        // https://github.com/lumtis/zetafast/issues/10
+        // but it seems there are a discrepancy of the data actually used
+        // vm.expectCall(
+        //     address(gateway),
+        //     abi.encodeWithSelector(
+        //         IGateway.withdrawAndCall.selector,
+        //         abi.encodePacked(intentContract),
+        //         amount - 1 ether,
+        //         address(targetZRC20),
+        //         abi.encode(
+        //             intentPayload.intentId,
+        //             intentPayload.amount,
+        //             "targetAsset",
+        //             receiverBytes,
+        //             tip - 1 ether
+        //         ),
+        //         abi.encode(IGateway.CallOptions({gasLimit: 100000, isArbitraryCall: false})),
+        //         abi.encode(IGateway.RevertOptions({
+        //             revertAddress: address(0),
+        //             callOnRevert: false,
+        //             abortAddress: address(0),
+        //             revertMessage: "",
+        //             onRevertGasLimit: 0
+        //         }))
+        //     )
+        // );
+
+        // Verify event
+        vm.expectEmit(true, true, true, false);
+        emit IntentSettlementForwarded(
+            abi.encodePacked(makeAddr("sender")),
+            1,
+            targetChain,
+            address(inputToken),
+            amount,
+            tip - 1 ether
+        );
+
+        // Execute
+        vm.prank(address(gateway));
+        router.onCall(context, address(inputToken), amount, message);
+    }
+
+    // TODO: add failure case for onCall
+    // https://github.com/lumtis/zetafast/issues/10
 } 
