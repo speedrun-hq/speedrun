@@ -8,16 +8,28 @@
   :root {
     --background: 0 0% 0%;
     --foreground: 0 0% 100%;
-    --primary: 142 100% 50%;
-    --secondary: 0 100% 50%;
-    --accent: 240 100% 50%;
-    --yellow: 60 100% 50%;
+    --primary: 142 100% 60%;
+    --secondary: 0 100% 45%;
+    --accent: 240 100% 45%;
+    --yellow: 60 100% 60%;
   }
+}
+
+@keyframes glow {
+  0% { box-shadow: 0 0 5px hsl(var(--primary) / 0.2); }
+  50% { box-shadow: 0 0 20px hsl(var(--primary) / 0.4); }
+  100% { box-shadow: 0 0 5px hsl(var(--primary) / 0.2); }
+}
+
+@keyframes borderGlow {
+  0% { border-color: hsl(var(--primary) / 0.3); }
+  50% { border-color: hsl(var(--primary) / 0.6); }
+  100% { border-color: hsl(var(--primary) / 0.3); }
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
+    @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
   }
 
   .btn-primary {
@@ -29,11 +41,11 @@
   }
 
   .card {
-    @apply bg-white shadow sm:rounded-lg;
+    @apply bg-white sm:rounded-lg;
   }
 
   .input {
-    @apply mt-1 focus:ring-primary-500 focus:border-primary-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md;
+    @apply mt-1 focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md;
   }
 
   .select {
@@ -42,46 +54,98 @@
 
   .arcade-text {
     font-family: 'Press Start 2P', cursive;
-    text-shadow: 0 0 10px hsl(var(--primary));
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .arcade-text.text-primary-500 {
+    color: hsl(var(--primary));
+  }
+
+  .arcade-text.text-yellow-500 {
+    color: hsl(var(--yellow));
   }
 
   .arcade-container {
-    @apply bg-black border-4 border-primary-500 p-4 rounded-lg;
-    box-shadow: 0 0 20px hsl(var(--primary) / 0.2);
+    @apply bg-black/60 border p-6 rounded-lg backdrop-blur-md;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+    animation: glow 3s infinite;
+    border-color: hsl(var(--primary) / 0.3);
   }
 
   .arcade-card {
-    @apply bg-black border-2 border-primary-500 p-4 mb-4;
-    box-shadow: 0 0 10px hsl(var(--primary) / 0.1);
+    @apply bg-black/60 border p-4 mb-4 backdrop-blur-md;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+    border-color: hsl(var(--primary) / 0.2);
   }
 
   .arcade-btn {
-    @apply inline-flex items-center px-4 py-2 border-2 border-primary-500 text-sm font-medium rounded-none;
+    @apply inline-flex items-center px-6 py-3 border text-sm font-medium rounded-none;
     font-family: 'Press Start 2P', cursive;
-    text-shadow: 0 0 5px hsl(var(--primary));
-    background: black;
+    background: rgba(0, 0, 0, 0.6);
     color: hsl(var(--primary));
-    transition: all 0.2s;
+    transition: all 0.3s ease-in-out;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+    border-color: hsl(var(--primary) / 0.3);
+    animation: borderGlow 3s infinite;
   }
 
   .arcade-btn:hover {
     background: hsl(var(--primary));
     color: black;
-    box-shadow: 0 0 15px hsl(var(--primary));
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.5);
+    animation: none;
   }
 
   .arcade-input {
-    @apply mt-1 block w-full bg-black border-2 border-primary-500 text-primary-500 p-2;
+    @apply mt-1 block w-full bg-black/60 border text-primary-500 p-3;
     font-family: 'Press Start 2P', cursive;
+    letter-spacing: 0.05em;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+    border-color: hsl(var(--primary) / 0.3);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .arcade-input:focus {
+    border-color: hsl(var(--primary) / 0.6);
+    box-shadow: 0 0 10px hsl(var(--primary) / 0.2);
   }
 
   .arcade-select {
-    @apply mt-1 block w-full bg-black border-2 border-primary-500 text-primary-500 p-2;
+    @apply mt-1 block w-full bg-black/60 border text-primary-500 p-3;
     font-family: 'Press Start 2P', cursive;
+    letter-spacing: 0.05em;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+    border-color: hsl(var(--primary) / 0.3);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .arcade-select:focus {
+    border-color: hsl(var(--primary) / 0.6);
+    box-shadow: 0 0 10px hsl(var(--primary) / 0.2);
   }
 
   .arcade-status {
-    @apply px-2 py-1 text-xs font-bold;
+    @apply px-3 py-2 text-xs font-bold;
     font-family: 'Press Start 2P', cursive;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .arcade-btn.border-yellow-500 {
+    border-color: hsl(var(--yellow) / 0.5);
+    color: hsl(var(--yellow));
+  }
+
+  .arcade-btn.border-yellow-500:hover {
+    background: hsl(var(--yellow));
+    color: black;
+    box-shadow: 0 0 30px hsl(var(--yellow) / 0.7);
   }
 } 

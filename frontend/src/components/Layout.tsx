@@ -13,7 +13,7 @@ export default function Layout({ children }: LayoutProps) {
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
                 <Link href="/" className="arcade-text text-xl text-primary-500">
-                  ZETAFAST
+                  SPEEDRUN
                 </Link>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">

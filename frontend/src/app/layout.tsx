@@ -3,7 +3,7 @@ import './globals.css';
 import Navigation from '@/components/Navigation';
 
 export const metadata: Metadata = {
-  title: 'ZetaFast',
+  title: 'Speedrun',
   description: 'Cross-chain USDC Transfer Service',
 };
 
