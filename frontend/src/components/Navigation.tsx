@@ -6,20 +6,20 @@ const Navigation = () => {
       <div className="container mx-auto px-4">
         <div className="flex justify-between h-16 items-center">
           <Link href="/" className="arcade-text text-xl text-primary-500 hover:text-primary-400">
-            ZETAFAST
+            SPEEDRUN
           </Link>
-          <div className="flex space-x-4">
+          <div className="flex space-x-4 items-center">
             <Link
               href="/intents"
-              className="arcade-text text-primary-500 hover:text-primary-400 px-3 py-2 text-sm"
+              className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500"
             >
-              HIGH SCORES
+              RUNS
             </Link>
             <Link
               href="/create"
               className="arcade-btn"
             >
-              NEW GAME
+              NEW RUN
             </Link>
           </div>
         </div>

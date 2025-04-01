@@ -66,7 +66,7 @@ const IntentList: React.FC = () => {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <h2 className="arcade-text text-2xl mb-6 text-center text-primary-500">HIGH SCORES</h2>
+      <h2 className="arcade-text text-2xl mb-6 text-center text-primary-500">RUNS</h2>
       {intents.length === 0 ? (
         <p className="arcade-text text-gray-500 text-center">NO RECORDS FOUND</p>
       ) : (
