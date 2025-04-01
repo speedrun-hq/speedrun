@@ -6,16 +6,11 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/zeta-chain/zetafast/api/config"
 	"github.com/zeta-chain/zetafast/api/models"
 )
 
 var (
-	// Supported chains for validation
-	supportedChains = map[string]bool{
-		"base":    true,
-		"polygon": true,
-	}
-
 	// Address regex pattern (basic Ethereum address format)
 	addressRegex = regexp.MustCompile(`^0x[a-fA-F0-9]{40}$`)
 
@@ -24,7 +19,15 @@ var (
 
 	// UUID regex pattern
 	uuidRegex = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+	// Config instance for validation
+	cfg *config.Config
 )
+
+// Initialize sets up the validation package with configuration
+func Initialize(c *config.Config) {
+	cfg = c
+}
 
 // ValidateAddress checks if the address is in a valid format
 func ValidateAddress(address string) error {
@@ -45,11 +48,16 @@ func ValidateChain(chain string) error {
 		return errors.New("chain cannot be empty")
 	}
 
-	if !supportedChains[strings.ToLower(chain)] {
-		return errors.New("unsupported chain")
+	chain = strings.ToLower(chain)
+
+	// Check if chain is in supported chains from config
+	for _, supported := range cfg.SupportedChains {
+		if chain == strings.ToLower(supported) {
+			return nil
+		}
 	}
 
-	return nil
+	return errors.New("unsupported chain")
 }
 
 // ValidateAmount checks if the amount is valid and within limits

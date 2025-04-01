@@ -12,6 +12,7 @@ import (
 	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/handlers"
 	"github.com/zeta-chain/zetafast/api/services"
+	"github.com/zeta-chain/zetafast/api/utils"
 )
 
 func main() {
@@ -20,6 +21,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	// Initialize validation with config
+	utils.Initialize(cfg)
 
 	// Initialize database
 	var database db.Database
