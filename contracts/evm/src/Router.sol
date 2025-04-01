@@ -11,7 +11,9 @@ import "./interfaces/IUniswapV3Pool.sol";
 import "./interfaces/IUniswapV3Factory.sol";
 import "./interfaces/ISwapRouter.sol";
 import "./interfaces/IGateway.sol";
+import "./interfaces/IZRC20.sol";
 import "./utils/PayloadUtils.sol";
+import "forge-std/console.sol";
 
 /**
  * @title Router
@@ -21,10 +23,10 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
     using SafeERC20 for IERC20;
 
     // Gateway contract address
-    address public gateway;
+    IGateway public gateway;
     // Uniswap V3 addresses
-    address public uniswapV3Factory;
-    address public uniswapV3Router;
+    IUniswapV3Factory public uniswapV3Factory;
+    ISwapRouter public uniswapV3Router;
     // WZETA address on ZetaChain
     address public wzeta;
 
@@ -57,8 +59,8 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
     // Event emitted when an intent settlement is forwarded
     event IntentSettlementForwarded(
         bytes indexed sender,
-        uint256 indexed sourceChainId,
-        uint256 indexed targetChainId,
+        uint256 indexed sourceChain,
+        uint256 indexed targetChain,
         address zrc20,
         uint256 amount,
         uint256 tip
@@ -92,18 +94,78 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         __Ownable_init(msg.sender);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        gateway = _gateway;
-        uniswapV3Factory = _uniswapV3Factory;
-        uniswapV3Router = _uniswapV3Router;
+        gateway = IGateway(_gateway);
+        uniswapV3Factory = IUniswapV3Factory(_uniswapV3Factory);
+        uniswapV3Router = ISwapRouter(_uniswapV3Router);
         wzeta = _wzeta;
     }
 
     modifier onlyGateway() {
-        require(msg.sender == gateway, "Only gateway can call this function");
+        require(msg.sender == address(gateway), "Only gateway can call this function");
         _;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    /**
+     * @dev Performs a two-step swap through ZETA and handles gas fee swap
+     * @param tokenIn The input token address
+     * @param tokenOut The output token address
+     * @param amountIn The amount of input tokens
+     * @param gasZRC20 The gas token address for the target chain
+     * @param gasFee The gas fee amount needed
+     * @return amountOut The amount of output tokens received
+     */
+    function _swapThroughZeta(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        address gasZRC20,
+        uint256 gasFee
+    ) internal returns (uint256 amountOut) {
+        // First swap: from input token to ZETA
+        IERC20(tokenIn).approve(address(uniswapV3Router), amountIn);
+        ISwapRouter.ExactInputSingleParams memory params1 = ISwapRouter.ExactInputSingleParams({
+            tokenIn: tokenIn,
+            tokenOut: wzeta,
+            fee: 3000,
+            recipient: address(this),
+            deadline: block.timestamp + 15 minutes,
+            amountIn: amountIn,
+            amountOutMinimum: 0, // TODO: Calculate minimum amount based on slippage
+            sqrtPriceLimitX96: 0
+        });
+        uint256 zetaAmount = ISwapRouter(address(uniswapV3Router)).exactInputSingle(params1);
+
+        // Swap ZETA for gas fee token
+        IERC20(wzeta).approve(address(uniswapV3Router), zetaAmount);
+        ISwapRouter.ExactOutputSingleParams memory gasParams = ISwapRouter.ExactOutputSingleParams({
+            tokenIn: wzeta,
+            tokenOut: gasZRC20,
+            fee: 3000,
+            recipient: address(this),
+            deadline: block.timestamp + 15 minutes,
+            amountOut: gasFee,
+            amountInMaximum: zetaAmount,
+            sqrtPriceLimitX96: 0
+        });
+        uint256 zetaUsedForGas = ISwapRouter(address(uniswapV3Router)).exactOutputSingle(gasParams);
+
+        // Second swap: remaining ZETA to target token
+        uint256 remainingZeta = zetaAmount - zetaUsedForGas;
+        IERC20(wzeta).approve(address(uniswapV3Router), remainingZeta);
+        ISwapRouter.ExactInputSingleParams memory params2 = ISwapRouter.ExactInputSingleParams({
+            tokenIn: wzeta,
+            tokenOut: tokenOut,
+            fee: 3000,
+            recipient: address(this),
+            deadline: block.timestamp + 15 minutes,
+            amountIn: remainingZeta,
+            amountOutMinimum: 0, // TODO: Calculate minimum amount based on slippage
+            sqrtPriceLimitX96: 0
+        });
+        return ISwapRouter(address(uniswapV3Router)).exactInputSingle(params2);
+    }
 
     /**
      * @dev Handles incoming messages from the gateway
@@ -128,31 +190,16 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         address intentContract = intentContracts[intentPayload.targetChain];
         require(intentContract != address(0), "Intent contract not set for target chain");
 
-        // Verify Uniswap V3 pool exists
-        require(IUniswapV3Factory(uniswapV3Factory).getPool(zrc20, targetZRC20, 3000) != address(0), "Pool does not exist");
+        // Get gas fee info from target ZRC20
+        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(100000);
 
-        // Approve Uniswap router to spend tokens
-        IERC20(zrc20).approve(uniswapV3Router, amount);
-
-        // Prepare swap parameters
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: zrc20,
-            tokenOut: targetZRC20,
-            fee: 3000,
-            recipient: address(this),
-            deadline: block.timestamp + 15 minutes,
-            amountIn: amount,
-            amountOutMinimum: 0, // TODO: Calculate minimum amount based on slippage
-            sqrtPriceLimitX96: 0
-        });
-
-        // Execute swap
-        uint256 amountOut = ISwapRouter(uniswapV3Router).exactInputSingle(params);
+        // Perform swap through ZETA and handle gas fee
+        uint256 amountOut = _swapThroughZeta(zrc20, targetZRC20, amount, gasZRC20, gasFee);
 
         // Calculate slippage difference and adjust tip accordingly
-        uint256 slippageDifference = amount - amountOut;
-        uint256 tipAfterSwap = intentPayload.tip - slippageDifference;
-        require(amountOut > (amount - intentPayload.tip), "Swap failed: insufficient output amount");
+        uint256 slippageAndFeeCost = amount - amountOut;
+        require(intentPayload.tip > slippageAndFeeCost, "Provided tip doesn't cover slippage and withdraw fee cost");
+        uint256 tipAfterSwap = intentPayload.tip - slippageAndFeeCost;
 
         // Convert receiver from bytes to address
         address receiverAddress = PayloadUtils.bytesToAddress(intentPayload.receiver);
@@ -182,10 +229,11 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         });
 
         // Approve gateway to spend tokens
-        IERC20(targetZRC20).approve(gateway, amountOut);
+        IERC20(targetZRC20).approve(address(gateway), amountOut);
+        IERC20(gasZRC20).approve(address(gateway), gasFee);
 
         // Call gateway to withdraw and call intent contract
-        IGateway(gateway).withdrawAndCall(
+        IGateway(address(gateway)).withdrawAndCall(
             abi.encodePacked(intentContract),
             amountOut,
             targetZRC20,
@@ -383,11 +431,4 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         return _supportedTokens[name];
     }
 
-    // TODO: Add routing functions
-    // - route CCTX
-    // - ZRC20 swap
-    // - registry management
-    // - onCall
-    // - onRevert
-    // - onAbort
 } 

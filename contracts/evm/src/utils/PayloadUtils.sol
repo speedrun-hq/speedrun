@@ -22,7 +22,7 @@ library PayloadUtils {
         uint256 amount,
         uint256 tip,
         uint256 targetChain,
-        bytes calldata receiver
+        bytes memory receiver
     ) internal pure returns (bytes memory) {
         return abi.encode(
             intentId,
