@@ -36,7 +36,7 @@ library PayloadUtils {
     /**
      * @dev Decodes payload back into intent data
      */
-    function decodeIntentPayload(bytes calldata payload) internal pure returns (IntentPayload memory) {
+    function decodeIntentPayload(bytes memory payload) internal pure returns (IntentPayload memory) {
         (
             bytes32 intentId,
             uint256 amount,
