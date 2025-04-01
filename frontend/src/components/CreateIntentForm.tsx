@@ -6,12 +6,12 @@ import { CreateIntentRequest } from '@/types';
 import { apiService } from '@/services/api';
 import { ApiError } from '@/utils/errors';
 
-const CHAINS = ['ethereum', 'base', 'zetachain'] as const;
+const CHAINS = ['base', 'arbitrum'] as const;
 
 export default function CreateIntentForm() {
   const router = useRouter();
   const [formData, setFormData] = useState<CreateIntentRequest>({
-    source_chain: 'ethereum',
+    source_chain: 'base',
     destination_chain: 'base',
     token: 'USDC',
     amount: '',

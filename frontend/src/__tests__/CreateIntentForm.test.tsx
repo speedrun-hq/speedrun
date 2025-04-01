@@ -35,7 +35,7 @@ describe('CreateIntentForm', () => {
     // Fill in the form
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/source chain/i), {
-        target: { value: 'ethereum' },
+        target: { value: 'base' },
       });
       fireEvent.change(screen.getByLabelText(/destination chain/i), {
         target: { value: 'base' },
@@ -58,7 +58,7 @@ describe('CreateIntentForm', () => {
 
     // Verify API call
     expect(mockCreateIntent).toHaveBeenCalledWith({
-      source_chain: 'ethereum',
+      source_chain: 'base',
       destination_chain: 'base',
       recipient: '0x1234567890abcdef',
       token: 'USDC',
@@ -76,7 +76,7 @@ describe('CreateIntentForm', () => {
     // Fill in the form
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/source chain/i), {
-        target: { value: 'ethereum' },
+        target: { value: 'base' },
       });
       fireEvent.change(screen.getByLabelText(/destination chain/i), {
         target: { value: 'base' },
