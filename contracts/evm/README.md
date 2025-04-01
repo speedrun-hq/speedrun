@@ -44,14 +44,6 @@ Fulfills an existing intent:
 - `receiver`: Address of the receiver
 - `tip`: Amount of tokens to pay for the transfer
 
-## Trading Path
-
-All token swaps on ZetaChain are executed through the native ZETA token as an intermediary. For example:
-- USDC on BSC → USDC on Base: USDC (BSC) → ZETA → USDC (Base)
-- USDT on Polygon → USDC on Arbitrum: USDT (Polygon) → ZETA → USDC (Arbitrum)
-
-This is handled automatically by the Uniswap V3 router, which finds the optimal path through the ZETA token. No manual path management is required.
-
 ## Development
 
 ### Prerequisites
