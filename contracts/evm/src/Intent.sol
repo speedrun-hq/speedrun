@@ -267,8 +267,4 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         return "";
     }
-
-    // TODO: Add intent management functions
-    // - complete
-    // - onRevert
 } 
