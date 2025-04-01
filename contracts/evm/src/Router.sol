@@ -5,12 +5,30 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./interfaces/IUniswapV3Pool.sol";
+import "./interfaces/IUniswapV3Factory.sol";
+import "./interfaces/ISwapRouter.sol";
+import "./interfaces/IGateway.sol";
+import "./utils/PayloadUtils.sol";
 
 /**
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
 contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessControlUpgradeable {
+    using SafeERC20 for IERC20;
+
+    // Gateway contract address
+    address public gateway;
+    // Uniswap V3 factory address
+    address public UNISWAP_V3_FACTORY;
+    // Uniswap V3 swap router address
+    address public UNISWAP_V3_ROUTER;
+    // WETH address on ZetaChain
+    address public WETH;
+
     // Mapping from chain ID to intent contract address
     mapping(uint256 => address) public intentContracts;
 
@@ -37,22 +55,152 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
     event TokenAssociationUpdated(string indexed name, uint256 indexed chainId, address asset, address zrc20);
     // Event emitted when a token association is removed
     event TokenAssociationRemoved(string indexed name, uint256 indexed chainId);
+    // Event emitted when an intent settlement is forwarded
+    event IntentSettlementForwarded(
+        bytes indexed sender,
+        uint256 indexed sourceChainId,
+        uint256 indexed targetChainId,
+        address zrc20,
+        uint256 amount,
+        uint256 tip
+    );
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    function initialize() public initializer {
+    function initialize(
+        address _gateway,
+        address _uniswapV3Factory,
+        address _uniswapV3Router,
+        address _weth
+    ) public initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         __AccessControl_init();
 
         // Grant the default admin role to the deployer
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        
+        // Set gateway address
+        require(_gateway != address(0), "Invalid gateway address");
+        gateway = _gateway;
+
+        // Set Uniswap addresses
+        require(_uniswapV3Factory != address(0), "Invalid Uniswap V3 factory address");
+        require(_uniswapV3Router != address(0), "Invalid Uniswap V3 router address");
+        require(_weth != address(0), "Invalid WETH address");
+        UNISWAP_V3_FACTORY = _uniswapV3Factory;
+        UNISWAP_V3_ROUTER = _uniswapV3Router;
+        WETH = _weth;
+    }
+
+    modifier onlyGateway() {
+        require(msg.sender == gateway, "Only gateway can call this function");
+        _;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    /**
+     * @dev Handles incoming messages from the gateway
+     * @param context The message context containing sender and chain information
+     * @param zrc20 The ZRC20 token address
+     * @param amount The amount of tokens
+     * @param message The encoded message containing intent payload
+     */
+    function onCall(
+        IGateway.ZetaChainMessageContext calldata context,
+        address zrc20,
+        uint256 amount,
+        bytes calldata message
+    ) external onlyGateway {
+        // Decode intent payload
+        PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(message);
+
+        // Get token association for target chain
+        (address targetAsset, address targetZRC20, uint256 chainIdValue) = getTokenAssociation(zrc20, intentPayload.targetChain);
+
+        // Get intent contract on target chain
+        address intentContract = intentContracts[intentPayload.targetChain];
+        require(intentContract != address(0), "Intent contract not set for target chain");
+
+        // Verify Uniswap V3 pool exists
+        require(IUniswapV3Factory(UNISWAP_V3_FACTORY).getPool(zrc20, targetZRC20, 3000) != address(0), "Pool does not exist");
+
+        // Approve Uniswap router to spend tokens
+        IERC20(zrc20).approve(UNISWAP_V3_ROUTER, amount);
+
+        // Prepare swap parameters
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: zrc20,
+            tokenOut: targetZRC20,
+            fee: 3000,
+            recipient: address(this),
+            deadline: block.timestamp + 15 minutes,
+            amountIn: amount,
+            amountOutMinimum: 0, // TODO: Calculate minimum amount based on slippage
+            sqrtPriceLimitX96: 0
+        });
+
+        // Execute swap
+        uint256 amountOut = ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(params);
+
+        // Calculate slippage difference and adjust tip accordingly
+        uint256 slippageDifference = amount - amountOut;
+        uint256 tipAfterSwap = intentPayload.tip - slippageDifference;
+        require(amountOut > (amount - intentPayload.tip), "Swap failed: insufficient output amount");
+
+        // Convert receiver from bytes to address
+        address receiverAddress = PayloadUtils.bytesToAddress(intentPayload.receiver);
+
+        // Encode settlement payload
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentPayload.intentId,
+            intentPayload.amount,
+            targetAsset,
+            receiverAddress,
+            tipAfterSwap
+        );
+
+        // Prepare call options
+        IGateway.CallOptions memory callOptions = IGateway.CallOptions({
+            gasLimit: 100000,
+            isArbitraryCall: false
+        });
+
+        // Prepare revert options
+        IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
+            revertAddress: address(0),
+            callOnRevert: false,
+            abortAddress: address(0),
+            revertMessage: "",
+            onRevertGasLimit: 0
+        });
+
+        // Approve gateway to spend tokens
+        IERC20(targetZRC20).approve(gateway, amountOut);
+
+        // Call gateway to withdraw and call intent contract
+        IGateway(gateway).withdrawAndCall(
+            abi.encodePacked(intentContract),
+            amountOut,
+            targetZRC20,
+            settlementPayload,
+            callOptions,
+            revertOptions
+        );
+
+        emit IntentSettlementForwarded(
+            context.sender,
+            context.chainID,
+            intentPayload.targetChain,
+            zrc20,
+            amount,
+            tipAfterSwap
+        );
+    }
 
     /**
      * @dev Sets the intent contract address for a specific chain

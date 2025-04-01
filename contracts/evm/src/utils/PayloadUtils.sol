@@ -126,4 +126,18 @@ library PayloadUtils {
             receiver
         ));
     }
+
+    /**
+     * @dev Converts bytes to address
+     * @param data The bytes to convert
+     * @return The converted address
+     */
+    function bytesToAddress(bytes memory data) internal pure returns (address) {
+        require(data.length >= 20, "Invalid address length");
+        address addr;
+        assembly {
+            addr := and(mload(add(data, 20)), 0xffffffffffffffffffffffffffffffffffffffff)
+        }
+        return addr;
+    }
 } 

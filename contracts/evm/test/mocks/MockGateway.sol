@@ -35,4 +35,15 @@ contract MockGateway is IGateway {
             revertOptions: revertOptions
         });
     }
+
+    function withdrawAndCall(
+        bytes memory receiver,
+        uint256 amount,
+        address zrc20,
+        bytes calldata message,
+        CallOptions calldata callOptions,
+        RevertOptions calldata revertOptions
+    ) external override {
+        // Mock implementation - do nothing
+    }
 } 

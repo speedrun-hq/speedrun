@@ -4,10 +4,18 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 import {Router} from "../src/router.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {MockGateway} from "./mocks/MockGateway.sol";
+import {MockUniswapV3Factory} from "./mocks/MockUniswapV3Factory.sol";
+import {MockUniswapV3Router} from "./mocks/MockUniswapV3Router.sol";
+import {MockWETH} from "./mocks/MockWETH.sol";
 
 contract RouterTest is Test {
     Router public router;
     Router public routerImplementation;
+    MockGateway public gateway;
+    MockUniswapV3Factory public factory;
+    MockUniswapV3Router public swapRouter;
+    MockWETH public weth;
     address public owner;
     address public user1;
     address public user2;
@@ -24,12 +32,22 @@ contract RouterTest is Test {
         user1 = makeAddr("user1");
         user2 = makeAddr("user2");
 
+        // Deploy mock contracts
+        gateway = new MockGateway();
+        factory = new MockUniswapV3Factory();
+        swapRouter = new MockUniswapV3Router();
+        weth = new MockWETH();
+
         // Deploy implementation
         routerImplementation = new Router();
 
         // Prepare initialization data
         bytes memory initData = abi.encodeWithSelector(
-            Router.initialize.selector
+            Router.initialize.selector,
+            address(gateway),
+            address(factory),
+            address(swapRouter),
+            address(weth)
         );
 
         // Deploy proxy
