@@ -22,12 +22,11 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
     // Gateway contract address
     address public gateway;
-    // Uniswap V3 factory address
-    address public UNISWAP_V3_FACTORY;
-    // Uniswap V3 swap router address
-    address public UNISWAP_V3_ROUTER;
-    // WETH address on ZetaChain
-    address public WETH;
+    // Uniswap V3 addresses
+    address public uniswapV3Factory;
+    address public uniswapV3Router;
+    // WZETA address on ZetaChain
+    address public wzeta;
 
     // Mapping from chain ID to intent contract address
     mapping(uint256 => address) public intentContracts;
@@ -70,30 +69,33 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         _disableInitializers();
     }
 
+    /**
+     * @dev Initializes the contract with the gateway and Uniswap V3 addresses
+     * @param _gateway The address of the gateway contract
+     * @param _uniswapV3Factory The address of the Uniswap V3 factory contract
+     * @param _uniswapV3Router The address of the Uniswap V3 router contract
+     * @param _wzeta The address of the WZETA contract
+     */
     function initialize(
         address _gateway,
         address _uniswapV3Factory,
         address _uniswapV3Router,
-        address _weth
+        address _wzeta
     ) public initializer {
-        __Ownable_init(msg.sender);
-        __UUPSUpgradeable_init();
-        __AccessControl_init();
-
-        // Grant the default admin role to the deployer
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        
-        // Set gateway address
         require(_gateway != address(0), "Invalid gateway address");
-        gateway = _gateway;
-
-        // Set Uniswap addresses
         require(_uniswapV3Factory != address(0), "Invalid Uniswap V3 factory address");
         require(_uniswapV3Router != address(0), "Invalid Uniswap V3 router address");
-        require(_weth != address(0), "Invalid WETH address");
-        UNISWAP_V3_FACTORY = _uniswapV3Factory;
-        UNISWAP_V3_ROUTER = _uniswapV3Router;
-        WETH = _weth;
+        require(_wzeta != address(0), "Invalid WZETA address");
+
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+        __Ownable_init(msg.sender);
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        gateway = _gateway;
+        uniswapV3Factory = _uniswapV3Factory;
+        uniswapV3Router = _uniswapV3Router;
+        wzeta = _wzeta;
     }
 
     modifier onlyGateway() {
@@ -127,10 +129,10 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         require(intentContract != address(0), "Intent contract not set for target chain");
 
         // Verify Uniswap V3 pool exists
-        require(IUniswapV3Factory(UNISWAP_V3_FACTORY).getPool(zrc20, targetZRC20, 3000) != address(0), "Pool does not exist");
+        require(IUniswapV3Factory(uniswapV3Factory).getPool(zrc20, targetZRC20, 3000) != address(0), "Pool does not exist");
 
         // Approve Uniswap router to spend tokens
-        IERC20(zrc20).approve(UNISWAP_V3_ROUTER, amount);
+        IERC20(zrc20).approve(uniswapV3Router, amount);
 
         // Prepare swap parameters
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
@@ -145,7 +147,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         });
 
         // Execute swap
-        uint256 amountOut = ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(params);
+        uint256 amountOut = ISwapRouter(uniswapV3Router).exactInputSingle(params);
 
         // Calculate slippage difference and adjust tip accordingly
         uint256 slippageDifference = amount - amountOut;
