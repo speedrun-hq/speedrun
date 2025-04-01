@@ -102,6 +102,9 @@ api/zetafast
 .env.*
 !.env.example
 
+# API specific
+api/zetafast
+
 # Logs
 *.log
 logs/
