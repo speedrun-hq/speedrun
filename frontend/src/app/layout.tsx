@@ -4,7 +4,7 @@ import Navigation from '@/components/Navigation';
 
 export const metadata: Metadata = {
   title: 'Speedrun',
-  description: 'Cross-chain USDC Transfer Service',
+  description: 'Fast Cross-Chain Transfers Powered by Speedrunners',
 };
 
 export default function RootLayout({
