@@ -46,8 +46,15 @@ func startEventListeners(ctx context.Context, clients map[uint64]*ethclient.Clie
 		return nil, nil, fmt.Errorf("failed to create fulfillment service: %v", err)
 	}
 
+	// Get the first chain ID from the config
+	var firstChainID uint64
+	for chainID := range cfg.ChainConfigs {
+		firstChainID = chainID
+		break
+	}
+
 	// Create intent service
-	intentService, err := services.NewIntentService(clients[cfg.ChainConfigs[0].ChainID], db, cfg.IntentInitiatedEventABI)
+	intentService, err := services.NewIntentService(clients[firstChainID], db, cfg.IntentInitiatedEventABI)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create intent service: %v", err)
 	}
