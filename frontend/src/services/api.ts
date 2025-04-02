@@ -37,8 +37,12 @@ class ApiService {
   }
 
   // Intent endpoints
-  async listIntents(page: number, limit: number): Promise<{ intents: Intent[]; total: number }> {
-    return this.fetchApi(`/intents?page=${page}&limit=${limit}`);
+  async listIntents(limit: number = 10, offset: number = 0, status?: string): Promise<Intent[]> {
+    let url = `/intents?limit=${limit}&offset=${offset}`;
+    if (status) {
+      url += `&status=${status}`;
+    }
+    return this.fetchApi(url);
   }
 
   async getIntent(id: string): Promise<Intent> {

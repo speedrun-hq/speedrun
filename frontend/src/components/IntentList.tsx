@@ -12,17 +12,17 @@ const IntentList: React.FC = () => {
   const [intents, setIntents] = useState<Intent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
     const fetchIntents = async () => {
       try {
         setLoading(true);
         setError(null);
-        const { intents: data, total: totalCount } = await apiService.listIntents(page, ITEMS_PER_PAGE);
+        const data = await apiService.listIntents(ITEMS_PER_PAGE, offset);
         setIntents(data);
-        setTotal(totalCount);
+        setHasMore(data.length === ITEMS_PER_PAGE);
       } catch (err) {
         setError(err);
       } finally {
@@ -31,7 +31,7 @@ const IntentList: React.FC = () => {
     };
 
     fetchIntents();
-  }, [page]);
+  }, [offset]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -78,7 +78,7 @@ const IntentList: React.FC = () => {
             >
               <div className="flex justify-between items-start">
                 <div className="space-y-2">
-                  <p className="arcade-text text-sm text-primary-500">#{index + 1}</p>
+                  <p className="arcade-text text-sm text-primary-500">#{index + 1 + offset}</p>
                   <p className="arcade-text text-xs text-primary-500">ID: {intent.id}</p>
                   <p className="arcade-text text-xs text-primary-500">
                     {intent.source_chain} → {intent.destination_chain}
@@ -100,18 +100,18 @@ const IntentList: React.FC = () => {
       )}
 
       {/* Pagination */}
-      {total > ITEMS_PER_PAGE && (
+      {(offset > 0 || hasMore) && (
         <div className="flex justify-center space-x-4 mt-6">
           <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
+            onClick={() => setOffset(o => Math.max(0, o - ITEMS_PER_PAGE))}
+            disabled={offset === 0}
             className="arcade-btn disabled:opacity-50 disabled:cursor-not-allowed"
           >
             PREV
           </button>
           <button
-            onClick={() => setPage(p => p + 1)}
-            disabled={page * ITEMS_PER_PAGE >= total}
+            onClick={() => setOffset(o => o + ITEMS_PER_PAGE)}
+            disabled={!hasMore}
             className="arcade-btn disabled:opacity-50 disabled:cursor-not-allowed"
           >
             NEXT
