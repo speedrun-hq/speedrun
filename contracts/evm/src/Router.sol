@@ -16,6 +16,12 @@ import "./utils/PayloadUtils.sol";
 contract Router {
     using SafeERC20 for IERC20;
 
+    // Default gas limit for withdraw operations
+    uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 300000;
+    
+    // Current gas limit for withdraw operations (can be modified by admin)
+    uint256 public withdrawGasLimit;
+
     // Gateway contract address
     address public gateway;
     // Swap module address
@@ -74,6 +80,7 @@ contract Router {
         gateway = _gateway;
         swapModule = _swapModule;
         admin = msg.sender;
+        withdrawGasLimit = DEFAULT_WITHDRAW_GAS_LIMIT;
     }
 
     /**
@@ -118,7 +125,7 @@ contract Router {
         require(intentContract != address(0), "Intent contract not set for target chain");
 
         // Get gas fee info from target ZRC20
-        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(100000);
+        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(withdrawGasLimit);
 
         // Approve swap module to spend tokens
         IERC20(zrc20).approve(swapModule, amount);
@@ -145,13 +152,13 @@ contract Router {
 
         // Prepare call options
         IGateway.CallOptions memory callOptions = IGateway.CallOptions({
-            gasLimit: 100000,
+            gasLimit: withdrawGasLimit,
             isArbitraryCall: false
         });
 
         // Prepare revert options
         IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
-            revertAddress: address(0),
+            revertAddress: receiverAddress, // should never happen: in case of failure, funds are reverted to receiver on ZetaChain
             callOnRevert: false,
             abortAddress: address(0),
             revertMessage: "",
@@ -359,5 +366,14 @@ contract Router {
      */
     function isTokenSupported(string calldata name) public view returns (bool) {
         return _supportedTokens[name];
+    }
+
+    /**
+     * @dev Updates the withdraw gas limit
+     * @param newGasLimit The new gas limit to set
+     */
+    function setWithdrawGasLimit(uint256 newGasLimit) public onlyAdmin {
+        require(newGasLimit > 0, "Gas limit cannot be zero");
+        withdrawGasLimit = newGasLimit;
     }
 } 
