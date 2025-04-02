@@ -7,11 +7,10 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/IUniswapV3Pool.sol";
-import "./interfaces/IUniswapV3Factory.sol";
-import "./interfaces/ISwapRouter.sol";
+import "./interfaces/IUniswapV3Router.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IZRC20.sol";
+import "./interfaces/ISwap.sol";
 import "./utils/PayloadUtils.sol";
 import "forge-std/console.sol";
 
@@ -24,11 +23,8 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
     // Gateway contract address
     IGateway public gateway;
-    // Uniswap V3 addresses
-    IUniswapV3Factory public uniswapV3Factory;
-    ISwapRouter public uniswapV3Router;
-    // WZETA address on ZetaChain
-    address public wzeta;
+    // Swap module address
+    address public swapModule;
 
     // Mapping from chain ID to intent contract address
     mapping(uint256 => address) public intentContracts;
@@ -72,22 +68,16 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
     }
 
     /**
-     * @dev Initializes the contract with the gateway and Uniswap V3 addresses
+     * @dev Initializes the contract with the gateway and swap module addresses
      * @param _gateway The address of the gateway contract
-     * @param _uniswapV3Factory The address of the Uniswap V3 factory contract
-     * @param _uniswapV3Router The address of the Uniswap V3 router contract
-     * @param _wzeta The address of the WZETA contract
+     * @param _swapModule The address of the swap module contract
      */
     function initialize(
         address _gateway,
-        address _uniswapV3Factory,
-        address _uniswapV3Router,
-        address _wzeta
+        address _swapModule
     ) public initializer {
         require(_gateway != address(0), "Invalid gateway address");
-        require(_uniswapV3Factory != address(0), "Invalid Uniswap V3 factory address");
-        require(_uniswapV3Router != address(0), "Invalid Uniswap V3 router address");
-        require(_wzeta != address(0), "Invalid WZETA address");
+        require(_swapModule != address(0), "Invalid swap module address");
 
         __AccessControl_init();
         __UUPSUpgradeable_init();
@@ -95,9 +85,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         gateway = IGateway(_gateway);
-        uniswapV3Factory = IUniswapV3Factory(_uniswapV3Factory);
-        uniswapV3Router = ISwapRouter(_uniswapV3Router);
-        wzeta = _wzeta;
+        swapModule = _swapModule;
     }
 
     modifier onlyGateway() {
@@ -107,67 +95,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    /**
-     * @dev Performs a two-step swap through ZETA and handles gas fee swap
-     * @param tokenIn The input token address
-     * @param tokenOut The output token address
-     * @param amountIn The amount of input tokens
-     * @param gasZRC20 The gas token address for the target chain
-     * @param gasFee The gas fee amount needed
-     * @return amountOut The amount of output tokens received
-     */
-    function _swapThroughZeta(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address gasZRC20,
-        uint256 gasFee
-    ) internal returns (uint256 amountOut) {
-        // First swap: from input token to ZETA
-        IERC20(tokenIn).approve(address(uniswapV3Router), amountIn);
-        ISwapRouter.ExactInputSingleParams memory params1 = ISwapRouter.ExactInputSingleParams({
-            tokenIn: tokenIn,
-            tokenOut: wzeta,
-            fee: 3000,
-            recipient: address(this),
-            deadline: block.timestamp + 15 minutes,
-            amountIn: amountIn,
-            amountOutMinimum: 0, // TODO: Calculate minimum amount based on slippage
-            sqrtPriceLimitX96: 0
-        });
-        uint256 zetaAmount = ISwapRouter(address(uniswapV3Router)).exactInputSingle(params1);
-
-        // Swap ZETA for gas fee token
-        IERC20(wzeta).approve(address(uniswapV3Router), zetaAmount);
-        ISwapRouter.ExactOutputSingleParams memory gasParams = ISwapRouter.ExactOutputSingleParams({
-            tokenIn: wzeta,
-            tokenOut: gasZRC20,
-            fee: 3000,
-            recipient: address(this),
-            deadline: block.timestamp + 15 minutes,
-            amountOut: gasFee,
-            amountInMaximum: zetaAmount,
-            sqrtPriceLimitX96: 0
-        });
-        uint256 zetaUsedForGas = ISwapRouter(address(uniswapV3Router)).exactOutputSingle(gasParams);
-
-        // Second swap: remaining ZETA to target token
-        uint256 remainingZeta = zetaAmount - zetaUsedForGas;
-        IERC20(wzeta).approve(address(uniswapV3Router), remainingZeta);
-        ISwapRouter.ExactInputSingleParams memory params2 = ISwapRouter.ExactInputSingleParams({
-            tokenIn: wzeta,
-            tokenOut: tokenOut,
-            fee: 3000,
-            recipient: address(this),
-            deadline: block.timestamp + 15 minutes,
-            amountIn: remainingZeta,
-            amountOutMinimum: 0, // TODO: Calculate minimum amount based on slippage
-            sqrtPriceLimitX96: 0
-        });
-        return ISwapRouter(address(uniswapV3Router)).exactInputSingle(params2);
-    }
-
-    /**
+    /**IUniswapV3Router
      * @dev Handles incoming messages from the gateway
      * @param context The message context containing sender and chain information
      * @param zrc20 The ZRC20 token address
@@ -196,8 +124,11 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         // Get gas fee info from target ZRC20
         (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(100000);
 
-        // Perform swap through ZETA and handle gas fee
-        uint256 amountOut = _swapThroughZeta(zrc20, targetZRC20, amount, gasZRC20, gasFee);
+        // Approve swap module to spend tokens
+        IERC20(zrc20).approve(swapModule, amount);
+
+        // Perform swap through swap module
+        uint256 amountOut = ISwap(swapModule).swap(zrc20, targetZRC20, amount, gasZRC20, gasFee);
 
         // Calculate slippage difference and adjust tip accordingly
         uint256 slippageAndFeeCost = amount - amountOut;

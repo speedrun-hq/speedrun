@@ -4,8 +4,6 @@ pragma solidity ^0.8.20;
 import {Script, console2} from "forge-std/Script.sol";
 import {Router} from "../src/Router.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {IUniswapV3Factory} from "../src/interfaces/IUniswapV3Factory.sol";
-import {ISwapRouter} from "../src/interfaces/ISwapRouter.sol";
 
 contract RouterScript is Script {
     function setUp() public {}
@@ -16,9 +14,7 @@ contract RouterScript is Script {
 
         // Get environment variables
         address gateway = vm.envAddress("GATEWAY_ADDRESS");
-        address uniswapFactory = vm.envAddress("UNISWAP_FACTORY_ADDRESS");
-        address uniswapRouter = vm.envAddress("UNISWAP_ROUTER_ADDRESS");
-        address wzeta = vm.envAddress("WZETA_ADDRESS");
+        address swapModule = vm.envAddress("SWAP_MODULE_ADDRESS");
 
         // Deploy implementation
         Router implementation = new Router();
@@ -27,9 +23,7 @@ contract RouterScript is Script {
         bytes memory initData = abi.encodeWithSelector(
             Router.initialize.selector,
             gateway,
-            uniswapFactory,
-            uniswapRouter,
-            wzeta
+            swapModule
         );
 
         // Deploy proxy
@@ -45,10 +39,7 @@ contract RouterScript is Script {
         console2.log("Proxy at:", address(proxy));
         console2.log("Initialized with:");
         console2.log("- Gateway:", gateway);
-        console2.log("- Uniswap Factory:", uniswapFactory);
-        console2.log("- Uniswap Router:", uniswapRouter);
-        console2.log("- WZETA:", wzeta);
-
+        console2.log("- Swap Module:", swapModule);
         vm.stopBroadcast();
     }
 } 
