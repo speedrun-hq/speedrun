@@ -3,7 +3,6 @@ pragma solidity 0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {Router} from "../src/Router.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract RouterScript is Script {
     function setUp() public {}
@@ -22,33 +21,16 @@ contract RouterScript is Script {
         address swapModule = vm.envAddress("SWAP_MODULE_ADDRESS");
         
         // Deploy router with specific compiler version noted
+        console2.log("Using Solidity version 0.8.26 for deployment");
         vm.startBroadcast(deployerPrivateKey);
         
-        // Deploy implementation
-        Router implementation = new Router();
-        console2.log("Implementation deployed at:", address(implementation));
+        // Deploy router directly (no proxy needed)
+        Router router = new Router(gateway, swapModule);
         
-        // Prepare initialization data
-        bytes memory initData = abi.encodeWithSelector(
-            Router.initialize.selector,
-            gateway,
-            swapModule
-        );
-        
-        // // Deploy proxy 
-        // ERC1967Proxy proxy = new ERC1967Proxy(
-        //     address(implementation),
-        //     initData
-        // );
-        
-        // Router router = Router(address(proxy));
-        
-        // console2.log("Router deployed to:", address(router));
-        // console2.log("Implementation at:", address(implementation));
-        // console2.log("Proxy at:", address(proxy));
-        // console2.log("Initialized with:");
-        // console2.log("- Gateway:", gateway);
-        // console2.log("- Swap Module:", swapModule);
+        console2.log("Router deployed to:", address(router));
+        console2.log("Initialized with:");
+        console2.log("- Gateway:", gateway);
+        console2.log("- Swap Module:", swapModule);
         
         vm.stopBroadcast();
     }

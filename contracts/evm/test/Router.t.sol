@@ -2,10 +2,8 @@
 pragma solidity 0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {Router} from "../src/router.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Router} from "../src/Router.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
-import {MockWETH} from "./mocks/MockWETH.sol";
 import {MockToken} from "./mocks/MockToken.sol";
 import {PayloadUtils} from "../src/utils/PayloadUtils.sol";
 import {IGateway} from "../src/interfaces/IGateway.sol";
@@ -13,6 +11,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IZRC20} from "../src/interfaces/IZRC20.sol";
 import {IUniswapV3Router} from "../src/interfaces/IUniswapV3Router.sol";
 import {ISwap} from "../src/interfaces/ISwap.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "forge-std/console.sol";
 
 contract MockSwapModule is ISwap {
@@ -33,7 +32,6 @@ contract MockSwapModule is ISwap {
 
 contract RouterTest is Test {
     Router public router;
-    Router public routerImplementation;
     MockGateway public gateway;
     MockToken public inputToken;
     MockToken public gasZRC20;
@@ -42,7 +40,6 @@ contract RouterTest is Test {
     address public owner;
     address public user1;
     address public user2;
-    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
 
     event IntentContractSet(uint256 indexed chainId, address indexed intentContract);
     event TokenAdded(string indexed name);
@@ -70,22 +67,8 @@ contract RouterTest is Test {
         targetZRC20 = new MockToken("Target Token", "TARGET");
         swapModule = new MockSwapModule();
 
-        // Deploy implementation
-        routerImplementation = new Router();
-
-        // Prepare initialization data
-        bytes memory initData = abi.encodeWithSelector(
-            Router.initialize.selector,
-            address(gateway),
-            address(swapModule)
-        );
-
-        // Deploy proxy
-        ERC1967Proxy proxy = new ERC1967Proxy(
-            address(routerImplementation),
-            initData
-        );
-        router = Router(address(proxy));
+        // Deploy router directly (no proxy)
+        router = new Router(address(gateway), address(swapModule));
     }
 
     function test_SetIntentContract() public {
@@ -101,14 +84,13 @@ contract RouterTest is Test {
         router.setIntentContract(chainId, user1);
     }
 
-    function test_SetIntentContract_NonAdminReverts() public {
+    function test_SetIntentContract_NonOwnerReverts() public {
         uint256 chainId = 1;
         vm.prank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")),
-                user1,
-                DEFAULT_ADMIN_ROLE
+                Ownable.OwnableUnauthorizedAccount.selector,
+                user1
             )
         );
         router.setIntentContract(chainId, user2);
@@ -304,7 +286,7 @@ contract RouterTest is Test {
         assertEq(tokens[1], name2);
     }
 
-    function test_NonAdminCannotModify() public {
+    function test_NonOwnerCannotModify() public {
         string memory name = "USDC";
         uint256 chainId = 1;
         address asset = makeAddr("asset");
@@ -313,9 +295,8 @@ contract RouterTest is Test {
         vm.prank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")),
-                user1,
-                DEFAULT_ADMIN_ROLE
+                Ownable.OwnableUnauthorizedAccount.selector,
+                user1
             )
         );
         router.addToken(name);
@@ -324,9 +305,8 @@ contract RouterTest is Test {
         vm.prank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")),
-                user1,
-                DEFAULT_ADMIN_ROLE
+                Ownable.OwnableUnauthorizedAccount.selector,
+                user1
             )
         );
         router.addTokenAssociation(name, chainId, asset, zrc20);
@@ -335,9 +315,8 @@ contract RouterTest is Test {
         vm.prank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")),
-                user1,
-                DEFAULT_ADMIN_ROLE
+                Ownable.OwnableUnauthorizedAccount.selector,
+                user1
             )
         );
         router.updateTokenAssociation(name, chainId, asset, zrc20);
@@ -345,9 +324,8 @@ contract RouterTest is Test {
         vm.prank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")),
-                user1,
-                DEFAULT_ADMIN_ROLE
+                Ownable.OwnableUnauthorizedAccount.selector,
+                user1
             )
         );
         router.removeTokenAssociation(name, chainId);
@@ -458,35 +436,6 @@ contract RouterTest is Test {
                 gasFee
             )
         );
-
-        // Verify gateway call
-        // TODO: fix this expected call check, we can see in the logs when executing the test that withdrawAndCall is called
-        // https://github.com/lumtis/zetafast/issues/10
-        // but it seems there are a discrepancy of the data actually used
-        // vm.expectCall(
-        //     address(gateway),
-        //     abi.encodeWithSelector(
-        //         IGateway.withdrawAndCall.selector,
-        //         abi.encodePacked(intentContract),
-        //         amount - 1 ether,
-        //         address(targetZRC20),
-        //         abi.encode(
-        //             intentPayload.intentId,
-        //             intentPayload.amount,
-        //             "targetAsset",
-        //             receiverBytes,
-        //             tip - 1 ether
-        //         ),
-        //         abi.encode(IGateway.CallOptions({gasLimit: 100000, isArbitraryCall: false})),
-        //         abi.encode(IGateway.RevertOptions({
-        //             revertAddress: address(0),
-        //             callOnRevert: false,
-        //             abortAddress: address(0),
-        //             revertMessage: "",
-        //             onRevertGasLimit: 0
-        //         }))
-        //     )
-        // );
 
         // Verify event
         vm.expectEmit(true, true, true, false);
