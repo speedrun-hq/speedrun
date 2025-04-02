@@ -21,6 +21,7 @@ jest.mock('wagmi', () => ({
 jest.mock('@/services/api', () => ({
   apiService: {
     createIntent: jest.fn(),
+    listIntents: jest.fn().mockResolvedValue([]),
   },
 }));
 

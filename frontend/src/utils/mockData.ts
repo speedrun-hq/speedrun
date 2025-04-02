@@ -60,17 +60,18 @@ const MOCK_FULFILLMENTS: Fulfillment[] = [
   },
 ];
 
-export const getMockIntents = (page: number, limit: number): ListIntentsResponse => {
-  const start = (page - 1) * limit;
-  const end = start + limit;
-  const paginatedIntents = MOCK_INTENTS.slice(start, end);
+export const getMockIntents = (limit: number, offset: number, status?: string): Intent[] => {
+  let filteredIntents = MOCK_INTENTS;
   
-  return {
-    intents: paginatedIntents,
-    total: MOCK_INTENTS.length,
-    page,
-    limit,
-  };
+  // Filter by status if provided
+  if (status) {
+    filteredIntents = filteredIntents.filter(intent => intent.status === status);
+  }
+  
+  // Apply pagination
+  const start = offset;
+  const end = start + limit;
+  return filteredIntents.slice(start, end);
 };
 
 export const getMockIntent = (id: string) => {
