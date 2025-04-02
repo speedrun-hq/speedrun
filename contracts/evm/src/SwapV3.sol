@@ -59,6 +59,9 @@ contract SwapV3 is ISwap {
         });
         uint256 zetaUsedForGas = swapRouter.exactOutputSingle(gasParams);
 
+        // Transfer gas fee tokens back to sender
+        IERC20(gasZRC20).safeTransfer(msg.sender, gasFee);
+
         // Second swap: remaining ZETA to target token
         uint256 remainingZeta = zetaAmount - zetaUsedForGas;
         IERC20(wzeta).approve(address(swapRouter), remainingZeta);
