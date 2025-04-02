@@ -74,7 +74,7 @@ The API is configured using environment variables. See `.env.example` for all av
 - `PORT`: The port the API server will listen on
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: Database connection details
 - `ETH_RPC_URL`: Ethereum RPC endpoint URL
-- `CONTRACT_ADDRESS`: The address of the deployed contract
+- `INTENT_ADDRESS`: The address of the deployed intent contract
 - `INTENT_INITIATED_EVENT_ABI`: The ABI for the IntentInitiated event
 
 ## API Endpoints

@@ -5,12 +5,8 @@ import { TokenSelector } from './TokenSelector';
 import { FormInput } from './FormInput';
 import ErrorMessage from '@/components/ErrorMessage';
 import { useIntentForm } from '@/hooks/useIntentForm';
-import { base, arbitrum } from 'wagmi/chains';
-
-// Helper function to convert chain name to ID
-const getChainId = (chainName: 'BASE' | 'ARBITRUM'): number => {
-  return chainName === 'BASE' ? base.id : arbitrum.id;
-};
+import { base } from 'wagmi/chains';
+import { getChainId } from '@/utils/chain';
 
 export default function CreateNewIntent() {
   const {

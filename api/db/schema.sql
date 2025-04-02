@@ -1,26 +1,33 @@
 -- Create intents table
 CREATE TABLE IF NOT EXISTS intents (
-    id VARCHAR(36) PRIMARY KEY,
-    source_chain VARCHAR(50) NOT NULL,
-    destination_chain VARCHAR(50) NOT NULL,
+    id VARCHAR(66) PRIMARY KEY,
+    source_chain VARCHAR(10) NOT NULL,
+    destination_chain VARCHAR(10) NOT NULL,
     token VARCHAR(10) NOT NULL,
-    amount VARCHAR(50) NOT NULL,
+    amount VARCHAR(78) NOT NULL,
     recipient VARCHAR(42) NOT NULL,
-    intent_fee VARCHAR(50) NOT NULL,
+    intent_fee VARCHAR(78) NOT NULL,
     status VARCHAR(20) NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create fulfillments table
 CREATE TABLE IF NOT EXISTS fulfillments (
-    id VARCHAR(36) PRIMARY KEY,
-    intent_id VARCHAR(36) NOT NULL REFERENCES intents(id),
-    fulfiller VARCHAR(42) NOT NULL,
-    amount VARCHAR(50) NOT NULL,
+    id SERIAL PRIMARY KEY,
+    intent_id VARCHAR(66) NOT NULL,
+    tx_hash VARCHAR(66) NOT NULL,
     status VARCHAR(20) NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (intent_id) REFERENCES intents(id)
+);
+
+-- Table to store last processed block numbers
+CREATE TABLE IF NOT EXISTS last_processed_blocks (
+    chain_id VARCHAR(10) PRIMARY KEY,
+    last_block BIGINT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create indexes

@@ -78,15 +78,11 @@ func FromIntent(intent *Intent) *IntentInitiatedEvent {
 func (e *FulfillmentEvent) ToFulfillment() *Fulfillment {
 	now := time.Now()
 	return &Fulfillment{
-		ID:          e.TxHash, // Using tx hash as ID for uniqueness
-		IntentID:    e.IntentID,
-		Fulfiller:   e.Receiver,
-		TargetChain: e.TargetChain,
-		Amount:      e.Amount,
-		Status:      FulfillmentStatusPending,
-		TxHash:      e.TxHash,
-		BlockNumber: e.BlockNumber,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:        e.TxHash, // Using tx hash as ID for uniqueness
+		IntentID:  e.IntentID,
+		TxHash:    e.TxHash,
+		Status:    FulfillmentStatusPending,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }

@@ -58,12 +58,8 @@ func TestFulfillmentEventToFulfillment(t *testing.T) {
 	// Verify fulfillment fields
 	assert.Equal(t, event.TxHash, fulfillment.ID)
 	assert.Equal(t, event.IntentID, fulfillment.IntentID)
-	assert.Equal(t, event.Receiver, fulfillment.Fulfiller)
-	assert.Equal(t, event.TargetChain, fulfillment.TargetChain)
-	assert.Equal(t, event.Amount, fulfillment.Amount)
-	assert.Equal(t, FulfillmentStatusPending, fulfillment.Status)
 	assert.Equal(t, event.TxHash, fulfillment.TxHash)
-	assert.Equal(t, event.BlockNumber, fulfillment.BlockNumber)
+	assert.Equal(t, FulfillmentStatusPending, fulfillment.Status)
 }
 
 func TestIntentInitiatedEventToIntent(t *testing.T) {

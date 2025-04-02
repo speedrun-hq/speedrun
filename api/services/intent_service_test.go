@@ -18,13 +18,13 @@ func TestNewIntentService(t *testing.T) {
 
 	// Create an intent service with a valid ABI
 	abi := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"IntentInitiated","type":"event"}]`
-	service, err := NewIntentService(ethClient, mockDB, abi)
+	service, err := NewIntentService(ethClient, mockDB, abi, 7001)
 	assert.NoError(t, err)
 	assert.NotNil(t, service)
 	assert.Equal(t, mockDB, service.db)
 
 	// Test with invalid ABI
-	service, err = NewIntentService(ethClient, mockDB, "invalid abi")
+	service, err = NewIntentService(ethClient, mockDB, "invalid abi", 7001)
 	assert.Error(t, err)
 	assert.Nil(t, service)
 }
@@ -38,7 +38,7 @@ func TestIntentServiceStartListening(t *testing.T) {
 	ethClient := createMockEthClient()
 
 	// Create an intent service
-	service, err := NewIntentService(ethClient, mockDB, `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"IntentInitiated","type":"event"}]`)
+	service, err := NewIntentService(ethClient, mockDB, `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"IntentInitiated","type":"event"}]`, 7001)
 	assert.NoError(t, err)
 
 	// Test starting to listen for events

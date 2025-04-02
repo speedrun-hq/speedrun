@@ -3,24 +3,13 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
-	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
 	"github.com/zeta-chain/zetafast/api/services"
 	"github.com/zeta-chain/zetafast/api/utils"
 )
 
 var fulfillmentService *services.FulfillmentService
-
-// InitHandlers initializes the handlers with required dependencies
-func InitHandlers(clients map[uint64]*ethclient.Client, contractAddresses map[uint64]string, database db.Database) error {
-	var err error
-	// TODO: Get contract ABI from a configuration or file
-	contractABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"}],"name":"IntentFulfilled","type":"event"}]`
-	fulfillmentService, err = services.NewFulfillmentService(clients, contractAddresses, database, contractABI)
-	return err
-}
 
 // CreateFulfillment handles the creation of a new fulfillment
 func CreateFulfillment(c *gin.Context) {
@@ -36,7 +25,7 @@ func CreateFulfillment(c *gin.Context) {
 		return
 	}
 
-	fulfillment, err := fulfillmentService.CreateFulfillment(c.Request.Context(), req.IntentID, req.Fulfiller, req.Amount)
+	fulfillment, err := fulfillmentService.CreateFulfillment(c.Request.Context(), req.IntentID, req.TxHash)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

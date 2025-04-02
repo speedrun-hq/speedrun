@@ -13,7 +13,6 @@ type CreateIntentRequest struct {
 
 // CreateFulfillmentRequest represents the request body for creating a new fulfillment
 type CreateFulfillmentRequest struct {
-	IntentID  string `json:"intent_id" binding:"required"`
-	Fulfiller string `json:"fulfiller" binding:"required"`
-	Amount    string `json:"amount" binding:"required"`
+	IntentID string `json:"intent_id" binding:"required"`
+	TxHash   string `json:"tx_hash" binding:"required"`
 }

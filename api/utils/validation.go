@@ -44,33 +44,16 @@ func ValidateAddress(address string) error {
 }
 
 // ValidateChain checks if a chain is supported
-func ValidateChain(chain interface{}) error {
-	var chainID uint64
-	switch v := chain.(type) {
-	case uint64:
-		chainID = v
-	case string:
-		// Try to parse string as uint64
-		parsed, err := fmt.Sscanf(v, "%d", &chainID)
-		if err != nil || parsed != 1 {
-			return errors.New("invalid chain format: must be a valid uint64 or string representation of uint64")
-		}
-	default:
-		return errors.New("invalid chain type: must be uint64 or string")
-	}
-
+func ValidateChain(chainID uint64) error {
 	if chainID == 0 {
 		return errors.New("chain ID cannot be zero")
 	}
 
 	fmt.Printf("Validating chain: %d, supported chains: %v\n", chainID, cfg.SupportedChains)
 
-	// Convert chain ID to string for comparison
-	chainStr := fmt.Sprintf("%d", chainID)
-
 	// Check if chain is in supported chains from config
 	for _, supported := range cfg.SupportedChains {
-		if chainStr == supported {
+		if chainID == supported {
 			return nil
 		}
 	}
@@ -206,19 +189,14 @@ func ValidateFulfillmentRequest(req *models.CreateFulfillmentRequest) error {
 		return errors.New("request cannot be nil")
 	}
 
-	// Validate fulfiller address
-	if err := ValidateAddress(req.Fulfiller); err != nil {
-		return err
-	}
-
-	// Validate amount
-	if err := ValidateAmount(req.Amount); err != nil {
-		return err
-	}
-
 	// Validate intent ID format (bytes32 format)
 	if !IsValidBytes32(req.IntentID) {
 		return errors.New("invalid intent ID format")
+	}
+
+	// Validate tx hash format (bytes32 format)
+	if !IsValidBytes32(req.TxHash) {
+		return errors.New("invalid transaction hash format")
 	}
 
 	return nil

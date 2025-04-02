@@ -9,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/assert"
+	"github.com/zeta-chain/zetafast/api/config"
+	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
 	"github.com/zeta-chain/zetafast/api/test/mocks"
 )
@@ -19,15 +21,36 @@ func TestIntentFulfillmentFlow(t *testing.T) {
 	mockDB := mocks.NewMockDB()
 
 	// Create mock Ethereum clients
-	clients := map[uint64]*ethclient.Client{
-		42161: createMockEthClient(), // Arbitrum
-		7001:  createMockEthClient(), // ZetaChain
+	clients := make(map[uint64]*ethclient.Client)
+	clients[7001] = createMockEthClient()
+	clients[42161] = createMockEthClient()
+	clients[8453] = createMockEthClient()
+
+	// Create contract addresses map
+	contractAddresses := make(map[uint64]string)
+	contractAddresses[7001] = "0x1234567890123456789012345678901234567890"
+	contractAddresses[42161] = "0x1234567890123456789012345678901234567890"
+	contractAddresses[8453] = "0x0987654321098765432109876543210987654321"
+
+	// Create test config
+	testConfig := &config.Config{
+		ChainConfigs: map[uint64]*config.ChainConfig{
+			42161: {
+				DefaultBlock: 322207320, // Arbitrum
+			},
+			8453: {
+				DefaultBlock: 28411000, // Base
+			},
+			7001: {
+				DefaultBlock: 1000000, // ZetaChain
+			},
+		},
 	}
 
-	// Contract addresses
-	contractAddresses := map[uint64]string{
-		42161: "0x1234567890123456789012345678901234567890",
-		7001:  "0x0987654321098765432109876543210987654321",
+	// Create default blocks map from test config
+	defaultBlocks := make(map[uint64]uint64)
+	for chainID, chainConfig := range testConfig.ChainConfigs {
+		defaultBlocks[chainID] = chainConfig.DefaultBlock
 	}
 
 	// Intent contract ABI
@@ -37,12 +60,12 @@ func TestIntentFulfillmentFlow(t *testing.T) {
 	fulfillmentABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
 
 	// Create intent service
-	intentService, err := NewIntentService(clients[7001], mockDB, intentABI)
+	intentService, err := NewIntentService(clients[7001], mockDB, intentABI, 7001)
 	assert.NoError(t, err)
 	assert.NotNil(t, intentService)
 
 	// Create fulfillment service
-	fulfillmentService, err := NewFulfillmentService(clients, contractAddresses, mockDB, fulfillmentABI)
+	fulfillmentService, err := NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), fulfillmentABI, defaultBlocks)
 	assert.NoError(t, err)
 	assert.NotNil(t, fulfillmentService)
 
@@ -94,7 +117,7 @@ func TestIntentFulfillmentFlow(t *testing.T) {
 	}
 
 	// Process the fulfillment log
-	err = fulfillmentService.processLog(ctx, fulfillmentService.clients["42161"], fulfillmentLog)
+	err = fulfillmentService.processLog(ctx, fulfillmentService.clients[42161], fulfillmentLog)
 	assert.NoError(t, err)
 
 	// Verify fulfillment was created
@@ -102,8 +125,7 @@ func TestIntentFulfillmentFlow(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, fulfillments, 1)
 	assert.Equal(t, intentID, fulfillments[0].IntentID)
-	assert.Equal(t, "0x0987654321098765432109876543210987654321", fulfillments[0].Fulfiller)
-	assert.Equal(t, "1000000000000000000", fulfillments[0].Amount)
+	assert.Equal(t, fulfillmentLog.TxHash.Hex(), fulfillments[0].TxHash)
 	assert.Equal(t, models.FulfillmentStatusCompleted, fulfillments[0].Status)
 
 	// Verify intent status is still pending
@@ -126,7 +148,7 @@ func TestIntentFulfillmentFlow(t *testing.T) {
 	}
 
 	// Process the second fulfillment log
-	err = fulfillmentService.processLog(ctx, fulfillmentService.clients["42161"], fulfillmentLog2)
+	err = fulfillmentService.processLog(ctx, fulfillmentService.clients[42161], fulfillmentLog2)
 	assert.NoError(t, err)
 
 	// Verify both fulfillments exist

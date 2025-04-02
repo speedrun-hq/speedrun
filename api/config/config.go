@@ -18,13 +18,14 @@ type ChainConfig struct {
 	MaxRetries    int
 	RetryDelay    int
 	Confirmations int
+	DefaultBlock  uint64
 }
 
 // Config holds all configuration values
 type Config struct {
 	Port                    string
 	DatabaseURL             string
-	SupportedChains         []string
+	SupportedChains         []uint64
 	ChainConfigs            map[uint64]*ChainConfig
 	ContractABI             string
 	IntentInitiatedEventABI string
@@ -87,26 +88,42 @@ func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
 	// Get supported chains
-	supportedChains := strings.Split(getEnvOrDefault("SUPPORTED_CHAINS", "zeta,arbitrum,base"), ",")
+	supportedChainsStr := strings.Split(getEnvOrDefault("SUPPORTED_CHAINS", "42161,8453"), ",")
+	supportedChains := make([]uint64, len(supportedChainsStr))
+	for i, chain := range supportedChainsStr {
+		chainID, err := strconv.ParseUint(chain, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid chain ID for %s: %v", chain, err)
+		}
+		supportedChains[i] = chainID
+	}
 
 	// Create chain configs map
 	chainConfigs := make(map[uint64]*ChainConfig)
 
 	// Load configurations for each chain
-	for _, chain := range supportedChains {
-		chainID, err := strconv.ParseUint(getEnvOrDefault(fmt.Sprintf("%s_CHAIN_ID", strings.ToUpper(chain)), "0"), 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid chain ID for %s: %v", chain, err)
+	for _, chainID := range supportedChains {
+		var prefix string
+		switch chainID {
+		case 42161:
+			prefix = "ARBITRUM"
+		case 8453:
+			prefix = "BASE"
+		case 7001:
+			prefix = "ZETA"
+		default:
+			return nil, fmt.Errorf("unsupported chain ID: %d", chainID)
 		}
 
 		chainConfigs[chainID] = &ChainConfig{
-			RPCURL:        getEnvOrDefault(fmt.Sprintf("%s_RPC_URL", strings.ToUpper(chain)), ""),
-			ContractAddr:  getEnvOrDefault(fmt.Sprintf("%s_CONTRACT_ADDR", strings.ToUpper(chain)), ""),
+			RPCURL:        getEnvOrDefault(fmt.Sprintf("%s_RPC_URL", prefix), ""),
+			ContractAddr:  getEnvOrDefault(fmt.Sprintf("%s_INTENT_ADDR", prefix), ""),
 			ChainID:       chainID,
-			BlockInterval: int64(getEnvIntOrDefault(fmt.Sprintf("%s_BLOCK_INTERVAL", strings.ToUpper(chain)), 1)),
-			MaxRetries:    getEnvIntOrDefault(fmt.Sprintf("%s_MAX_RETRIES", strings.ToUpper(chain)), 3),
-			RetryDelay:    getEnvIntOrDefault(fmt.Sprintf("%s_RETRY_DELAY", strings.ToUpper(chain)), 5),
-			Confirmations: getEnvIntOrDefault(fmt.Sprintf("%s_CONFIRMATIONS", strings.ToUpper(chain)), 1),
+			BlockInterval: int64(getEnvIntOrDefault(fmt.Sprintf("%s_BLOCK_INTERVAL", prefix), 1)),
+			MaxRetries:    getEnvIntOrDefault(fmt.Sprintf("%s_MAX_RETRIES", prefix), 3),
+			RetryDelay:    getEnvIntOrDefault(fmt.Sprintf("%s_RETRY_DELAY", prefix), 5),
+			Confirmations: getEnvIntOrDefault(fmt.Sprintf("%s_CONFIRMATIONS", prefix), 1),
+			DefaultBlock:  getEnvUint64OrDefault(fmt.Sprintf("%s_DEFAULT_BLOCK", prefix), 0),
 		}
 	}
 
@@ -166,6 +183,16 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+// getEnvUint64OrDefault gets an environment variable as a uint64 or returns a default value
+func getEnvUint64OrDefault(key string, defaultValue uint64) uint64 {
+	if value := os.Getenv(key); value != "" {
+		if uintValue, err := strconv.ParseUint(value, 10, 64); err == nil {
+			return uintValue
 		}
 	}
 	return defaultValue

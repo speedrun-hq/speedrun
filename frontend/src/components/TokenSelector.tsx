@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-type TokenSymbol = 'USDC' | 'USDT';
+import { TokenSymbol } from '@/constants/tokens';
 
 interface TokenSelectorProps {
   value: TokenSymbol;
