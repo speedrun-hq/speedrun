@@ -16,8 +16,11 @@ import "./utils/PayloadUtils.sol";
 contract Router {
     using SafeERC20 for IERC20;
 
-    // Gas limit for withdraw operations
-    uint256 private constant WITHDRAW_GAS_LIMIT = 160000;
+    // Default gas limit for withdraw operations
+    uint256 private constant DEFAULT_WITHDRAW_GAS_LIMIT = 300000;
+    
+    // Current gas limit for withdraw operations (can be modified by admin)
+    uint256 public withdrawGasLimit;
 
     // Gateway contract address
     address public gateway;
@@ -77,6 +80,7 @@ contract Router {
         gateway = _gateway;
         swapModule = _swapModule;
         admin = msg.sender;
+        withdrawGasLimit = DEFAULT_WITHDRAW_GAS_LIMIT;
     }
 
     /**
@@ -121,7 +125,7 @@ contract Router {
         require(intentContract != address(0), "Intent contract not set for target chain");
 
         // Get gas fee info from target ZRC20
-        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(WITHDRAW_GAS_LIMIT);
+        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(withdrawGasLimit);
 
         // Approve swap module to spend tokens
         IERC20(zrc20).approve(swapModule, amount);
@@ -148,7 +152,7 @@ contract Router {
 
         // Prepare call options
         IGateway.CallOptions memory callOptions = IGateway.CallOptions({
-            gasLimit: WITHDRAW_GAS_LIMIT,
+            gasLimit: withdrawGasLimit,
             isArbitraryCall: false
         });
 
@@ -362,5 +366,14 @@ contract Router {
      */
     function isTokenSupported(string calldata name) public view returns (bool) {
         return _supportedTokens[name];
+    }
+
+    /**
+     * @dev Updates the withdraw gas limit
+     * @param newGasLimit The new gas limit to set
+     */
+    function setWithdrawGasLimit(uint256 newGasLimit) public onlyAdmin {
+        require(newGasLimit > 0, "Gas limit cannot be zero");
+        withdrawGasLimit = newGasLimit;
     }
 } 

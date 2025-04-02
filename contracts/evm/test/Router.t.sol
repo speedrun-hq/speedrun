@@ -372,7 +372,7 @@ contract RouterTest is Test {
         // Setup gas fee info
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, 160000),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, 300000),
             abi.encode(address(gasZRC20), gasFee)
         );
 
@@ -429,4 +429,23 @@ contract RouterTest is Test {
 
     // TODO: add failure case for onCall
     // https://github.com/lumtis/zetafast/issues/10
+    
+    function test_SetWithdrawGasLimit() public {
+        uint256 newGasLimit = 200000;
+        router.setWithdrawGasLimit(newGasLimit);
+        assertEq(router.withdrawGasLimit(), newGasLimit);
+    }
+    
+    function test_SetWithdrawGasLimit_ZeroValueReverts() public {
+        uint256 zeroGasLimit = 0;
+        vm.expectRevert("Gas limit cannot be zero");
+        router.setWithdrawGasLimit(zeroGasLimit);
+    }
+    
+    function test_SetWithdrawGasLimit_NonAdminReverts() public {
+        uint256 newGasLimit = 200000;
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
+        router.setWithdrawGasLimit(newGasLimit);
+    }
 } 
