@@ -14,7 +14,24 @@ import {IGateway} from "../src/interfaces/IGateway.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IZRC20} from "../src/interfaces/IZRC20.sol";
 import {ISwapRouter} from "../src/interfaces/ISwapRouter.sol";
+import {ISwap} from "../src/interfaces/ISwap.sol";
 import "forge-std/console.sol";
+
+contract MockSwapModule is ISwap {
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        address gasZRC20,
+        uint256 gasFee
+    ) external returns (uint256 amountOut) {
+        // Mock 1:1 swap with gas fee deduction
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
+        IERC20(tokenOut).transfer(msg.sender, amountIn - gasFee);
+        IERC20(gasZRC20).transfer(msg.sender, gasFee);
+        return amountIn - gasFee;
+    }
+}
 
 contract RouterTest is Test {
     Router public router;
@@ -26,6 +43,7 @@ contract RouterTest is Test {
     MockToken public inputToken;
     MockToken public gasZRC20;
     MockToken public targetZRC20;
+    MockSwapModule public swapModule;
     address public owner;
     address public user1;
     address public user2;
@@ -58,6 +76,7 @@ contract RouterTest is Test {
         inputToken = new MockToken("Input Token", "INPUT");
         gasZRC20 = new MockToken("Gas Token", "GAS");
         targetZRC20 = new MockToken("Target Token", "TARGET");
+        swapModule = new MockSwapModule();
 
         // Deploy implementation
         routerImplementation = new Router();
@@ -68,7 +87,8 @@ contract RouterTest is Test {
             address(gateway),
             address(factory),
             address(swapRouter),
-            address(wzeta)
+            address(wzeta),
+            address(swapModule)
         );
 
         // Deploy proxy
@@ -422,91 +442,36 @@ contract RouterTest is Test {
         // Setup mock balances and approvals
         inputToken.mint(address(router), amount);
         gasZRC20.mint(address(router), gasFee);
-        targetZRC20.mint(address(router), amount - 1 ether);
-
-        // Setup mock swap responses with exact parameters
-        vm.mockCall(
-            address(router.uniswapV3Router()),
-            abi.encodeWithSelector(
-                ISwapRouter.exactInputSingle.selector,
-                ISwapRouter.ExactInputSingleParams({
-                    tokenIn: address(inputToken),
-                    tokenOut: address(wzeta),
-                    fee: 3000,
-                    recipient: address(router),
-                    deadline: block.timestamp + 15 minutes,
-                    amountIn: amount,
-                    amountOutMinimum: 0,
-                    sqrtPriceLimitX96: 0
-                })
-            ),
-            abi.encode(amount) // First swap: input -> ZETA
-        );
-        vm.mockCall(
-            address(router.uniswapV3Router()),
-            abi.encodeWithSelector(
-                ISwapRouter.exactOutputSingle.selector,
-                ISwapRouter.ExactOutputSingleParams({
-                    tokenIn: address(wzeta),
-                    tokenOut: address(gasZRC20),
-                    fee: 3000,
-                    recipient: address(router),
-                    deadline: block.timestamp + 15 minutes,
-                    amountOut: gasFee,
-                    amountInMaximum: amount,
-                    sqrtPriceLimitX96: 0
-                })
-            ),
-            abi.encode(gasFee) // Second swap: ZETA -> gas token
-        );
-        vm.mockCall(
-            address(router.uniswapV3Router()),
-            abi.encodeWithSelector(
-                ISwapRouter.exactInputSingle.selector,
-                ISwapRouter.ExactInputSingleParams({
-                    tokenIn: address(wzeta),
-                    tokenOut: address(targetZRC20),
-                    fee: 3000,
-                    recipient: address(router),
-                    deadline: block.timestamp + 15 minutes,
-                    amountIn: amount - gasFee,
-                    amountOutMinimum: 0,
-                    sqrtPriceLimitX96: 0
-                })
-            ),
-            abi.encode(amount - 1 ether) // Third swap: remaining ZETA -> target token
-        );
+        targetZRC20.mint(address(router), amount - gasFee);
+        // Mint tokens to swap module for the swap
+        targetZRC20.mint(address(swapModule), amount - gasFee);
+        gasZRC20.mint(address(swapModule), gasFee);
 
         // Verify expected calls before execution
         vm.expectCall(
             address(inputToken),
-            abi.encodeWithSelector(IERC20.approve.selector, address(router.uniswapV3Router()), amount)
-        );
-        vm.expectCall(
-            address(wzeta),
-            abi.encodeWithSelector(IERC20.approve.selector, address(router.uniswapV3Router()), amount)
+            abi.encodeWithSelector(IERC20.approve.selector, address(swapModule), amount)
         );
         vm.expectCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IERC20.approve.selector, address(gateway), amount - 1 ether)
+            abi.encodeWithSelector(IERC20.approve.selector, address(gateway), amount - gasFee)
         );
         vm.expectCall(
             address(gasZRC20),
             abi.encodeWithSelector(IERC20.approve.selector, address(gateway), gasFee)
         );
 
-        // Verify expected swaps
+        // Verify swap module call
         vm.expectCall(
-            address(router.uniswapV3Router()),
-            abi.encodeWithSelector(ISwapRouter.exactInputSingle.selector)
-        );
-        vm.expectCall(
-            address(router.uniswapV3Router()),
-            abi.encodeWithSelector(ISwapRouter.exactOutputSingle.selector)
-        );
-        vm.expectCall(
-            address(router.uniswapV3Router()),
-            abi.encodeWithSelector(ISwapRouter.exactInputSingle.selector)
+            address(swapModule),
+            abi.encodeWithSelector(
+                ISwap.swap.selector,
+                address(inputToken),
+                address(targetZRC20),
+                amount,
+                address(gasZRC20),
+                gasFee
+            )
         );
 
         // Verify gateway call
@@ -546,7 +511,7 @@ contract RouterTest is Test {
             targetChain,
             address(inputToken),
             amount,
-            tip - 1 ether
+            tip - gasFee
         );
 
         // Execute
