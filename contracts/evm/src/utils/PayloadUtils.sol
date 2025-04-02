@@ -134,10 +134,6 @@ library PayloadUtils {
      */
     function bytesToAddress(bytes memory data) internal pure returns (address) {
         require(data.length >= 20, "Invalid address length");
-        address addr;
-        assembly {
-            addr := and(mload(add(data, 20)), 0xffffffffffffffffffffffffffffffffffffffff)
-        }
-        return addr;
+        return address(bytes20(data));
     }
 } 
