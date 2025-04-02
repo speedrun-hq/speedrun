@@ -21,7 +21,6 @@ contract RouterScript is Script {
         address swapModule = vm.envAddress("SWAP_MODULE_ADDRESS");
         
         // Deploy router with specific compiler version noted
-        console2.log("Using Solidity version 0.8.26 for deployment");
         vm.startBroadcast(deployerPrivateKey);
         
         // Deploy router directly (no proxy needed)
