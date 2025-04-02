@@ -14,7 +14,6 @@ contract RouterScript is Script {
 
         // Get environment variables
         address gateway = vm.envAddress("GATEWAY_ADDRESS");
-        address wzeta = vm.envAddress("WZETA_ADDRESS");
         address swapModule = vm.envAddress("SWAP_MODULE_ADDRESS");
 
         // Deploy implementation
@@ -24,7 +23,6 @@ contract RouterScript is Script {
         bytes memory initData = abi.encodeWithSelector(
             Router.initialize.selector,
             gateway,
-            wzeta,
             swapModule
         );
 
@@ -41,7 +39,6 @@ contract RouterScript is Script {
         console2.log("Proxy at:", address(proxy));
         console2.log("Initialized with:");
         console2.log("- Gateway:", gateway);
-        console2.log("- WZETA:", wzeta);
         console2.log("- Swap Module:", swapModule);
         vm.stopBroadcast();
     }

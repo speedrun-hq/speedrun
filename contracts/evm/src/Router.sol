@@ -23,8 +23,6 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
     // Gateway contract address
     IGateway public gateway;
-    // WZETA address on ZetaChain
-    address public wzeta;
     // Swap module address
     address public swapModule;
 
@@ -72,16 +70,13 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
     /**
      * @dev Initializes the contract with the gateway and swap module addresses
      * @param _gateway The address of the gateway contract
-     * @param _wzeta The address of the WZETA contract
      * @param _swapModule The address of the swap module contract
      */
     function initialize(
         address _gateway,
-        address _wzeta,
         address _swapModule
     ) public initializer {
         require(_gateway != address(0), "Invalid gateway address");
-        require(_wzeta != address(0), "Invalid WZETA address");
         require(_swapModule != address(0), "Invalid swap module address");
 
         __AccessControl_init();
@@ -90,7 +85,6 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         gateway = IGateway(_gateway);
-        wzeta = _wzeta;
         swapModule = _swapModule;
     }
 

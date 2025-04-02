@@ -35,7 +35,6 @@ contract RouterTest is Test {
     Router public router;
     Router public routerImplementation;
     MockGateway public gateway;
-    MockWETH public wzeta;
     MockToken public inputToken;
     MockToken public gasZRC20;
     MockToken public targetZRC20;
@@ -66,7 +65,6 @@ contract RouterTest is Test {
 
         // Deploy mock contracts
         gateway = new MockGateway();
-        wzeta = new MockWETH();
         inputToken = new MockToken("Input Token", "INPUT");
         gasZRC20 = new MockToken("Gas Token", "GAS");
         targetZRC20 = new MockToken("Target Token", "TARGET");
@@ -79,7 +77,6 @@ contract RouterTest is Test {
         bytes memory initData = abi.encodeWithSelector(
             Router.initialize.selector,
             address(gateway),
-            address(wzeta),
             address(swapModule)
         );
 
