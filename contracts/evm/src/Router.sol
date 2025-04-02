@@ -16,6 +16,9 @@ import "./utils/PayloadUtils.sol";
 contract Router {
     using SafeERC20 for IERC20;
 
+    // Gas limit for withdraw operations
+    uint256 private constant WITHDRAW_GAS_LIMIT = 160000;
+
     // Gateway contract address
     address public gateway;
     // Swap module address
@@ -118,7 +121,7 @@ contract Router {
         require(intentContract != address(0), "Intent contract not set for target chain");
 
         // Get gas fee info from target ZRC20
-        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(100000);
+        (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(WITHDRAW_GAS_LIMIT);
 
         // Approve swap module to spend tokens
         IERC20(zrc20).approve(swapModule, amount);
@@ -145,7 +148,7 @@ contract Router {
 
         // Prepare call options
         IGateway.CallOptions memory callOptions = IGateway.CallOptions({
-            gasLimit: 100000,
+            gasLimit: WITHDRAW_GAS_LIMIT,
             isArbitraryCall: false
         });
 

@@ -372,7 +372,7 @@ contract RouterTest is Test {
         // Setup gas fee info
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, 100000),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, 160000),
             abi.encode(address(gasZRC20), gasFee)
         );
 
