@@ -154,7 +154,7 @@ contract Router {
 
         // Prepare revert options
         IGateway.RevertOptions memory revertOptions = IGateway.RevertOptions({
-            revertAddress: address(0),
+            revertAddress: receiverAddress, // should never happen: in case of failure, funds are reverted to receiver on ZetaChain
             callOnRevert: false,
             abortAddress: address(0),
             revertMessage: "",
