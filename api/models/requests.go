@@ -2,8 +2,9 @@ package models
 
 // CreateIntentRequest represents the request body for creating a new intent
 type CreateIntentRequest struct {
-	SourceChain      string `json:"source_chain" binding:"required"`
-	DestinationChain string `json:"destination_chain" binding:"required"`
+	ID               string `json:"id" binding:"required"`
+	SourceChain      uint64 `json:"source_chain" binding:"required"`
+	DestinationChain uint64 `json:"destination_chain" binding:"required"`
 	Token            string `json:"token" binding:"required"`
 	Amount           string `json:"amount" binding:"required"`
 	Recipient        string `json:"recipient" binding:"required"`

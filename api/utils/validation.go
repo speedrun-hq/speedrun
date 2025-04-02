@@ -2,10 +2,13 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"regexp"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/zeta-chain/zetafast/api/config"
 	"github.com/zeta-chain/zetafast/api/models"
 )
@@ -14,11 +17,11 @@ var (
 	// Address regex pattern (basic Ethereum address format)
 	addressRegex = regexp.MustCompile(`^0x[a-fA-F0-9]{40}$`)
 
-	// Amount regex pattern (positive decimal with up to 18 decimal places)
-	amountRegex = regexp.MustCompile(`^[0-9]+\.?[0-9]{0,18}$`)
+	// Amount regex pattern (positive integer)
+	amountRegex = regexp.MustCompile(`^[0-9]+$`)
 
-	// UUID regex pattern
-	uuidRegex = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	// Bytes32 regex pattern (for intent IDs)
+	bytes32Regex = regexp.MustCompile(`^0x[a-fA-F0-9]{64}$`)
 
 	// Config instance for validation
 	cfg *config.Config
@@ -29,35 +32,50 @@ func Initialize(c *config.Config) {
 	cfg = c
 }
 
-// ValidateAddress checks if the address is in a valid format
+// ValidateAddress validates an Ethereum address
 func ValidateAddress(address string) error {
 	if address == "" {
-		return errors.New("address cannot be empty")
+		return fmt.Errorf("address cannot be empty")
 	}
-
 	if !addressRegex.MatchString(address) {
-		return errors.New("invalid address format")
+		return fmt.Errorf("invalid Ethereum address format: %s", address)
 	}
-
 	return nil
 }
 
-// ValidateChain checks if the chain is supported
-func ValidateChain(chain string) error {
-	if chain == "" {
-		return errors.New("chain cannot be empty")
+// ValidateChain checks if a chain is supported
+func ValidateChain(chain interface{}) error {
+	var chainID uint64
+	switch v := chain.(type) {
+	case uint64:
+		chainID = v
+	case string:
+		// Try to parse string as uint64
+		parsed, err := fmt.Sscanf(v, "%d", &chainID)
+		if err != nil || parsed != 1 {
+			return errors.New("invalid chain format: must be a valid uint64 or string representation of uint64")
+		}
+	default:
+		return errors.New("invalid chain type: must be uint64 or string")
 	}
 
-	chain = strings.ToLower(chain)
+	if chainID == 0 {
+		return errors.New("chain ID cannot be zero")
+	}
+
+	fmt.Printf("Validating chain: %d, supported chains: %v\n", chainID, cfg.SupportedChains)
+
+	// Convert chain ID to string for comparison
+	chainStr := fmt.Sprintf("%d", chainID)
 
 	// Check if chain is in supported chains from config
 	for _, supported := range cfg.SupportedChains {
-		if chain == strings.ToLower(supported) {
+		if chainStr == supported {
 			return nil
 		}
 	}
 
-	return errors.New("unsupported chain")
+	return fmt.Errorf("unsupported chain: %d", chainID)
 }
 
 // ValidateAmount checks if the amount is valid and within limits
@@ -75,7 +93,7 @@ func ValidateAmount(amount string) error {
 	}
 
 	// Parse the amount as a big number
-	value, success := new(big.Float).SetString(amount)
+	value, success := new(big.Int).SetString(amount, 10)
 	if !success {
 		return errors.New("invalid amount format")
 	}
@@ -85,8 +103,11 @@ func ValidateAmount(amount string) error {
 		return errors.New("amount must be positive")
 	}
 
-	// Check maximum amount (e.g., 1 billion)
-	maxAmount := new(big.Float).SetInt64(1_000_000_000)
+	// Check maximum amount (e.g., 1 billion ETH in wei)
+	maxAmount := new(big.Int).Mul(
+		new(big.Int).SetInt64(1_000_000_000),
+		new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil),
+	)
 	if value.Cmp(maxAmount) > 0 {
 		return errors.New("amount exceeds maximum limit")
 	}
@@ -96,78 +117,87 @@ func ValidateAmount(amount string) error {
 
 // ValidateFulfillmentAmount checks if the fulfillment amount is valid for the intent
 func ValidateFulfillmentAmount(amount, intentAmount, totalFulfilled string) error {
-	if err := ValidateAmount(amount); err != nil {
-		return err
+	// Parse amounts
+	fulfillmentAmount := new(big.Int)
+	if _, ok := fulfillmentAmount.SetString(amount, 10); !ok {
+		return fmt.Errorf("invalid fulfillment amount format")
 	}
 
-	// Convert all amounts to big numbers for comparison
-	fulfillmentAmount, _ := new(big.Float).SetString(amount)
-	intentTotal, _ := new(big.Float).SetString(intentAmount)
-	alreadyFulfilled, _ := new(big.Float).SetString(totalFulfilled)
-
-	// Calculate remaining amount
-	remaining := new(big.Float).Sub(intentTotal, alreadyFulfilled)
-
-	// Check if fulfillment amount exceeds remaining amount
-	if fulfillmentAmount.Cmp(remaining) > 0 {
-		return errors.New("fulfillment amount exceeds remaining amount")
+	intentAmountBig := new(big.Int)
+	if _, ok := intentAmountBig.SetString(intentAmount, 10); !ok {
+		return fmt.Errorf("invalid intent amount format")
 	}
 
-	// Check minimum fulfillment amount (e.g., 0.000001)
-	minAmount := new(big.Float).SetFloat64(0.000001)
-	if fulfillmentAmount.Cmp(minAmount) < 0 {
-		return errors.New("fulfillment amount below minimum limit")
+	totalFulfilledBig := new(big.Int)
+	if _, ok := totalFulfilledBig.SetString(totalFulfilled, 10); !ok {
+		return fmt.Errorf("invalid total fulfilled amount format")
+	}
+
+	// Validate amount is positive
+	if fulfillmentAmount.Cmp(big.NewInt(0)) <= 0 {
+		return fmt.Errorf("fulfillment amount must be positive")
+	}
+
+	// Validate amount doesn't exceed intent amount
+	if fulfillmentAmount.Cmp(intentAmountBig) > 0 {
+		return fmt.Errorf("fulfillment amount exceeds intent amount")
+	}
+
+	// Validate total fulfilled doesn't exceed intent amount
+	total := new(big.Int).Add(totalFulfilledBig, fulfillmentAmount)
+	if total.Cmp(intentAmountBig) > 0 {
+		return fmt.Errorf("total fulfilled amount would exceed intent amount")
 	}
 
 	return nil
 }
 
-// ValidateIntent checks if an intent is valid for fulfillment
+// ValidateReceiverBytes validates a receiver address in bytes format
+func ValidateReceiverBytes(receiver []byte) error {
+	if len(receiver) == 0 {
+		return fmt.Errorf("receiver cannot be empty")
+	}
+	if len(receiver) != 20 { // Ethereum address length
+		return fmt.Errorf("invalid receiver address length: expected 20 bytes, got %d", len(receiver))
+	}
+	return nil
+}
+
+// ValidateIntent validates an intent
 func ValidateIntent(intent *models.Intent) error {
 	if intent == nil {
-		return errors.New("intent not found")
+		return fmt.Errorf("intent is nil")
 	}
 
-	if intent.Status != models.IntentStatusPending {
-		return errors.New("intent is not in pending status")
+	if intent.ID == "" {
+		return fmt.Errorf("intent ID is required")
 	}
 
-	// Validate source chain
-	if err := ValidateChain(intent.SourceChain); err != nil {
-		return err
+	if intent.SourceChain == 0 {
+		return fmt.Errorf("source chain is required")
 	}
 
-	// Validate destination chain
-	if err := ValidateChain(intent.DestinationChain); err != nil {
-		return err
+	if intent.DestinationChain == 0 {
+		return fmt.Errorf("destination chain is required")
 	}
 
-	// Validate recipient address
-	if err := ValidateAddress(intent.Recipient); err != nil {
-		return err
+	if intent.Token == "" {
+		return fmt.Errorf("token is required")
 	}
 
-	// Validate amount
-	if err := ValidateAmount(intent.Amount); err != nil {
-		return err
+	if intent.Amount == "" {
+		return fmt.Errorf("amount is required")
 	}
 
-	// Validate intent fee
-	if err := ValidateAmount(intent.IntentFee); err != nil {
-		return err
+	if intent.Recipient == "" {
+		return fmt.Errorf("recipient is required")
 	}
 
-	// Validate source and destination chains are different
-	if intent.SourceChain == intent.DestinationChain {
-		return errors.New("source and destination chains must be different")
+	if intent.IntentFee == "" {
+		return fmt.Errorf("intent fee is required")
 	}
 
 	return nil
-}
-
-// IsValidUUID checks if a string is a valid UUID
-func IsValidUUID(uuid string) bool {
-	return uuidRegex.MatchString(strings.ToLower(uuid))
 }
 
 // ValidateFulfillmentRequest validates a fulfillment request
@@ -186,8 +216,8 @@ func ValidateFulfillmentRequest(req *models.CreateFulfillmentRequest) error {
 		return err
 	}
 
-	// Validate intent ID format (UUID)
-	if !IsValidUUID(req.IntentID) {
+	// Validate intent ID format (bytes32 format)
+	if !IsValidBytes32(req.IntentID) {
 		return errors.New("invalid intent ID format")
 	}
 
@@ -200,40 +230,88 @@ func ValidateIntentRequest(req *models.CreateIntentRequest) error {
 		return errors.New("request cannot be nil")
 	}
 
+	fmt.Printf("Validating intent request: %+v\n", req)
+
+	// Validate intent ID format (bytes32 format)
+	if !IsValidBytes32(req.ID) {
+		fmt.Printf("Invalid intent ID format: %s\n", req.ID)
+		return errors.New("invalid intent ID format")
+	}
+
 	// Validate source chain
 	if err := ValidateChain(req.SourceChain); err != nil {
+		fmt.Printf("Invalid source chain: %d, error: %v\n", req.SourceChain, err)
 		return err
 	}
 
 	// Validate destination chain
 	if err := ValidateChain(req.DestinationChain); err != nil {
+		fmt.Printf("Invalid destination chain: %d, error: %v\n", req.DestinationChain, err)
 		return err
 	}
 
-	// Validate token
-	if req.Token != "USDC" {
-		return errors.New("only USDC token is supported")
+	// Validate token address
+	if err := ValidateAddress(req.Token); err != nil {
+		fmt.Printf("Invalid token address: %s, error: %v\n", req.Token, err)
+		return err
 	}
 
 	// Validate amount
 	if err := ValidateAmount(req.Amount); err != nil {
+		fmt.Printf("Invalid amount: %s, error: %v\n", req.Amount, err)
 		return err
 	}
 
 	// Validate recipient address
 	if err := ValidateAddress(req.Recipient); err != nil {
+		fmt.Printf("Invalid recipient address: %s, error: %v\n", req.Recipient, err)
 		return err
 	}
 
 	// Validate intent fee
 	if err := ValidateAmount(req.IntentFee); err != nil {
+		fmt.Printf("Invalid intent fee: %s, error: %v\n", req.IntentFee, err)
 		return err
 	}
 
 	// Validate source and destination chains are different
 	if req.SourceChain == req.DestinationChain {
+		fmt.Printf("Source and destination chains are the same: %d\n", req.SourceChain)
 		return errors.New("source and destination chains must be different")
 	}
 
 	return nil
+}
+
+// IsValidBytes32 checks if a string is a valid bytes32 hash
+func IsValidBytes32(hash string) bool {
+	return bytes32Regex.MatchString(strings.ToLower(hash))
+}
+
+// GenerateIntentID generates an intent ID using the same logic as the contract
+func GenerateIntentID(counter uint64, salt *big.Int) string {
+	// Pack counter and salt
+	packed := append(
+		common.BigToHash(new(big.Int).SetUint64(counter)).Bytes(),
+		common.BigToHash(salt).Bytes()...,
+	)
+
+	// Generate keccak256 hash
+	hash := crypto.Keccak256(packed)
+	return common.BytesToHash(hash).Hex()
+}
+
+// ValidateIntentID validates that an intent ID matches what would be generated from counter and salt
+func ValidateIntentID(id string, counter uint64, salt *big.Int) bool {
+	if !IsValidBytes32(id) {
+		return false
+	}
+
+	expected := GenerateIntentID(counter, salt)
+	return strings.EqualFold(id, expected)
+}
+
+// ValidateBytes32 validates a bytes32 hex string
+func ValidateBytes32(hex string) bool {
+	return bytes32Regex.MatchString(hex)
 }

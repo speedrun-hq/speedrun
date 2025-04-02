@@ -43,7 +43,4 @@ export interface CreateIntentResponse {
 
 export interface ListIntentsResponse {
   intents: Intent[];
-  total: number;
-  page: number;
-  limit: number;
 } 

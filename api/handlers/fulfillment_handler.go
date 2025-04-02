@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
@@ -13,8 +14,12 @@ import (
 var fulfillmentService *services.FulfillmentService
 
 // InitHandlers initializes the handlers with required dependencies
-func InitHandlers(database db.Database) {
-	fulfillmentService = services.NewFulfillmentService(database)
+func InitHandlers(clients map[uint64]*ethclient.Client, contractAddresses map[uint64]string, database db.Database) error {
+	var err error
+	// TODO: Get contract ABI from a configuration or file
+	contractABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"}],"name":"IntentFulfilled","type":"event"}]`
+	fulfillmentService, err = services.NewFulfillmentService(clients, contractAddresses, database, contractABI)
+	return err
 }
 
 // CreateFulfillment handles the creation of a new fulfillment
@@ -31,7 +36,7 @@ func CreateFulfillment(c *gin.Context) {
 		return
 	}
 
-	fulfillment, err := fulfillmentService.CreateFulfillment(req.IntentID, req.Fulfiller, req.Amount)
+	fulfillment, err := fulfillmentService.CreateFulfillment(c.Request.Context(), req.IntentID, req.Fulfiller, req.Amount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -51,13 +56,13 @@ func GetFulfillment(c *gin.Context) {
 		return
 	}
 
-	// Validate UUID format
-	if !utils.IsValidUUID(fulfillmentID) {
+	// Validate bytes32 format
+	if !utils.IsValidBytes32(fulfillmentID) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid fulfillment ID format"})
 		return
 	}
 
-	fulfillment, err := fulfillmentService.GetFulfillment(fulfillmentID)
+	fulfillment, err := fulfillmentService.GetFulfillment(c.Request.Context(), fulfillmentID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
