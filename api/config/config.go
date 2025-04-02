@@ -111,7 +111,37 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Default contract ABI
-	defaultABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"}],"name":"IntentFulfilled","type":"event"}]`
+	defaultABI := `[{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "bytes32",
+				"name": "intentId",
+				"type": "bytes32"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "asset",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "receiver",
+				"type": "address"
+			}
+		],
+		"name": "IntentFulfilled",
+		"type": "event"
+	}]`
 
 	return &Config{
 		Port:                    getEnvOrDefault("PORT", "8080"),
