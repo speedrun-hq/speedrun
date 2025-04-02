@@ -11,7 +11,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IZRC20} from "../src/interfaces/IZRC20.sol";
 import {IUniswapV3Router} from "../src/interfaces/IUniswapV3Router.sol";
 import {ISwap} from "../src/interfaces/ISwap.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "forge-std/console.sol";
 
 contract MockSwapModule is ISwap {
@@ -84,15 +83,10 @@ contract RouterTest is Test {
         router.setIntentContract(chainId, user1);
     }
 
-    function test_SetIntentContract_NonOwnerReverts() public {
+    function test_SetIntentContract_NonAdminReverts() public {
         uint256 chainId = 1;
         vm.prank(user1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                user1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
         router.setIntentContract(chainId, user2);
     }
 
@@ -286,48 +280,28 @@ contract RouterTest is Test {
         assertEq(tokens[1], name2);
     }
 
-    function test_NonOwnerCannotModify() public {
+    function test_NonAdminCannotModify() public {
         string memory name = "USDC";
         uint256 chainId = 1;
         address asset = makeAddr("asset");
         address zrc20 = makeAddr("zrc20");
 
         vm.prank(user1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                user1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
         router.addToken(name);
 
         router.addToken(name);
         vm.prank(user1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                user1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
         router.addTokenAssociation(name, chainId, asset, zrc20);
 
         router.addTokenAssociation(name, chainId, asset, zrc20);
         vm.prank(user1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                user1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
         router.updateTokenAssociation(name, chainId, asset, zrc20);
 
         vm.prank(user1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                user1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
         router.removeTokenAssociation(name, chainId);
     }
 
