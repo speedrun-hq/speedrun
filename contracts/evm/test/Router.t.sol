@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {Router} from "../src/router.sol";
@@ -86,10 +86,6 @@ contract RouterTest is Test {
             initData
         );
         router = Router(address(proxy));
-    }
-
-    function test_Initialization() public {
-        assertEq(router.owner(), owner);
     }
 
     function test_SetIntentContract() public {

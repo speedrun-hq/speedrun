@@ -84,18 +84,17 @@ export PRIVATE_KEY=<private key>
 Deploy the swap module that uses Uniswap V2:
 ```
 export UNISWAP_V2_ROUTER="0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe"
-export WZETA_ADDRESS="0x5F0b1a82749cb4E2278EC87F8BF6B618dC71a8bf"
+export WZETA="0x5F0b1a82749cb4E2278EC87F8BF6B618dC71a8bf"
 
 forge script script/SwapV2.s.sol \
   --rpc-url https://zetachain-mainnet.g.allthatnode.com/archive/evm \
-  --chain-id 7000  \
+  --chain-id 7000 \
   --broadcast
 ```
 
 Deploy the router contract on ZetaChain:
 ```
 export GATEWAY_ADDRESS="0xfEDD7A6e3Ef1cC470fbfbF955a22D793dDC0F44E"
-export WZETA_ADDRESS="0x5F0b1a82749cb4E2278EC87F8BF6B618dC71a8bf"
 export SWAP_MODULE_ADDRESS=<swap module>
 
 forge script script/Router.s.sol \

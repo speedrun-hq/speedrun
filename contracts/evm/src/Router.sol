@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -18,7 +17,7 @@ import "forge-std/console.sol";
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessControlUpgradeable {
+contract Router is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
     using SafeERC20 for IERC20;
 
     // Gateway contract address
@@ -81,7 +80,6 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
         __AccessControl_init();
         __UUPSUpgradeable_init();
-        __Ownable_init(msg.sender);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         gateway = IGateway(_gateway);
@@ -93,7 +91,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         _;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /**IUniswapV3Router
      * @dev Handles incoming messages from the gateway
