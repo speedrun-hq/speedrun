@@ -7,9 +7,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/IUniswapV3Pool.sol";
-import "./interfaces/IUniswapV3Factory.sol";
-import "./interfaces/ISwapRouter.sol";
+import "./interfaces/IUniswapV3Router.sol";
 import "./interfaces/IGateway.sol";
 import "./interfaces/IZRC20.sol";
 import "./interfaces/ISwap.sol";
@@ -25,9 +23,6 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
     // Gateway contract address
     IGateway public gateway;
-    // Uniswap V3 addresses
-    IUniswapV3Factory public uniswapV3Factory;
-    ISwapRouter public uniswapV3Router;
     // WZETA address on ZetaChain
     address public wzeta;
     // Swap module address
@@ -75,22 +70,17 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
     }
 
     /**
-     * @dev Initializes the contract with the gateway and Uniswap V3 addresses
+     * @dev Initializes the contract with the gateway and swap module addresses
      * @param _gateway The address of the gateway contract
-     * @param _uniswapV3Factory The address of the Uniswap V3 factory contract
-     * @param _uniswapV3Router The address of the Uniswap V3 router contract
      * @param _wzeta The address of the WZETA contract
+     * @param _swapModule The address of the swap module contract
      */
     function initialize(
         address _gateway,
-        address _uniswapV3Factory,
-        address _uniswapV3Router,
         address _wzeta,
         address _swapModule
     ) public initializer {
         require(_gateway != address(0), "Invalid gateway address");
-        require(_uniswapV3Factory != address(0), "Invalid Uniswap V3 factory address");
-        require(_uniswapV3Router != address(0), "Invalid Uniswap V3 router address");
         require(_wzeta != address(0), "Invalid WZETA address");
         require(_swapModule != address(0), "Invalid swap module address");
 
@@ -100,8 +90,6 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         gateway = IGateway(_gateway);
-        uniswapV3Factory = IUniswapV3Factory(_uniswapV3Factory);
-        uniswapV3Router = ISwapRouter(_uniswapV3Router);
         wzeta = _wzeta;
         swapModule = _swapModule;
     }
@@ -113,7 +101,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    /**
+    /**IUniswapV3Router
      * @dev Handles incoming messages from the gateway
      * @param context The message context containing sender and chain information
      * @param zrc20 The ZRC20 token address

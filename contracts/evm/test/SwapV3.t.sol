@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
 import "../src/SwapV3.sol";
-import "../src/interfaces/ISwapRouter.sol";
+import "../src/interfaces/IUniswapV3Router.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -19,7 +19,7 @@ contract MockERC20 is ERC20 {
     }
 }
 
-contract MockSwapRouter is ISwapRouter {
+contract MockSwapRouter is IUniswapV3Router {
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut) {
         // Mock 1:1 swap for testing
         if (params.tokenIn == address(0)) {

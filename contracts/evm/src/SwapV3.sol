@@ -4,20 +4,20 @@ pragma solidity ^0.8.26;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/ISwap.sol";
-import "./interfaces/ISwapRouter.sol";
+import "./interfaces/IUniswapV3Router.sol";
 
 contract SwapV3 is ISwap {
     using SafeERC20 for IERC20;
 
     // Uniswap V3 Router address
-    ISwapRouter public immutable swapRouter;
+    IUniswapV3Router public immutable swapRouter;
     // WZETA address on ZetaChain
     address public immutable wzeta;
 
     constructor(address _swapRouter, address _wzeta) {
         require(_swapRouter != address(0), "Invalid swap router address");
         require(_wzeta != address(0), "Invalid WZETA address");
-        swapRouter = ISwapRouter(_swapRouter);
+        swapRouter = IUniswapV3Router(_swapRouter);
         wzeta = _wzeta;
     }
 
@@ -33,7 +33,7 @@ contract SwapV3 is ISwap {
 
         // First swap: from input token to ZETA
         IERC20(tokenIn).approve(address(swapRouter), amountIn);
-        ISwapRouter.ExactInputSingleParams memory params1 = ISwapRouter.ExactInputSingleParams({
+        IUniswapV3Router.ExactInputSingleParams memory params1 = IUniswapV3Router.ExactInputSingleParams({
             tokenIn: tokenIn,
             tokenOut: wzeta,
             fee: 3000,
@@ -47,7 +47,7 @@ contract SwapV3 is ISwap {
 
         // Swap ZETA for gas fee token
         IERC20(wzeta).approve(address(swapRouter), zetaAmount);
-        ISwapRouter.ExactOutputSingleParams memory gasParams = ISwapRouter.ExactOutputSingleParams({
+        IUniswapV3Router.ExactOutputSingleParams memory gasParams = IUniswapV3Router.ExactOutputSingleParams({
             tokenIn: wzeta,
             tokenOut: gasZRC20,
             fee: 3000,
@@ -62,7 +62,7 @@ contract SwapV3 is ISwap {
         // Second swap: remaining ZETA to target token
         uint256 remainingZeta = zetaAmount - zetaUsedForGas;
         IERC20(wzeta).approve(address(swapRouter), remainingZeta);
-        ISwapRouter.ExactInputSingleParams memory params2 = ISwapRouter.ExactInputSingleParams({
+        IUniswapV3Router.ExactInputSingleParams memory params2 = IUniswapV3Router.ExactInputSingleParams({
             tokenIn: wzeta,
             tokenOut: tokenOut,
             fee: 3000,

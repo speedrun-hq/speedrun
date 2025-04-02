@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-interface ISwapRouter {
+interface IUniswapV3Router {
     struct ExactInputSingleParams {
         address tokenIn;
         address tokenOut;

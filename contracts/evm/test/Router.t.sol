@@ -5,15 +5,13 @@ import {Test, console2} from "forge-std/Test.sol";
 import {Router} from "../src/router.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MockGateway} from "./mocks/MockGateway.sol";
-import {MockUniswapV3Factory} from "./mocks/MockUniswapV3Factory.sol";
-import {MockUniswapV3Router} from "./mocks/MockUniswapV3Router.sol";
 import {MockWETH} from "./mocks/MockWETH.sol";
 import {MockToken} from "./mocks/MockToken.sol";
 import {PayloadUtils} from "../src/utils/PayloadUtils.sol";
 import {IGateway} from "../src/interfaces/IGateway.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IZRC20} from "../src/interfaces/IZRC20.sol";
-import {ISwapRouter} from "../src/interfaces/ISwapRouter.sol";
+import {IUniswapV3Router} from "../src/interfaces/IUniswapV3Router.sol";
 import {ISwap} from "../src/interfaces/ISwap.sol";
 import "forge-std/console.sol";
 
@@ -37,8 +35,6 @@ contract RouterTest is Test {
     Router public router;
     Router public routerImplementation;
     MockGateway public gateway;
-    MockUniswapV3Factory public factory;
-    MockUniswapV3Router public swapRouter;
     MockWETH public wzeta;
     MockToken public inputToken;
     MockToken public gasZRC20;
@@ -70,8 +66,6 @@ contract RouterTest is Test {
 
         // Deploy mock contracts
         gateway = new MockGateway();
-        factory = new MockUniswapV3Factory();
-        swapRouter = new MockUniswapV3Router();
         wzeta = new MockWETH();
         inputToken = new MockToken("Input Token", "INPUT");
         gasZRC20 = new MockToken("Gas Token", "GAS");
@@ -85,8 +79,6 @@ contract RouterTest is Test {
         bytes memory initData = abi.encodeWithSelector(
             Router.initialize.selector,
             address(gateway),
-            address(factory),
-            address(swapRouter),
             address(wzeta),
             address(swapModule)
         );
