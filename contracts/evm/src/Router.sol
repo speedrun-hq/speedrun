@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IUniswapV3Router.sol";
@@ -12,19 +8,20 @@ import "./interfaces/IGateway.sol";
 import "./interfaces/IZRC20.sol";
 import "./interfaces/ISwap.sol";
 import "./utils/PayloadUtils.sol";
-import "forge-std/console.sol";
 
 /**
  * @title Router
  * @dev Routes CCTX and handles ZRC20 swaps on ZetaChain
  */
-contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessControlUpgradeable {
+contract Router {
     using SafeERC20 for IERC20;
 
     // Gateway contract address
-    IGateway public gateway;
+    address public gateway;
     // Swap module address
     address public swapModule;
+    // Admin address
+    address public immutable admin;
 
     // Mapping from chain ID to intent contract address
     mapping(uint256 => address) public intentContracts;
@@ -62,40 +59,39 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         uint256 tip
     );
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
+    // Error for unauthorized access
+    error Unauthorized(address caller);
 
     /**
-     * @dev Initializes the contract with the gateway and swap module addresses
+     * @dev Constructor that sets the gateway and swap module addresses
      * @param _gateway The address of the gateway contract
      * @param _swapModule The address of the swap module contract
      */
-    function initialize(
-        address _gateway,
-        address _swapModule
-    ) public initializer {
+    constructor(address _gateway, address _swapModule) {
         require(_gateway != address(0), "Invalid gateway address");
         require(_swapModule != address(0), "Invalid swap module address");
 
-        __AccessControl_init();
-        __UUPSUpgradeable_init();
-        __Ownable_init(msg.sender);
-
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        gateway = IGateway(_gateway);
+        gateway = _gateway;
         swapModule = _swapModule;
+        admin = msg.sender;
     }
 
-    modifier onlyGateway() {
-        require(msg.sender == address(gateway), "Only gateway can call this function");
+    /**
+     * @dev Modifier to restrict access to the admin
+     */
+    modifier onlyAdmin() {
+        if (msg.sender != admin) {
+            revert Unauthorized(msg.sender);
+        }
         _;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    modifier onlyGateway() {
+        require(msg.sender == gateway, "Only gateway can call this function");
+        _;
+    }
 
-    /**IUniswapV3Router
+    /**
      * @dev Handles incoming messages from the gateway
      * @param context The message context containing sender and chain information
      * @param zrc20 The ZRC20 token address
@@ -163,11 +159,11 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         });
 
         // Approve gateway to spend tokens
-        IERC20(targetZRC20).approve(address(gateway), amountOut);
-        IERC20(gasZRC20).approve(address(gateway), gasFee);
+        IERC20(targetZRC20).approve(gateway, amountOut);
+        IERC20(gasZRC20).approve(gateway, gasFee);
 
         // Call gateway to withdraw and call intent contract
-        IGateway(address(gateway)).withdrawAndCall(
+        IGateway(gateway).withdrawAndCall(
             abi.encodePacked(intentContract),
             amountOut,
             targetZRC20,
@@ -191,7 +187,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
      * @param chainId The chain ID to set the intent contract for
      * @param intentContract The address of the intent contract
      */
-    function setIntentContract(uint256 chainId, address intentContract) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setIntentContract(uint256 chainId, address intentContract) public onlyAdmin {
         require(intentContract != address(0), "Invalid intent contract address");
         intentContracts[chainId] = intentContract;
         emit IntentContractSet(chainId, intentContract);
@@ -210,7 +206,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
      * @dev Adds a new supported token
      * @param name The name of the token (e.g., "USDC")
      */
-    function addToken(string calldata name) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function addToken(string calldata name) public onlyAdmin {
         require(bytes(name).length > 0, "Token name cannot be empty");
         require(!_supportedTokens[name], "Token already exists");
         
@@ -231,7 +227,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         uint256 chainId,
         address asset,
         address zrc20
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) public onlyAdmin {
         require(_supportedTokens[name], "Token does not exist");
         require(asset != address(0), "Invalid asset address");
         require(zrc20 != address(0), "Invalid ZRC20 address");
@@ -257,7 +253,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
         uint256 chainId,
         address asset,
         address zrc20
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) public onlyAdmin {
         require(_supportedTokens[name], "Token does not exist");
         require(asset != address(0), "Invalid asset address");
         require(zrc20 != address(0), "Invalid ZRC20 address");
@@ -278,7 +274,7 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
     function removeTokenAssociation(
         string calldata name,
         uint256 chainId
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) public onlyAdmin {
         require(_supportedTokens[name], "Token does not exist");
         require(_tokenAssets[name][chainId] != address(0), "Association does not exist");
         
@@ -364,5 +360,4 @@ contract Router is Initializable, UUPSUpgradeable, OwnableUpgradeable, AccessCon
     function isTokenSupported(string calldata name) public view returns (bool) {
         return _supportedTokens[name];
     }
-
 } 

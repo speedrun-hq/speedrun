@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {SwapV2} from "../src/SwapV2.sol";
@@ -146,7 +146,7 @@ contract SwapV2Test is Test {
         assertEq(inputToken.balanceOf(user), initialBalance - AMOUNT, "Input tokens not transferred from user");
         assertEq(inputToken.balanceOf(address(swapV2)), 0, "Input tokens should not remain in swap contract");
         assertEq(outputToken.balanceOf(user), expectedOutput, "Output tokens not received by user");
-        assertEq(gasToken.balanceOf(address(swapV2)), GAS_FEE, "Gas tokens not received by swap contract");
+        assertEq(gasToken.balanceOf(user), GAS_FEE, "Gas tokens not received by swap contract");
     }
 
     function test_SwapWithZeroAmount() public {
