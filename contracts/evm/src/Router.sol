@@ -17,9 +17,9 @@ contract Router {
     using SafeERC20 for IERC20;
 
     // Gateway contract address
-    address public immutable gateway;
+    address public gateway;
     // Swap module address
-    address public immutable swapModule;
+    address public swapModule;
     // Admin address
     address public immutable admin;
 
