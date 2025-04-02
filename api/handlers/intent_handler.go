@@ -1,39 +1,62 @@
 package handlers
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
+	"github.com/zeta-chain/zetafast/api/services"
 	"github.com/zeta-chain/zetafast/api/utils"
 )
 
-var database db.Database
+var (
+	database      db.Database
+	intentService *services.IntentService
+)
 
 // InitIntentHandlers initializes the intent handlers with required dependencies
-func InitIntentHandlers(db db.Database) {
+func InitIntentHandlers(db db.Database, service *services.IntentService) {
 	database = db
+	intentService = service
 }
 
-// CreateIntent handles the creation of a new transfer intent
+// CreateIntent handles the creation of a new intent
 func CreateIntent(c *gin.Context) {
+	// Read raw request body
+	rawBody, err := c.GetRawData()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to read request body: %v", err)})
+		return
+	}
+	fmt.Printf("Raw request body: %s\n", string(rawBody))
+
+	// Reset request body for binding
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(rawBody))
+
+	// Bind request body
 	var req models.CreateIntentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to bind request: %v", err)})
 		return
 	}
 
+	fmt.Printf("Bound request: %+v\n", req)
+
 	// Validate request
 	if err := utils.ValidateIntentRequest(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		fmt.Printf("Validation error: %v\n", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to validate request: %v", err)})
 		return
 	}
 
 	// Create intent
 	intent := &models.Intent{
-		ID:               utils.GenerateID(),
+		ID:               req.ID,
 		SourceChain:      req.SourceChain,
 		DestinationChain: req.DestinationChain,
 		Token:            req.Token,
@@ -46,51 +69,45 @@ func CreateIntent(c *gin.Context) {
 	}
 
 	// Store intent in database
-	if err := database.CreateIntent(intent); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := database.CreateIntent(c.Request.Context(), intent); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to store intent: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Intent created successfully",
-		"intent":  intent,
-	})
+	// Return response
+	c.JSON(http.StatusCreated, intent.ToResponse())
 }
 
-// GetIntent retrieves an intent by ID
+// GetIntent handles retrieving a specific intent
 func GetIntent(c *gin.Context) {
-	intentID := c.Param("id")
-	if intentID == "" {
+	id := c.Param("id")
+	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "intent ID is required"})
 		return
 	}
 
-	intent, err := database.GetIntent(intentID)
+	intent, err := intentService.GetIntent(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "intent not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"intent": intent,
-	})
+	c.JSON(http.StatusOK, intent.ToResponse())
 }
 
-// ListIntents retrieves a list of intents with optional filtering
+// ListIntents handles retrieving all intents
 func ListIntents(c *gin.Context) {
-	page := 1
-	limit := 10
-
-	intents, total, err := database.ListIntents(page, limit)
+	intents, err := intentService.ListIntents(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"intents": intents,
-		"total":   total,
-		"page":    page,
-		"limit":   limit,
-	})
+	// Convert intents to responses
+	responses := make([]*models.IntentResponse, len(intents))
+	for i, intent := range intents {
+		responses[i] = intent.ToResponse()
+	}
+
+	c.JSON(http.StatusOK, responses)
 }
