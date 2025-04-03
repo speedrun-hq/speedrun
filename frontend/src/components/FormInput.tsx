@@ -12,6 +12,7 @@ interface FormInputProps {
   min?: string;
   step?: string;
   className?: string;
+  labelClassName?: string;
 }
 
 export function FormInput({
@@ -26,10 +27,11 @@ export function FormInput({
   min,
   step,
   className = '',
+  labelClassName = 'block text-[hsl(var(--yellow))] mb-2 font-mono',
 }: FormInputProps) {
   return (
     <div className="space-y-2 relative z-10">
-      {label && <label className="block text-[hsl(var(--yellow))] mb-2 font-mono">{label}</label>}
+      {label && <label className={labelClassName}>{label}</label>}
       <input
         type={type}
         value={value}
