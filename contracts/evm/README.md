@@ -7,42 +7,42 @@ This directory contains the Solidity contracts for intent-based bridge platform 
 ### Initiate Intent
 ```solidity
 function initiate(
-    bytes32 intentId,
-    uint256 amount,
-    address asset,
-    bytes memory receiver,
-    uint256 targetChain,
-    address targetZRC20,
-    uint256 tip
+  address asset,
+  uint256 amount,
+  uint256 targetChain,
+  bytes calldata receiver,
+  uint256 tip,
+  uint256 salt
 ) external
 ```
 
 Creates a new intent for cross-chain transfer:
-- `intentId`: Unique identifier for the intent
-- `amount`: Amount of tokens to transfer
 - `asset`: Address of the token to transfer
-- `receiver`: Address of the receiver on the target chain (in bytes format)
+- `amount`: Amount of tokens to transfer
 - `targetChain`: Chain ID of the destination chain
-- `targetZRC20`: Address of the ZRC20 token on the target chain
-- `tip`: Amount of tokens to pay for the cross-chain transfer
+- `receiver`: Address of the receiver on the target chain (in bytes format)
+- `tip`: Amount of tokens to pay as fee for the cross-chain transfer
+- `salt`: Random value to ensure uniqueness of the intent ID
 
 ### Fulfill Intent
 ```solidity
 function fulfill(
-    bytes32 intentId,
-    uint256 amount,
-    address asset,
-    address receiver,
-    uint256 tip
+  bytes32 intentId,
+  uint256 amount,
+  address asset,
+  address receiver
 ) external
 ```
 
 Fulfills an existing intent:
 - `intentId`: Identifier of the intent to fulfill
-- `amount`: Amount of tokens to transfer
-- `asset`: Address of the token to transfer
-- `receiver`: Address of the receiver
-- `tip`: Amount of tokens to pay for the transfer
+- `amount`: Actual amount of tokens being transferred (may differ from intent's amount)
+- `asset`: Address of the token being transferred
+- `receiver`: Address of the recipient on the target chain
+
+## Architecture
+
+[Learn more about the contract architecture](./architecture.md)
 
 ## Development
 
@@ -73,7 +73,7 @@ forge build
 forge test
 ```
 
-## Deployment on Mainnet
+## Deploying on Mainnet to Enable USDT on Base and Arbitrum
 
 These commands showcase how the infrastucture can be deployed on Mainnet to support USDC between Base and Arbitrum.
 
