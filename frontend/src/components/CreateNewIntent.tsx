@@ -28,7 +28,7 @@ export default function CreateNewIntent() {
 
   if (!isConnected) {
     return (
-      <div className="max-w-2xl mx-auto p-6 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg shadow-lg">
+      <div className="max-w-2xl mx-auto p-6 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg shadow-lg relative z-0">
         <h2 className="text-2xl font-bold text-[hsl(var(--yellow))] mb-6 text-center font-mono">
           CREATE NEW RUN
         </h2>
@@ -40,14 +40,14 @@ export default function CreateNewIntent() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg shadow-lg">
+    <div className="max-w-2xl mx-auto p-6 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg shadow-lg relative z-0">
       <h2 className="text-2xl font-bold text-[hsl(var(--yellow))] mb-6 text-center font-mono">
         CREATE NEW RUN
       </h2>
       
       <form
         onSubmit={handleSubmit}
-        className="space-y-6"
+        className="space-y-6 relative"
         role="form"
       >
         {formState.error && <ErrorMessage error={formState.error} className="mb-4" />}
@@ -59,7 +59,7 @@ export default function CreateNewIntent() {
         )}
 
         <div className="space-y-4">
-          <div>
+          <div className="relative">
             <label className="block text-[hsl(var(--yellow))] mb-2 font-mono">SOURCE CHAIN</label>
             <ChainSelector
               value={getChainId(formState.sourceChain)}
@@ -69,7 +69,7 @@ export default function CreateNewIntent() {
             />
           </div>
 
-          <div>
+          <div className="relative">
             <label className="block text-[hsl(var(--yellow))] mb-2 font-mono">DESTINATION CHAIN</label>
             <ChainSelector
               value={getChainId(formState.destinationChain)}
@@ -79,7 +79,7 @@ export default function CreateNewIntent() {
             />
           </div>
 
-          <div>
+          <div className="relative">
             <label className="block text-[hsl(var(--yellow))] mb-2 font-mono">SELECT TOKEN</label>
             <TokenSelector
               value={formState.selectedToken}
@@ -87,15 +87,17 @@ export default function CreateNewIntent() {
             />
           </div>
 
-          <FormInput
-            label="RECIPIENT ADDRESS"
-            value={formState.recipient}
-            onChange={updateRecipient}
-            placeholder="0x..."
-            disabled={formState.isSubmitting}
-          />
+          <div className="relative">
+            <FormInput
+              label="RECIPIENT ADDRESS"
+              value={formState.recipient}
+              onChange={updateRecipient}
+              placeholder="0x..."
+              disabled={formState.isSubmitting}
+            />
+          </div>
 
-          <div>
+          <div className="relative">
             <div className="flex justify-between items-center mb-2">
               <label className="text-[hsl(var(--yellow))] font-mono">AMOUNT ({symbol})</label>
               <span className="text-[#00ff00] font-mono">
@@ -113,7 +115,7 @@ export default function CreateNewIntent() {
             />
           </div>
 
-          <div>
+          <div className="relative">
             <div className="flex justify-between items-center mb-2">
               <label className="text-[hsl(var(--yellow))] font-mono">TIP ({symbol})</label>
               <span className="text-[#00ff00] font-mono">

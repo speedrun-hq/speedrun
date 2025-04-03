@@ -3,26 +3,12 @@ import { formatUnits } from 'viem';
 import { TOKENS, TokenSymbol } from '@/constants/tokens';
 import { ChainName, getChainId } from '@/utils/chain';
 
-// ERC20 ABI for balanceOf and decimals
+// ERC20 ABI for balanceOf
 const ERC20_ABI = [
   {
     inputs: [{ name: 'account', type: 'address' }],
     name: 'balanceOf',
     outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'decimals',
-    outputs: [{ name: '', type: 'uint8' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'symbol',
-    outputs: [{ name: '', type: 'string' }],
     stateMutability: 'view',
     type: 'function',
   },
@@ -48,19 +34,8 @@ export function useTokenBalance(
     userAddress: address,
   });
 
-  // Get decimals from contract
-  const { data: decimalsFromContract, error: decimalsError } = useContractRead({
-    address: tokenAddress,
-    abi: ERC20_ABI,
-    functionName: 'decimals',
-    enabled: !!tokenAddress,
-  });
-
-  if (decimalsError) {
-    console.error('Error fetching decimals:', decimalsError);
-  }
-
-  const decimals = decimalsFromContract ?? tokenConfig?.decimals ?? 6;
+  // Use configured decimals value
+  const decimals = tokenConfig?.decimals ?? 6;
 
   // Get balance
   const { data: balance, isError, isLoading, error: balanceError } = useContractRead({
@@ -78,8 +53,7 @@ export function useTokenBalance(
 
   // Add console logs for debugging
   console.log('Token Balance Debug:', {
-    decimalsFromContract,
-    decimalsError,
+    decimals,
     balance,
     balanceError,
     isError,
