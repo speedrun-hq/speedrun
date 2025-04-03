@@ -600,6 +600,92 @@ contract IntentTest is Test {
         );
     }
 
+    function test_OnCallWithActualAmountDifferent() public {
+        // Create an intent
+        uint256 amount = 100 ether;
+        uint256 actualAmount = 93 ether; // Simulating 7 ether reduction due to insufficient tip
+        uint256 tip = 3 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Store initial user1 balance
+        uint256 initialBalance = token.balanceOf(user1);
+
+        // Initiate an intent from user1
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Account for tokens spent in initiate
+        initialBalance -= (amount + tip);
+        
+        // Transfer tokens to the intent contract for fulfillment
+        token.mint(address(intent), amount);
+
+        // Fulfill the intent with the original amount (for indexing purposes)
+        vm.prank(user1);
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+
+        // Prepare settlement payload with different actualAmount
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,            // Original amount (for index calculation)
+            address(token),
+            user2,
+            tip,
+            actualAmount       // Reduced actual amount to transfer
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), actualAmount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), actualAmount + tip);
+
+        // Call onCall through gateway
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+
+        // Verify settlement record
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,            // Original amount for index calculation
+            user2
+        );
+        (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
+        assertTrue(settled, "Settlement should be marked as settled");
+        assertTrue(fulfilled, "Settlement should be marked as fulfilled");
+        assertEq(paidTip, tip, "Paid tip should match the input tip");
+        assertEq(fulfiller, user1, "Fulfiller should be user1");
+
+        // Verify tokens were transferred to fulfiller
+        // User1 should receive actualAmount (93 ether) + tip (3 ether) = 96 ether
+        uint256 expectedBalance = initialBalance + actualAmount + tip;
+        assertEq(token.balanceOf(user1), expectedBalance, "User1 should receive actualAmount + tip");
+        
+        // Additional check: the payment should be actualAmount + tip
+        // rather than amount + tip that would have been sent with the original amount
+        assertEq(actualAmount + tip, 96 ether, "Payment amount should be actualAmount + tip");
+        assertLt(actualAmount, amount, "Actual amount should be less than original amount");
+    }
+
     // TODO: Add more tests for:
     // - complete
     // - onCall

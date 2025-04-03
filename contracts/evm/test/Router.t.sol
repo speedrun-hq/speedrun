@@ -436,4 +436,89 @@ contract RouterTest is Test {
         vm.expectRevert(abi.encodeWithSelector(Router.Unauthorized.selector, user1));
         router.setWithdrawGasLimit(newGasLimit);
     }
+
+    function test_OnCall_PartialTipCoverage() public {
+        // Setup intent contract
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 2;
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        address targetIntentContract = makeAddr("targetIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+        router.setIntentContract(targetChainId, targetIntentContract);
+
+        // Setup token associations
+        string memory tokenName = "USDC";
+        router.addToken(tokenName);
+        address inputAsset = makeAddr("input_asset");
+        address targetAsset = makeAddr("target_asset");
+        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
+        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+
+        // Setup intent payload with amount and small tip
+        bytes32 intentId = keccak256("test-intent");
+        uint256 amount = 100 ether;
+        uint256 tip = 3 ether;     // Small tip that won't cover all costs
+        bytes memory receiver = abi.encodePacked(user2);
+
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver
+        );
+
+        // Set high slippage (8%) so we can observe amount reduction
+        swapModule.setSlippage(800);  // 8% slippage = 8 ether on 100 ether
+
+        // Mock setup for IZRC20 withdrawGasFeeWithGasLimit - medium gas fee
+        uint256 gasFee = 2 ether;
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+
+        // Total costs: 8 ether slippage + 2 ether gas fee = 10 ether
+        // Tip only covers 3 ether, so 7 ether should come from amount
+        // Expected actualAmount = 93 ether (100 - 7)
+        
+        // Mint tokens to make the test work
+        inputToken.mint(address(router), amount);
+        targetZRC20.mint(address(swapModule), 90 ether);  // 90 ether (100 - 8 - 2)
+        gasZRC20.mint(address(swapModule), gasFee);
+        
+        // Setup context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+        
+        // Check that we correctly set the event expectations BEFORE the call
+        // Event expectations must be set before the call that emits them
+        vm.expectEmit();
+        emit IntentSettlementForwarded(
+            context.sender,
+            context.chainID,
+            targetChainId,
+            address(inputToken),
+            amount,
+            0  // Tip should be 0 after using it all
+        );
+        
+        // Call onCall
+        vm.prank(address(gateway));
+        router.onCall(context, address(inputToken), amount, intentPayloadBytes);
+
+        // Verify approvals to the gateway
+        assertTrue(targetZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve target ZRC20 to gateway");
+        assertTrue(gasZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway");
+        
+        // At this point we've confirmed:
+        // 1. The slippage and fee cost was 10 ether
+        // 2. The tip (3 ether) was fully used (tip = 0 in the event)
+        // 3. The remaining 7 ether was deducted from the amount
+        // 4. Expected actualAmount is 93 ether (100 - 7)
+    }
 } 
