@@ -67,24 +67,26 @@ export default function CreateNewIntent() {
           )}
 
           <div className="space-y-4">
-            <div className="relative">
-              <label className="block text-yellow-500 mb-2 arcade-text">FROM</label>
-              <ChainSelector
-                value={getChainId(formState.sourceChain)}
-                onChange={(value) => updateSourceChain(value === base.id ? 'BASE' : 'ARBITRUM')}
-                label="SELECT SOURCE CHAIN"
-                disabled={formState.isSubmitting}
-              />
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="relative">
+                <label className="block text-yellow-500 mb-2 arcade-text">FROM</label>
+                <ChainSelector
+                  value={getChainId(formState.sourceChain)}
+                  onChange={(value) => updateSourceChain(value === base.id ? 'BASE' : 'ARBITRUM')}
+                  label="SELECT SOURCE CHAIN"
+                  disabled={formState.isSubmitting}
+                />
+              </div>
 
-            <div className="relative">
-              <label className="block text-yellow-500 mb-2 arcade-text">TO</label>
-              <ChainSelector
-                value={getChainId(formState.destinationChain)}
-                onChange={(value) => updateDestinationChain(value === base.id ? 'BASE' : 'ARBITRUM')}
-                label="SELECT DESTINATION CHAIN"
-                disabled={formState.isSubmitting}
-              />
+              <div className="relative">
+                <label className="block text-yellow-500 mb-2 arcade-text">TO</label>
+                <ChainSelector
+                  value={getChainId(formState.destinationChain)}
+                  onChange={(value) => updateDestinationChain(value === base.id ? 'BASE' : 'ARBITRUM')}
+                  label="SELECT DESTINATION CHAIN"
+                  disabled={formState.isSubmitting}
+                />
+              </div>
             </div>
 
             <div className="relative">

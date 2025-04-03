@@ -38,7 +38,7 @@ export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disable
         type="button"
         onClick={handleClick}
         disabled={disabled}
-        className="w-full px-4 py-2 bg-black border-2 border-yellow-500 rounded-lg text-yellow-500 font-mono focus:outline-none focus:border-yellow-400 flex justify-between items-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full px-4 py-2 bg-black border-2 border-yellow-500 rounded-lg text-yellow-500 arcade-text text-xs focus:outline-none focus:border-yellow-400 flex justify-between items-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <span>{chains.find(chain => chain.id === value)?.name || label}</span>
         <span className="ml-2">{isOpen ? '▲' : '▼'}</span>
@@ -68,7 +68,7 @@ export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disable
                   onChange(chain.id);
                   setIsOpen(false);
                 }}
-                className={`w-full px-4 py-3 text-left font-mono text-lg hover:bg-yellow-500 hover:text-black transition-colors cursor-pointer ${
+                className={`w-full px-4 py-3 text-left arcade-text text-xs hover:bg-yellow-500 hover:text-black transition-colors cursor-pointer ${
                   chain.id === value ? 'text-[#00ff00] bg-black/50' : 'text-yellow-500'
                 }`}
               >
