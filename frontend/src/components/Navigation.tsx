@@ -11,6 +11,12 @@ const Navigation = () => {
           </Link>
           <div className="flex space-x-4 items-center relative z-10">
             <Link
+              href="/about"
+              className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 relative"
+            >
+              LEARN MORE
+            </Link>
+            <Link
               href="/intents"
               className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 relative"
             >
