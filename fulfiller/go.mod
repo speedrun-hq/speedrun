@@ -2,7 +2,10 @@ module github.com/zeta-chain/zetafast/fulfiller
 
 go 1.21
 
-require github.com/ethereum/go-ethereum v1.13.14
+require (
+	github.com/ethereum/go-ethereum v1.13.14
+	github.com/joho/godotenv v1.5.1
+)
 
 require (
 	github.com/Microsoft/go-winio v0.6.1 // indirect
