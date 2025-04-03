@@ -14,7 +14,7 @@ import "./utils/PayloadUtils.sol";
  */
 contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Counter for generating unique intent IDs
-    uint256 private _intentCounter;
+    uint256 public intentCounter;
 
     // Gateway contract address
     address public gateway;
@@ -82,6 +82,52 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /**
+     * @dev Computes a unique intent ID
+     * @param counter The current intent counter
+     * @param salt Random salt for uniqueness
+     * @param chainId The chain ID where the intent is being initiated
+     * @return The computed intent ID
+     */
+    function computeIntentId(
+        uint256 counter,
+        uint256 salt,
+        uint256 chainId
+    ) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(counter, salt, chainId));
+    }
+
+    /**
+     * @dev Get the next intent ID that would be generated with the current counter
+     * @param salt Random salt for uniqueness
+     * @return The next intent ID that would be generated
+     */
+    function getNextIntentId(uint256 salt) public view returns (bytes32) {
+        return computeIntentId(intentCounter, salt, block.chainid);
+    }
+
+    /**
+     * @dev Calculates the fulfillment index for the given parameters
+     * @param intentId The ID of the intent
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     * @return The computed fulfillment index
+     */
+    function getFulfillmentIndex(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver
+    ) public pure returns (bytes32) {
+        return PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+    }
+
+    /**
      * @dev Initiates a new intent for cross-chain transfer
      * @param asset The ERC20 token address
      * @param amount Amount to receive on target chain
@@ -108,11 +154,11 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Approve gateway to spend the tokens
         IERC20(asset).approve(gateway, totalAmount);
 
-        // Generate intent ID using keccak256 hash of counter and salt
-        bytes32 intentId = keccak256(abi.encodePacked(_intentCounter, salt));
+        // Generate intent ID using the computeIntentId function with current chain ID
+        bytes32 intentId = computeIntentId(intentCounter, salt, block.chainid);
         
         // Increment counter
-        _intentCounter++;
+        intentCounter++;
 
         // Create payload for crosschain transaction
         bytes memory payload = PayloadUtils.encodeIntentPayload(
@@ -179,8 +225,8 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Check if intent is already fulfilled with these parameters
         require(fulfillments[fulfillmentIndex] == address(0), "Intent already fulfilled with these parameters");
 
-        // Transfer tokens from this contract to the receiver
-        IERC20(asset).transfer(receiver, amount);
+        // Transfer tokens from the sender to the receiver
+        IERC20(asset).transferFrom(msg.sender, receiver, amount);
 
         // Register the fulfillment
         fulfillments[fulfillmentIndex] = msg.sender;
@@ -198,9 +244,10 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @dev Internal function to settle an intent
      * @param intentId The ID of the intent to settle
      * @param asset The ERC20 token address
-     * @param amount Amount to transfer
+     * @param amount Amount for intent index computation
      * @param receiver Receiver address
      * @param tip Tip for the fulfiller
+     * @param actualAmount Actual amount to transfer after fees
      * @return fulfilled Whether the intent was fulfilled
      */
     function _settle(
@@ -208,9 +255,10 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address asset,
         uint256 amount,
         address receiver,
-        uint256 tip
+        uint256 tip,
+        uint256 actualAmount
     ) internal returns (bool) {
-        // Compute the fulfillment index
+        // Compute the fulfillment index using the original amount
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
             intentId,
             asset,
@@ -228,13 +276,13 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         settlement.fulfilled = fulfilled;
         settlement.fulfiller = fulfiller;
 
-        // If there's a fulfiller, transfer the tip to them
-        // Otherwise, transfer amount + tip to the receiver
+        // If there's a fulfiller, transfer the actual amount + tip to them
+        // Otherwise, transfer actual amount + tip to the receiver
         if (fulfilled) {
-            IERC20(asset).transfer(fulfiller, amount + tip);
+            IERC20(asset).transfer(fulfiller, actualAmount + tip);
             settlement.paidTip = tip;
         } else {
-            IERC20(asset).transfer(receiver, amount + tip);
+            IERC20(asset).transfer(receiver, actualAmount + tip);
         }
 
         return fulfilled;
@@ -254,7 +302,8 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         PayloadUtils.SettlementPayload memory payload = PayloadUtils.decodeSettlementPayload(message);
 
         // Transfer tokens from gateway to this contract
-        IERC20(payload.asset).transferFrom(gateway, address(this), payload.amount + payload.tip);
+        uint256 totalTransfer = payload.actualAmount + payload.tip;
+        IERC20(payload.asset).transferFrom(gateway, address(this), totalTransfer);
 
         // Settle the intent
         _settle(
@@ -262,7 +311,8 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             payload.asset,
             payload.amount,
             payload.receiver,
-            payload.tip
+            payload.tip,
+            payload.actualAmount
         );
 
         return "";

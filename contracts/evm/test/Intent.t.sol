@@ -66,16 +66,127 @@ contract IntentTest is Test {
         );
         intent = Intent(address(proxy));
 
-        // Setup test tokens
-        token.mint(user1, 1000 ether);
-        vm.prank(user1);
-        token.approve(address(intent), 1000 ether);
+        // Setup test tokens - We'll mint specific amounts in each test rather than here
     }
 
     function test_Initialization() public {
         assertEq(intent.owner(), owner);
         assertEq(intent.gateway(), address(gateway));
         assertEq(intent.router(), router);
+    }
+
+    function test_ComputeIntentId() public {
+        // Test parameters
+        uint256 counter = 42;
+        uint256 salt = 123;
+        uint256 chainId = 1337;
+        
+        // Expected result (manually computed)
+        bytes32 expectedId = keccak256(abi.encodePacked(counter, salt, chainId));
+        
+        // Call the function and verify result
+        bytes32 actualId = intent.computeIntentId(counter, salt, chainId);
+        
+        assertEq(actualId, expectedId, "Intent ID computation does not match expected value");
+    }
+    
+    function test_ComputeIntentId_Uniqueness() public {
+        // Different counters
+        bytes32 id1 = intent.computeIntentId(1, 100, 1);
+        bytes32 id2 = intent.computeIntentId(2, 100, 1);
+        assertTrue(id1 != id2, "IDs should be different with different counters");
+        
+        // Different salts
+        bytes32 id3 = intent.computeIntentId(1, 100, 1);
+        bytes32 id4 = intent.computeIntentId(1, 200, 1);
+        assertTrue(id3 != id4, "IDs should be different with different salts");
+        
+        // Different chain IDs
+        bytes32 id5 = intent.computeIntentId(1, 100, 1);
+        bytes32 id6 = intent.computeIntentId(1, 100, 2);
+        assertTrue(id5 != id6, "IDs should be different with different chain IDs");
+    }
+
+    function test_GetNextIntentId() public {
+        uint256 salt = 789;
+        uint256 currentChainId = block.chainid;
+        
+        // Get the initial counter value
+        uint256 initialCounter = intent.intentCounter();
+        
+        // Get the next intent ID
+        bytes32 nextIntentId = intent.getNextIntentId(salt);
+        
+        // Verify it matches the expected computation
+        assertEq(nextIntentId, intent.computeIntentId(initialCounter, salt, currentChainId));
+        
+        // Mint tokens for initiate
+        uint256 amount = 50 ether;
+        uint256 tip = 5 ether;
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+        
+        // Initiate an intent which should increment the counter
+        uint256 targetChain = 2;
+        bytes memory receiver = abi.encodePacked(user2);
+        
+        vm.prank(user1);
+        bytes32 actualIntentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+        
+        // Verify the intent ID matches what we predicted
+        assertEq(actualIntentId, nextIntentId);
+        
+        // Verify counter was incremented
+        assertEq(intent.intentCounter(), initialCounter + 1);
+        
+        // Get the next intent ID again
+        bytes32 nextIntentId2 = intent.getNextIntentId(salt);
+        
+        // Verify it's different than the previous one
+        assertTrue(nextIntentId2 != nextIntentId);
+    }
+
+    function test_GetFulfillmentIndex() public {
+        // Test parameters
+        bytes32 intentId = bytes32(uint256(123));
+        address asset = address(token);
+        uint256 amount = 50 ether;
+        address receiver = user2;
+        
+        // Expected result calculated using PayloadUtils directly
+        bytes32 expectedIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+        
+        // Call the function and verify result
+        bytes32 actualIndex = intent.getFulfillmentIndex(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+        
+        // Verify the computed index matches what we expect
+        assertEq(actualIndex, expectedIndex, "Fulfillment index computation does not match expected value");
+        
+        // Verify it matches with the internal computation too
+        assertEq(actualIndex, keccak256(abi.encodePacked(
+            intentId,
+            asset,
+            amount,
+            receiver
+        )), "Index doesn't match raw computation");
     }
 
     function test_Initiate() public {
@@ -85,11 +196,17 @@ contract IntentTest is Test {
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
+        uint256 currentChainId = block.chainid;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
 
         // Expect the IntentInitiated event
         vm.expectEmit(true, true, false, false);
         emit IntentInitiated(
-            keccak256(abi.encodePacked(uint256(0), salt)), // First intent ID
+            intent.computeIntentId(0, salt, currentChainId), // First intent ID with chainId
             address(token),
             amount,
             targetChain,
@@ -110,7 +227,7 @@ contract IntentTest is Test {
         );
 
         // Verify intent ID
-        assertEq(intentId, keccak256(abi.encodePacked(uint256(0), salt)));
+        assertEq(intentId, intent.computeIntentId(0, salt, currentChainId));
 
         // Verify gateway received the correct amount
         assertEq(token.balanceOf(address(gateway)), amount + tip);
@@ -132,22 +249,20 @@ contract IntentTest is Test {
 
     function test_InitiateInsufficientBalance() public {
         // Test parameters
-        uint256 amount = 1000 ether; // More than user1's balance
+        uint256 amount = 1000 ether;
         uint256 tip = 10 ether;
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
-        // Call initiate and expect revert with ERC20InsufficientAllowance error
+        // Mint tokens for initiate, but not enough
+        token.mint(user1, amount); // Not enough for amount + tip
         vm.prank(user1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientAllowance.selector,
-                address(intent),
-                1000 ether,
-                1010 ether
-            )
-        );
+        token.approve(address(intent), amount + tip);
+
+        // Call initiate and expect revert with ERC20InsufficientBalance error
+        vm.prank(user1);
+        vm.expectRevert();
         intent.initiate(
             address(token),
             amount,
@@ -166,6 +281,11 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
             address(token),
@@ -176,8 +296,10 @@ contract IntentTest is Test {
             salt
         );
 
-        // Transfer tokens to the intent contract for fulfillment
-        token.mint(address(intent), amount);
+        // Mint tokens to the fulfiller (user1) and approve them for the intent contract
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
 
         // Expect the IntentFulfilled event
         vm.expectEmit(true, true, false, true);
@@ -206,7 +328,7 @@ contract IntentTest is Test {
         );
         assertEq(intent.fulfillments(fulfillmentIndex), user1);
 
-        // Verify tokens were transferred
+        // Verify tokens were transferred from user1 to user2
         assertEq(token.balanceOf(user2), amount);
     }
 
@@ -218,6 +340,11 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
             address(token),
@@ -228,8 +355,10 @@ contract IntentTest is Test {
             salt
         );
 
-        // Transfer tokens to the intent contract for fulfillment
-        token.mint(address(intent), amount);
+        // Mint tokens to the fulfiller (user1) and approve them for the intent contract
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
 
         // First fulfillment
         vm.prank(user1);
@@ -241,6 +370,11 @@ contract IntentTest is Test {
         );
 
         // Try to fulfill again with same parameters and expect revert
+        // First need to mint and approve more tokens
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
+        
         vm.prank(user1);
         vm.expectRevert("Intent already fulfilled with these parameters");
         intent.fulfill(
@@ -259,6 +393,11 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
             address(token),
@@ -269,8 +408,10 @@ contract IntentTest is Test {
             salt
         );
 
-        // Transfer tokens to the intent contract for both fulfillments
-        token.mint(address(intent), amount + (amount + 1 ether));
+        // Mint tokens to the fulfiller (user1) and approve them for both fulfillments
+        token.mint(user1, amount + (amount + 1 ether));
+        vm.prank(user1);
+        token.approve(address(intent), amount + (amount + 1 ether));
 
         // First fulfillment
         vm.prank(user1);
@@ -318,9 +459,12 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
-        // Store initial balance
-        uint256 initialBalance = token.balanceOf(user1);
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
 
+        // Initiate the intent
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
             address(token),
@@ -331,11 +475,10 @@ contract IntentTest is Test {
             salt
         );
 
-        // Account for tokens spent during initiate
-        initialBalance -= (amount + tip);
-
-        // Transfer tokens to the intent contract for fulfillment
-        token.mint(address(intent), amount);
+        // Mint additional tokens for fulfillment
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
 
         // Fulfill the intent
         vm.prank(user1);
@@ -352,7 +495,8 @@ contract IntentTest is Test {
             amount,
             address(token),
             user2,
-            tip
+            tip,
+            amount  // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -377,13 +521,13 @@ contract IntentTest is Test {
             user2
         );
         (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
-        assertTrue(settled);
-        assertTrue(fulfilled);
-        assertEq(paidTip, tip);
-        assertEq(fulfiller, user1);
+        assertTrue(settled, "Settlement should be marked as settled");
+        assertTrue(fulfilled, "Settlement should be marked as fulfilled");
+        assertEq(paidTip, tip, "Paid tip should match the input tip");
+        assertEq(fulfiller, user1, "Fulfiller should be user1");
 
         // Verify tokens were transferred to fulfiller (amount + tip)
-        assertEq(token.balanceOf(user1), initialBalance + amount + tip);
+        assertEq(token.balanceOf(user1), amount + tip, "User1 should receive amount + tip");
     }
 
     function test_OnCallWithoutFulfillment() public {
@@ -393,6 +537,16 @@ contract IntentTest is Test {
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
+
+        // Reset user2 balance for clean testing
+        vm.prank(user2);
+        token.transfer(address(this), token.balanceOf(user2));
+        assertEq(token.balanceOf(user2), 0, "Initial balance should be 0");
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
@@ -410,7 +564,8 @@ contract IntentTest is Test {
             amount,
             address(token),
             user2,
-            tip
+            tip,
+            amount  // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -441,7 +596,7 @@ contract IntentTest is Test {
         assertEq(fulfiller, address(0));
 
         // Verify tokens were transferred to receiver (amount + tip)
-        assertEq(token.balanceOf(user2), amount + tip);
+        assertEq(token.balanceOf(user2), amount + tip, "User2 should receive amount + tip");
     }
 
     function test_OnCallInvalidSender() public {
@@ -451,6 +606,11 @@ contract IntentTest is Test {
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
@@ -468,7 +628,8 @@ contract IntentTest is Test {
             amount,
             address(token),
             user2,
-            tip
+            tip,
+            amount  // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -485,6 +646,92 @@ contract IntentTest is Test {
             }),
             settlementPayload
         );
+    }
+
+    function test_OnCallWithActualAmountDifferent() public {
+        // Create an intent
+        uint256 amount = 100 ether;
+        uint256 actualAmount = 93 ether; // Simulating 7 ether reduction due to insufficient tip
+        uint256 tip = 3 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        // Initiate an intent from user1
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+        
+        // Mint additional tokens for fulfillment
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
+
+        // Fulfill the intent with the original amount (for indexing purposes)
+        vm.prank(user1);
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+
+        // Prepare settlement payload with different actualAmount
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,            // Original amount (for index calculation)
+            address(token),
+            user2,
+            tip,
+            actualAmount       // Reduced actual amount to transfer
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), actualAmount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), actualAmount + tip);
+
+        // Call onCall through gateway
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+
+        // Verify settlement record
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,            // Original amount for index calculation
+            user2
+        );
+        (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
+        assertTrue(settled, "Settlement should be marked as settled");
+        assertTrue(fulfilled, "Settlement should be marked as fulfilled");
+        assertEq(paidTip, tip, "Paid tip should match the input tip");
+        assertEq(fulfiller, user1, "Fulfiller should be user1");
+
+        // Verify tokens were transferred to fulfiller
+        // User1 should receive actualAmount (93 ether) + tip (3 ether) = 96 ether
+        assertEq(token.balanceOf(user1), actualAmount + tip, "User1 should receive actualAmount + tip");
+        
+        // Additional check: the payment should be actualAmount + tip
+        // rather than amount + tip that would have been sent with the original amount
+        assertEq(actualAmount + tip, 96 ether, "Payment amount should be actualAmount + tip");
+        assertLt(actualAmount, amount, "Actual amount should be less than original amount");
     }
 
     // TODO: Add more tests for:

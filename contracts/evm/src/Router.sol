@@ -135,8 +135,25 @@ contract Router {
 
         // Calculate slippage difference and adjust tip accordingly
         uint256 slippageAndFeeCost = amount - amountOut;
-        require(intentPayload.tip > slippageAndFeeCost, "Provided tip doesn't cover slippage and withdraw fee cost");
-        uint256 tipAfterSwap = intentPayload.tip - slippageAndFeeCost;
+        
+        // Initialize tip and actual amount
+        uint256 tipAfterSwap;
+        uint256 actualAmount = intentPayload.amount;
+
+        // Check if tip covers the slippage and fee costs
+        if (intentPayload.tip > slippageAndFeeCost) {
+            // Tip covers all costs, subtract from tip only
+            tipAfterSwap = intentPayload.tip - slippageAndFeeCost;
+        } else {
+            // Tip doesn't cover costs, use it all and reduce the amount
+            tipAfterSwap = 0;
+            // Calculate how much remaining slippage to cover from the amount
+            uint256 remainingCost = slippageAndFeeCost - intentPayload.tip;
+            // Ensure the amount is greater than the remaining cost, otherwise fail
+            require(intentPayload.amount > remainingCost, "Amount insufficient to cover costs after tip");
+            // Reduce the actual amount by the remaining cost
+            actualAmount = intentPayload.amount - remainingCost;
+        }
 
         // Convert receiver from bytes to address
         address receiverAddress = PayloadUtils.bytesToAddress(intentPayload.receiver);
@@ -144,10 +161,11 @@ contract Router {
         // Encode settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
             intentPayload.intentId,
-            intentPayload.amount,
+            intentPayload.amount, // original amount for index computation
             targetAsset,
             receiverAddress,
-            tipAfterSwap
+            tipAfterSwap,
+            actualAmount  // actual amount to transfer after all costs
         );
 
         // Prepare call options
