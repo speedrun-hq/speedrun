@@ -1,9 +1,9 @@
 -- Create intents table
 CREATE TABLE IF NOT EXISTS intents (
     id VARCHAR(66) PRIMARY KEY,
-    source_chain VARCHAR(10) NOT NULL,
-    destination_chain VARCHAR(10) NOT NULL,
-    token VARCHAR(10) NOT NULL,
+    source_chain BIGINT NOT NULL,
+    destination_chain BIGINT NOT NULL,
+    token VARCHAR(42) NOT NULL,
     amount VARCHAR(78) NOT NULL,
     recipient VARCHAR(42) NOT NULL,
     intent_fee VARCHAR(78) NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS intents (
 
 -- Create fulfillments table
 CREATE TABLE IF NOT EXISTS fulfillments (
-    id SERIAL PRIMARY KEY,
+    id VARCHAR(66) PRIMARY KEY,
     intent_id VARCHAR(66) NOT NULL,
     tx_hash VARCHAR(66) NOT NULL,
     status VARCHAR(20) NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS fulfillments (
 
 -- Table to store last processed block numbers
 CREATE TABLE IF NOT EXISTS last_processed_blocks (
-    chain_id VARCHAR(10) PRIMARY KEY,
+    chain_id BIGINT PRIMARY KEY,
     block_number BIGINT NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
