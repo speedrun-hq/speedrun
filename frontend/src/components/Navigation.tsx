@@ -20,13 +20,7 @@ const Navigation = () => {
               href="/intents"
               className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 relative"
             >
-              RUNS
-            </Link>
-            <Link
-              href="/create"
-              className="arcade-btn relative"
-            >
-              NEW RUN
+              TRANSFERS
             </Link>
             <div className="relative">
               <ConnectWallet />

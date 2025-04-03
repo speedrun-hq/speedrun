@@ -30,7 +30,7 @@ export default function CreateNewIntent() {
     return (
       <div className="max-w-2xl mx-auto p-6 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg shadow-lg relative z-0">
         <h2 className="text-2xl font-bold text-[hsl(var(--yellow))] mb-6 text-center font-mono">
-          CREATE NEW RUN
+          NEW TRANSFER
         </h2>
         <p className="text-[hsl(var(--yellow))] text-center font-mono">
           Please connect your wallet to continue
@@ -42,7 +42,7 @@ export default function CreateNewIntent() {
   return (
     <div className="max-w-2xl mx-auto p-6 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg shadow-lg relative z-0">
       <h2 className="text-2xl font-bold text-[hsl(var(--yellow))] mb-6 text-center font-mono">
-        CREATE NEW RUN
+        NEW TRANSFER
       </h2>
       
       <form

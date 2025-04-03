@@ -48,7 +48,7 @@ describe('CreateNewIntent', () => {
   it('renders the form with all required fields', () => {
     render(<CreateNewIntent />);
     
-    expect(screen.getByText('CREATE NEW RUN')).toBeInTheDocument();
+    expect(screen.getByText('NEW TRANSFER')).toBeInTheDocument();
     expect(screen.getByText('SOURCE CHAIN')).toBeInTheDocument();
     expect(screen.getByText('DESTINATION CHAIN')).toBeInTheDocument();
     expect(screen.getByText('SELECT TOKEN')).toBeInTheDocument();
