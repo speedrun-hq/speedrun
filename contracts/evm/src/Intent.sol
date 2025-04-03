@@ -14,7 +14,7 @@ import "./utils/PayloadUtils.sol";
  */
 contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Counter for generating unique intent IDs
-    uint256 private _intentCounter;
+    uint256 public intentCounter;
 
     // Gateway contract address
     address public gateway;
@@ -82,6 +82,30 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /**
+     * @dev Computes a unique intent ID
+     * @param counter The current intent counter
+     * @param salt Random salt for uniqueness
+     * @param chainId The chain ID where the intent is being initiated
+     * @return The computed intent ID
+     */
+    function computeIntentId(
+        uint256 counter,
+        uint256 salt,
+        uint256 chainId
+    ) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(counter, salt, chainId));
+    }
+
+    /**
+     * @dev Get the next intent ID that would be generated with the current counter
+     * @param salt Random salt for uniqueness
+     * @return The next intent ID that would be generated
+     */
+    function getNextIntentId(uint256 salt) public view returns (bytes32) {
+        return computeIntentId(intentCounter, salt, block.chainid);
+    }
+
+    /**
      * @dev Initiates a new intent for cross-chain transfer
      * @param asset The ERC20 token address
      * @param amount Amount to receive on target chain
@@ -108,11 +132,11 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Approve gateway to spend the tokens
         IERC20(asset).approve(gateway, totalAmount);
 
-        // Generate intent ID using keccak256 hash of counter and salt
-        bytes32 intentId = keccak256(abi.encodePacked(_intentCounter, salt));
+        // Generate intent ID using the computeIntentId function with current chain ID
+        bytes32 intentId = computeIntentId(intentCounter, salt, block.chainid);
         
         // Increment counter
-        _intentCounter++;
+        intentCounter++;
 
         // Create payload for crosschain transaction
         bytes memory payload = PayloadUtils.encodeIntentPayload(

@@ -78,6 +78,80 @@ contract IntentTest is Test {
         assertEq(intent.router(), router);
     }
 
+    function test_ComputeIntentId() public {
+        // Test parameters
+        uint256 counter = 42;
+        uint256 salt = 123;
+        uint256 chainId = 1337;
+        
+        // Expected result (manually computed)
+        bytes32 expectedId = keccak256(abi.encodePacked(counter, salt, chainId));
+        
+        // Call the function and verify result
+        bytes32 actualId = intent.computeIntentId(counter, salt, chainId);
+        
+        assertEq(actualId, expectedId, "Intent ID computation does not match expected value");
+    }
+    
+    function test_ComputeIntentId_Uniqueness() public {
+        // Different counters
+        bytes32 id1 = intent.computeIntentId(1, 100, 1);
+        bytes32 id2 = intent.computeIntentId(2, 100, 1);
+        assertTrue(id1 != id2, "IDs should be different with different counters");
+        
+        // Different salts
+        bytes32 id3 = intent.computeIntentId(1, 100, 1);
+        bytes32 id4 = intent.computeIntentId(1, 200, 1);
+        assertTrue(id3 != id4, "IDs should be different with different salts");
+        
+        // Different chain IDs
+        bytes32 id5 = intent.computeIntentId(1, 100, 1);
+        bytes32 id6 = intent.computeIntentId(1, 100, 2);
+        assertTrue(id5 != id6, "IDs should be different with different chain IDs");
+    }
+
+    function test_GetNextIntentId() public {
+        uint256 salt = 789;
+        uint256 currentChainId = block.chainid;
+        
+        // Get the initial counter value
+        uint256 initialCounter = intent.intentCounter();
+        
+        // Get the next intent ID
+        bytes32 nextIntentId = intent.getNextIntentId(salt);
+        
+        // Verify it matches the expected computation
+        assertEq(nextIntentId, intent.computeIntentId(initialCounter, salt, currentChainId));
+        
+        // Initiate an intent which should increment the counter
+        uint256 amount = 50 ether;
+        uint256 tip = 5 ether;
+        uint256 targetChain = 2;
+        bytes memory receiver = abi.encodePacked(user2);
+        
+        vm.prank(user1);
+        bytes32 actualIntentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+        
+        // Verify the intent ID matches what we predicted
+        assertEq(actualIntentId, nextIntentId);
+        
+        // Verify counter was incremented
+        assertEq(intent.intentCounter(), initialCounter + 1);
+        
+        // Get the next intent ID again
+        bytes32 nextIntentId2 = intent.getNextIntentId(salt);
+        
+        // Verify it's different than the previous one
+        assertTrue(nextIntentId2 != nextIntentId);
+    }
+
     function test_Initiate() public {
         // Test parameters
         uint256 amount = 100 ether;
@@ -85,11 +159,12 @@ contract IntentTest is Test {
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
+        uint256 currentChainId = block.chainid;
 
         // Expect the IntentInitiated event
         vm.expectEmit(true, true, false, false);
         emit IntentInitiated(
-            keccak256(abi.encodePacked(uint256(0), salt)), // First intent ID
+            intent.computeIntentId(0, salt, currentChainId), // First intent ID with chainId
             address(token),
             amount,
             targetChain,
@@ -110,7 +185,7 @@ contract IntentTest is Test {
         );
 
         // Verify intent ID
-        assertEq(intentId, keccak256(abi.encodePacked(uint256(0), salt)));
+        assertEq(intentId, intent.computeIntentId(0, salt, currentChainId));
 
         // Verify gateway received the correct amount
         assertEq(token.balanceOf(address(gateway)), amount + tip);
