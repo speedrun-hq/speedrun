@@ -40,6 +40,10 @@ Fulfills an existing intent:
 - `asset`: Address of the token being transferred
 - `receiver`: Address of the recipient on the target chain
 
+## Architecture
+
+[Learn more about the contract architecture](./architecture.md)
+
 ## Development
 
 ### Prerequisites
