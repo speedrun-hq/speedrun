@@ -59,25 +59,6 @@ export default function CreateNewIntent() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg shadow-lg relative z-0">
-      <h2 className="text-2xl font-bold text-[hsl(var(--yellow))] mb-6 text-center font-mono">
-        NEW TRANSFER
-      </h2>
-      
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-6 relative"
-        role="form"
-      >
-        {formState.error && <ErrorMessage error={formState.error} className="mb-4" />}
-        
-        {formState.success && (
-          <div className="bg-green-500/10 border border-green-500 text-green-500 p-4 rounded-lg mb-4">
-            <p className="font-mono text-center">RUN CREATED SUCCESSFULLY!</p>
-          </div>
-        )}
-
-  return (
     <div className="max-w-2xl mx-auto arcade-container border-yellow-500 relative group">
       <div className="absolute inset-0 bg-yellow-500/10 blur-sm group-hover:bg-yellow-500/20 transition-all duration-300" />
       <div className="relative p-6">
