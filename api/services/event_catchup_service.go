@@ -101,7 +101,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context, contractAddres
 
 	// Start fulfillment catch-up for each chain
 	for chainID, currentBlock := range currentBlocks {
-		lastBlock := s.intentProgress[chainID]
+		lastBlock := cfg.ChainConfigs[chainID].DefaultBlock
 		if lastBlock >= currentBlock {
 			continue
 		}
@@ -111,8 +111,10 @@ func (s *EventCatchupService) StartListening(ctx context.Context, contractAddres
 		if err := s.catchUpOnFulfillmentEvents(ctx, contractAddress, lastBlock, currentBlock); err != nil {
 			return fmt.Errorf("failed to catch up on fulfillment events for chain %d: %v", chainID, err)
 		}
+	}
 
-		// Update the last processed block number
+	// Update last processed blocks for all chains only after all services have completed
+	for chainID, currentBlock := range currentBlocks {
 		if err := s.db.UpdateLastProcessedBlock(ctx, chainID, currentBlock); err != nil {
 			return fmt.Errorf("failed to update last processed block for chain %d: %v", chainID, err)
 		}

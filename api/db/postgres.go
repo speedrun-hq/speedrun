@@ -3,14 +3,16 @@ package db
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/zeta-chain/zetafast/api/models"
 )
+
+//go:embed schema.sql
+var schemaFS embed.FS
 
 // PostgresDB implements the Database interface using PostgreSQL
 type PostgresDB struct {
@@ -71,17 +73,10 @@ func (p *PostgresDB) Query(ctx context.Context, query string, args ...interface{
 
 // InitDB initializes the database schema
 func (p *PostgresDB) InitDB(ctx context.Context) error {
-	// Get the workspace root from environment variable or use default
-	workspaceRoot := os.Getenv("WORKSPACE_ROOT")
-	if workspaceRoot == "" {
-		workspaceRoot = "/Users/peterlee/go/src/github.com/zeta-chain/zetafast"
-	}
-
-	// Read schema file
-	schemaPath := filepath.Join(workspaceRoot, "api/db/schema.sql")
-	schemaBytes, err := os.ReadFile(schemaPath)
+	// Read schema file from embedded filesystem
+	schemaBytes, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {
-		return fmt.Errorf("failed to read schema file at %s: %v", schemaPath, err)
+		return fmt.Errorf("failed to read embedded schema file: %v", err)
 	}
 
 	// Execute schema
