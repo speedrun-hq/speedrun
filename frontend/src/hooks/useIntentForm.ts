@@ -1,20 +1,21 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAccount, useNetwork } from 'wagmi';
-import { useTokenBalance } from './useTokenBalance';
-import { TOKENS } from '../config/tokens';
-import { base, arbitrum } from 'wagmi/chains';
+import { useCallback, useState } from 'react';
+import { useAccount, useBalance, useNetwork } from 'wagmi';
+import { useTokenBalance } from '@/hooks/useTokenBalance';
 import { apiService } from '@/services/api';
-import { ApiError } from '@/utils/errors';
+import { useContract } from './useContract';
+import { TOKENS } from '@/constants/tokens';
+import { getChainId } from '@/utils/chain';
 
-type TokenSymbol = 'USDC' | 'USDT';
 type ChainName = 'BASE' | 'ARBITRUM';
+type TokenSymbol = 'USDC' | 'USDT';
 
-interface IntentFormState {
+interface FormState {
   sourceChain: ChainName;
   destinationChain: ChainName;
   selectedToken: TokenSymbol;
   amount: string;
   recipient: string;
+  tip: string;
   isSubmitting: boolean;
   error: Error | null;
   success: boolean;
@@ -23,66 +24,35 @@ interface IntentFormState {
 export function useIntentForm() {
   const { address, isConnected } = useAccount();
   const { chain } = useNetwork();
-  
-  const [formState, setFormState] = useState<IntentFormState>({
+  const { createIntent, isConnected: isWalletConnected } = useContract();
+
+  const [formState, setFormState] = useState<FormState>({
     sourceChain: 'BASE',
     destinationChain: 'ARBITRUM',
     selectedToken: 'USDC',
     amount: '',
     recipient: '',
+    tip: '0.01',
     isSubmitting: false,
     error: null,
     success: false,
   });
 
-  // Helper function to convert chain ID to name
-  const getChainName = (chainId: number): ChainName => {
-    return chainId === base.id ? 'BASE' : 'ARBITRUM';
-  };
-
-  // Helper function to convert chain name to ID
-  const getChainId = (chainName: ChainName): number => {
-    return chainName === 'BASE' ? base.id : arbitrum.id;
-  };
-
-  // Fetch token balance
-  const { balance, isError, isLoading: isBalanceLoading, symbol } = useTokenBalance(
-    formState.selectedToken,
-    address,
-    getChainId(formState.sourceChain)
+  // Get token balance
+  const { balance, symbol, isLoading, isError } = useTokenBalance(
+    formState.sourceChain,
+    formState.selectedToken
   );
 
-  // Update source chain when wallet chain changes
-  useEffect(() => {
-    if (chain?.id && TOKENS[chain.id]) {
-      const sourceName = getChainName(chain.id);
-      const destName = sourceName === 'BASE' ? 'ARBITRUM' : 'BASE';
-      setFormState(prev => ({
-        ...prev,
-        sourceChain: sourceName,
-        destinationChain: destName,
-      }));
-    }
-  }, [chain?.id]);
-
   // Form validation
-  const isValid = useMemo(() => {
-    if (!formState.recipient || !formState.amount || isError || isBalanceLoading) {
-      return false;
-    }
-
-    // Validate recipient address format
-    if (!/^0x[a-fA-F0-9]{40}$/.test(formState.recipient)) {
-      return false;
-    }
-
-    // Validate amount is not greater than balance
-    if (balance && parseFloat(formState.amount) > parseFloat(balance)) {
-      return false;
-    }
-
-    return true;
-  }, [formState.recipient, formState.amount, balance, isError, isBalanceLoading]);
+  const isValid = Boolean(
+    formState.amount &&
+    formState.recipient &&
+    formState.tip &&
+    parseFloat(formState.amount) > 0 &&
+    parseFloat(formState.tip) > 0 &&
+    parseFloat(formState.amount) <= (balance ? parseFloat(balance) : 0)
+  );
 
   // Handle form submission
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
@@ -94,20 +64,25 @@ export function useIntentForm() {
     try {
       setFormState(prev => ({ ...prev, isSubmitting: true, error: null, success: false }));
 
-      await apiService.createIntent({
-        source_chain: formState.sourceChain.toLowerCase(),
-        destination_chain: formState.destinationChain.toLowerCase(),
-        token: formState.selectedToken,
-        amount: formState.amount,
-        recipient: formState.recipient,
-        intent_fee: '0.01',
-      });
+      const sourceChainId = getChainId(formState.sourceChain);
+      const destinationChainId = getChainId(formState.destinationChain);
+      const tokenAddress = TOKENS[sourceChainId][formState.selectedToken].address;
+
+      await createIntent(
+        sourceChainId,
+        destinationChainId,
+        tokenAddress,
+        formState.amount,
+        formState.recipient,
+        formState.tip
+      );
 
       setFormState(prev => ({
         ...prev,
         success: true,
         amount: '',
         recipient: '',
+        tip: '0.01',
       }));
     } catch (err) {
       setFormState(prev => ({
@@ -117,7 +92,7 @@ export function useIntentForm() {
     } finally {
       setFormState(prev => ({ ...prev, isSubmitting: false }));
     }
-  }, [formState, isValid]);
+  }, [formState, isValid, createIntent]);
 
   // Update handlers
   const updateSourceChain = useCallback((value: ChainName) => {
@@ -148,13 +123,20 @@ export function useIntentForm() {
     setFormState(prev => ({ ...prev, recipient: value }));
   }, []);
 
+  const updateTip = useCallback((value: string) => {
+    setFormState(prev => ({
+      ...prev,
+      tip: value,
+    }));
+  }, []);
+
   return {
     formState,
     balance,
     isError,
-    isLoading: isBalanceLoading,
+    isLoading,
     symbol,
-    isConnected,
+    isConnected: isConnected && isWalletConnected,
     isValid,
     handleSubmit,
     updateSourceChain,
@@ -162,5 +144,6 @@ export function useIntentForm() {
     updateToken,
     updateAmount,
     updateRecipient,
+    updateTip,
   };
 } 

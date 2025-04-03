@@ -31,16 +31,12 @@ func TestMockDB(t *testing.T) {
 
 	// Create a test fulfillment
 	fulfillment := &models.Fulfillment{
-		ID:          "test-fulfillment-id",
-		IntentID:    intent.ID,
-		Fulfiller:   "0x0987654321098765432109876543210987654321",
-		TargetChain: 42161,
-		Amount:      "1000000000000000000",
-		Status:      models.FulfillmentStatusPending,
-		TxHash:      "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-		BlockNumber: 12345678,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:        "test-fulfillment-id",
+		IntentID:  intent.ID,
+		TxHash:    "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		Status:    models.FulfillmentStatusPending,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	ctx := context.Background()
@@ -78,12 +74,8 @@ func TestMockDB(t *testing.T) {
 	assert.NotNil(t, retrievedFulfillment)
 	assert.Equal(t, fulfillment.ID, retrievedFulfillment.ID)
 	assert.Equal(t, fulfillment.IntentID, retrievedFulfillment.IntentID)
-	assert.Equal(t, fulfillment.Fulfiller, retrievedFulfillment.Fulfiller)
-	assert.Equal(t, fulfillment.TargetChain, retrievedFulfillment.TargetChain)
-	assert.Equal(t, fulfillment.Amount, retrievedFulfillment.Amount)
-	assert.Equal(t, fulfillment.Status, retrievedFulfillment.Status)
 	assert.Equal(t, fulfillment.TxHash, retrievedFulfillment.TxHash)
-	assert.Equal(t, fulfillment.BlockNumber, retrievedFulfillment.BlockNumber)
+	assert.Equal(t, fulfillment.Status, retrievedFulfillment.Status)
 
 	// Test listing fulfillments
 	fulfillments, err := db.ListFulfillments(ctx)

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/zeta-chain/zetafast/api/config"
+	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
 	"github.com/zeta-chain/zetafast/api/services"
 	"github.com/zeta-chain/zetafast/api/test/mocks"
@@ -27,18 +28,44 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *mocks.MockDB, *services.Intent
 
 	// Initialize validation package with test config
 	testConfig := &config.Config{
-		SupportedChains: []string{"7001", "42161", "8453"},
+		SupportedChains: []uint64{7001, 42161, 8453},
+		ChainConfigs: map[uint64]*config.ChainConfig{
+			42161: {
+				DefaultBlock: 322207320, // Arbitrum
+			},
+			8453: {
+				DefaultBlock: 28411000, // Base
+			},
+			7001: {
+				DefaultBlock: 1000000, // ZetaChain
+			},
+		},
 	}
 	utils.Initialize(testConfig)
 
 	// Create intent service
-	intentService, err := services.NewIntentService(mockEthClient, mockDB, `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"IntentInitiated","type":"event"}]`)
+	intentService, err := services.NewIntentService(mockEthClient, mockDB, `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"IntentInitiated","type":"event"}]`, 7001)
 	assert.NoError(t, err)
 
 	// Create fulfillment service
-	clients := map[uint64]*ethclient.Client{42161: mockEthClient}
-	contractAddresses := map[uint64]string{42161: "0x1234567890123456789012345678901234567890"}
-	fulfillmentService, err := services.NewFulfillmentService(clients, contractAddresses, mockDB, `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"address","name":"fulfiller","type":"address"}],"name":"IntentFulfilled","type":"event"}]`)
+	clients := map[uint64]*ethclient.Client{
+		42161: mockEthClient, // Arbitrum
+		8453:  mockEthClient, // Base
+		7001:  mockEthClient, // ZetaChain
+	}
+	contractAddresses := map[uint64]string{
+		42161: "0x1234567890123456789012345678901234567890",
+		8453:  "0x0987654321098765432109876543210987654321",
+		7001:  "0x1234567890123456789012345678901234567890",
+	}
+
+	// Create default blocks map from test config
+	defaultBlocks := make(map[uint64]uint64)
+	for chainID, chainConfig := range testConfig.ChainConfigs {
+		defaultBlocks[chainID] = chainConfig.DefaultBlock
+	}
+
+	fulfillmentService, err := services.NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"address","name":"fulfiller","type":"address"}],"name":"IntentFulfilled","type":"event"}]`, defaultBlocks)
 	assert.NoError(t, err)
 
 	// Set up Gin router

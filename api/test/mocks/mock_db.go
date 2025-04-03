@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"math/big"
 	"sync"
 
 	"github.com/zeta-chain/zetafast/api/models"
@@ -87,24 +86,9 @@ func (db *MockDB) CreateFulfillment(ctx context.Context, fulfillment *models.Ful
 	// Store the fulfillment
 	db.fulfillments[fulfillment.ID] = fulfillment
 
-	// Get the intent
-	intent, ok := db.intents[fulfillment.IntentID]
-	if !ok {
+	// Check if intent exists
+	if _, ok := db.intents[fulfillment.IntentID]; !ok {
 		return errors.New("intent not found")
-	}
-
-	// Calculate total fulfilled amount
-	totalFulfilled := "0"
-	for _, f := range db.fulfillments {
-		if f.IntentID == fulfillment.IntentID {
-			// Add the amount to total
-			totalFulfilled = addBigIntStrings(totalFulfilled, f.Amount)
-		}
-	}
-
-	// Update intent status only if total fulfilled amount equals intent amount
-	if totalFulfilled == intent.Amount {
-		intent.Status = models.IntentStatusFulfilled
 	}
 
 	return nil
@@ -125,26 +109,20 @@ func (db *MockDB) GetTotalFulfilledAmount(ctx context.Context, intentID string) 
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
-	// Calculate total fulfilled amount
-	totalFulfilled := "0"
+	// Get the intent
+	intent, ok := db.intents[intentID]
+	if !ok {
+		return "0", errors.New("intent not found")
+	}
+
+	// Check if there's a completed fulfillment
 	for _, f := range db.fulfillments {
-		if f.IntentID == intentID {
-			// Add the amount to total
-			totalFulfilled = addBigIntStrings(totalFulfilled, f.Amount)
+		if f.IntentID == intentID && f.Status == models.FulfillmentStatusCompleted {
+			return intent.Amount, nil
 		}
 	}
 
-	return totalFulfilled, nil
-}
-
-// addBigIntStrings adds two big integer strings and returns the result as a string
-func addBigIntStrings(a, b string) string {
-	bigA := new(big.Int)
-	bigA.SetString(a, 10)
-	bigB := new(big.Int)
-	bigB.SetString(b, 10)
-	result := new(big.Int).Add(bigA, bigB)
-	return result.String()
+	return "0", nil
 }
 
 // UpdateIntentStatus implements the Database interface
@@ -171,4 +149,16 @@ func (m *MockDB) ListFulfillments(ctx context.Context) ([]*models.Fulfillment, e
 	}
 
 	return fulfillments, nil
+}
+
+// GetLastProcessedBlock implements DBInterface
+func (db *MockDB) GetLastProcessedBlock(ctx context.Context, chainID uint64) (uint64, error) {
+	// For testing purposes, return 0
+	return 0, nil
+}
+
+// UpdateLastProcessedBlock implements DBInterface
+func (db *MockDB) UpdateLastProcessedBlock(ctx context.Context, chainID uint64, blockNumber uint64) error {
+	// For testing purposes, do nothing
+	return nil
 }

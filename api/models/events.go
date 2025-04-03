@@ -4,6 +4,8 @@ import (
 	"math/big"
 	"time"
 
+	"log"
+
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -31,6 +33,16 @@ type FulfillmentEvent struct {
 	BlockNumber uint64
 }
 
+// IntentSettledEvent represents an intent settlement event
+type IntentSettledEvent struct {
+	IntentID  string
+	Asset     string
+	Amount    *big.Int
+	Receiver  string
+	Fulfilled bool
+	TxHash    string
+}
+
 // ToIntent converts an IntentInitiatedEvent to an Intent
 func (e *IntentInitiatedEvent) ToIntent() *Intent {
 	// Convert big.Int to string for amount and tip
@@ -39,6 +51,12 @@ func (e *IntentInitiatedEvent) ToIntent() *Intent {
 
 	// Convert receiver bytes to hex string
 	receiver := common.BytesToAddress(e.Receiver).Hex()
+
+	// Validate target chain
+	if e.TargetChain == 0 {
+		log.Printf("Warning: Target chain is 0, using source chain as target")
+		e.TargetChain = e.ChainID
+	}
 
 	return &Intent{
 		ID:               e.IntentID,
@@ -78,15 +96,11 @@ func FromIntent(intent *Intent) *IntentInitiatedEvent {
 func (e *FulfillmentEvent) ToFulfillment() *Fulfillment {
 	now := time.Now()
 	return &Fulfillment{
-		ID:          e.TxHash, // Using tx hash as ID for uniqueness
-		IntentID:    e.IntentID,
-		Fulfiller:   e.Receiver,
-		TargetChain: e.TargetChain,
-		Amount:      e.Amount,
-		Status:      FulfillmentStatusPending,
-		TxHash:      e.TxHash,
-		BlockNumber: e.BlockNumber,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:        e.TxHash, // Using tx hash as ID for uniqueness
+		IntentID:  e.IntentID,
+		TxHash:    e.TxHash,
+		Status:    FulfillmentStatusPending,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }

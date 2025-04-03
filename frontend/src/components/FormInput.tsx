@@ -9,6 +9,7 @@ interface FormInputProps {
   error?: string;
   type?: string;
   max?: string;
+  min?: string;
   step?: string;
   className?: string;
 }
@@ -22,6 +23,7 @@ export function FormInput({
   error,
   type = 'text',
   max,
+  min,
   step,
   className = '',
 }: FormInputProps) {
@@ -35,6 +37,7 @@ export function FormInput({
         placeholder={placeholder}
         disabled={disabled}
         max={max}
+        min={min}
         step={step}
         className={`w-full px-4 py-2 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg text-[#00ff00] font-mono focus:outline-none focus:border-[hsl(var(--yellow)/0.8)] disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-[hsl(var(--yellow)/0.5)] ${className}`}
       />

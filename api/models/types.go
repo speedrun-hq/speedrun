@@ -6,7 +6,7 @@ import (
 
 // Chain represents a supported blockchain network
 type Chain struct {
-	ID          string `json:"id"`
+	ID          uint64 `json:"id"`
 	Name        string `json:"name"`
 	NetworkID   string `json:"network_id"`
 	RPCURL      string `json:"rpc_url"`
@@ -18,7 +18,7 @@ type Token struct {
 	Address  string `json:"address"`
 	Symbol   string `json:"symbol"`
 	Decimals int    `json:"decimals"`
-	ChainID  string `json:"chain_id"`
+	ChainID  uint64 `json:"chain_id"`
 	LogoURL  string `json:"logo_url,omitempty"`
 }
 
@@ -89,18 +89,14 @@ type IntentResponse struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-// Fulfillment represents a partial or complete fulfillment of an intent
+// Fulfillment represents a fulfillment of an intent
 type Fulfillment struct {
-	ID          string            `json:"id"`
-	IntentID    string            `json:"intent_id"`
-	Fulfiller   string            `json:"fulfiller"`
-	TargetChain uint64            `json:"target_chain"`
-	Amount      string            `json:"amount"`
-	Status      FulfillmentStatus `json:"status"`
-	TxHash      string            `json:"tx_hash"`
-	BlockNumber uint64            `json:"block_number"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	ID        string            `json:"id"`
+	IntentID  string            `json:"intent_id"`
+	TxHash    string            `json:"tx_hash"`
+	Status    FulfillmentStatus `json:"status"`
+	CreatedAt time.Time         `json:"created_at"`
+	UpdatedAt time.Time         `json:"updated_at"`
 }
 
 // FulfillmentStatus represents the possible states of a fulfillment

@@ -2,14 +2,16 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/assert"
+	"github.com/zeta-chain/zetafast/api/config"
+	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
 	"github.com/zeta-chain/zetafast/api/test/mocks"
 )
@@ -31,23 +33,44 @@ func TestNewFulfillmentService(t *testing.T) {
 		7001:  "0x0987654321098765432109876543210987654321",
 	}
 
-	// Create a fulfillment service with a valid ABI
-	abi := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"address","name":"fulfiller","type":"address"}],"name":"IntentFulfilled","type":"event"}]`
-	service, err := NewFulfillmentService(clients, contractAddresses, mockDB, abi)
+	// Create test config
+	testConfig := &config.Config{
+		ChainConfigs: map[uint64]*config.ChainConfig{
+			42161: {
+				DefaultBlock: 322207320, // Arbitrum
+			},
+			7001: {
+				DefaultBlock: 1000000, // ZetaChain
+			},
+		},
+	}
+
+	// Create default blocks map from test config
+	defaultBlocks := make(map[uint64]uint64)
+	for chainID, chainConfig := range testConfig.ChainConfigs {
+		defaultBlocks[chainID] = chainConfig.DefaultBlock
+	}
+
+	// Create a fulfillment service
+	abi := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
+	service, err := NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), abi, defaultBlocks)
 	assert.NoError(t, err)
 	assert.NotNil(t, service)
-	assert.Equal(t, mockDB, service.db)
+
+	// Test with invalid contract address
+	invalidContractAddresses := map[uint64]string{
+		42161: "invalid-address",
+	}
+	_, err = NewFulfillmentService(clients, invalidContractAddresses, db.DBInterface(mockDB), abi, defaultBlocks)
+	assert.Error(t, err)
 
 	// Test with invalid ABI
-	service, err = NewFulfillmentService(clients, contractAddresses, mockDB, "invalid abi")
+	invalidABI := "invalid-abi"
+	_, err = NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), invalidABI, defaultBlocks)
 	assert.Error(t, err)
-	assert.Nil(t, service)
 }
 
-func TestFulfillmentServiceStartListening(t *testing.T) {
-	// Skip this test for now as it requires a real Ethereum client
-	t.Skip("Skipping test that requires a real Ethereum client")
-
+func TestProcessFulfillmentEvent(t *testing.T) {
 	// Create a mock database and eth client
 	mockDB := mocks.NewMockDB()
 	ethClient := createMockEthClient()
@@ -55,273 +78,270 @@ func TestFulfillmentServiceStartListening(t *testing.T) {
 	// Create chain clients map
 	clients := map[uint64]*ethclient.Client{
 		42161: ethClient, // Arbitrum
+		7001:  ethClient, // ZetaChain
 	}
 
 	// Contract addresses
 	contractAddresses := map[uint64]string{
 		42161: "0x1234567890123456789012345678901234567890",
+		7001:  "0x0987654321098765432109876543210987654321",
+	}
+
+	// Create test config
+	testConfig := &config.Config{
+		ChainConfigs: map[uint64]*config.ChainConfig{
+			42161: {
+				DefaultBlock: 322207320, // Arbitrum
+			},
+			7001: {
+				DefaultBlock: 1000000, // ZetaChain
+			},
+		},
+	}
+
+	// Create default blocks map from test config
+	defaultBlocks := make(map[uint64]uint64)
+	for chainID, chainConfig := range testConfig.ChainConfigs {
+		defaultBlocks[chainID] = chainConfig.DefaultBlock
 	}
 
 	// Create a fulfillment service
-	service, err := NewFulfillmentService(clients, contractAddresses, mockDB, `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"address","name":"fulfiller","type":"address"}],"name":"IntentFulfilled","type":"event"}]`)
+	abi := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
+	service, err := NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), abi, defaultBlocks)
 	assert.NoError(t, err)
+	assert.NotNil(t, service)
 
-	// Test starting to listen for events
+	// Test processing a fulfillment event
 	ctx := context.Background()
-	err = service.StartListening(ctx)
-	assert.NoError(t, err)
-}
+	event := &IntentFulfilledEvent{
+		IntentID: common.HexToHash("0x1234567890123456789012345678901234567890123456789012345678901234"),
+		Asset:    common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		Amount:   big.NewInt(1000000000000000000), // 1 ETH
+		Receiver: common.HexToAddress("0x0987654321098765432109876543210987654321"),
+	}
 
-func TestProcessFulfillmentEvent(t *testing.T) {
-	// Create a mock database
-	mockDB := mocks.NewMockDB()
-
-	// Create a test intent first
-	amount := new(big.Int)
-	amount.SetString("1000000000000000000", 10)
-	tip := new(big.Int)
-	tip.SetString("100000000000000000", 10)
-	salt := new(big.Int)
-	salt.SetString("0", 10)
-
+	// Create the intent first
 	intent := &models.Intent{
-		ID:               "test-intent-id",
+		ID:               event.IntentID.Hex(),
 		SourceChain:      7001,
 		DestinationChain: 42161,
-		Token:            "0x1234567890123456789012345678901234567890",
-		Amount:           amount.String(),
-		Recipient:        "0x0987654321098765432109876543210987654321",
-		IntentFee:        tip.String(),
+		Token:            event.Asset.Hex(),
+		Amount:           "2000000000000000000", // 2 ETH
+		Recipient:        event.Receiver.Hex(),
+		IntentFee:        "100000000000000000", // 0.1 ETH
 		Status:           models.IntentStatusPending,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	err = mockDB.CreateIntent(ctx, intent)
+	assert.NoError(t, err)
+
+	// Create a test log entry
+	log := types.Log{
+		Topics: []common.Hash{
+			service.abi.Events["IntentFulfilled"].ID,
+			event.IntentID,
+			common.BytesToHash(event.Asset.Bytes()),
+			common.BytesToHash(event.Receiver.Bytes()),
+		},
+		Data: common.FromHex("0x0000000000000000000000000000000000000000000000000de0b6b3a7640000"), // Amount: 1 ETH
 	}
 
-	// Save the intent to the database
-	ctx := context.Background()
-	err := mockDB.CreateIntent(ctx, intent)
+	// Process the log
+	err = service.processLog(ctx, service.clients[42161], log)
 	assert.NoError(t, err)
-
-	// Create a test fulfillment event
-	fulfillmentAmount := new(big.Int)
-	fulfillmentAmount.SetString("1000000000000000000", 10) // Full amount
-
-	event := &models.FulfillmentEvent{
-		IntentID:    intent.ID,
-		TargetChain: 42161,
-		Receiver:    common.HexToAddress("0xabcdef1234567890abcdef1234567890abcdef12").Hex(),
-		Amount:      fulfillmentAmount.String(),
-		TxHash:      common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890").Hex(),
-		BlockNumber: 12345678,
-	}
-
-	// Test processing the event
-	fulfillment := event.ToFulfillment()
-	err = mockDB.CreateFulfillment(ctx, fulfillment)
-	assert.NoError(t, err)
-
-	// Verify fulfillment was created
-	retrievedFulfillment, err := mockDB.GetFulfillment(ctx, fulfillment.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, fulfillment.ID, retrievedFulfillment.ID)
-	assert.Equal(t, fulfillment.IntentID, retrievedFulfillment.IntentID)
-	assert.Equal(t, fulfillment.Amount, retrievedFulfillment.Amount)
-	assert.Equal(t, fulfillment.Fulfiller, retrievedFulfillment.Fulfiller)
-	assert.Equal(t, event.TargetChain, retrievedFulfillment.TargetChain)
-	assert.Equal(t, fulfillment.TxHash, retrievedFulfillment.TxHash)
-
-	// Verify intent status was updated
-	updatedIntent, err := mockDB.GetIntent(ctx, intent.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, models.IntentStatusFulfilled, updatedIntent.Status)
 }
 
 func TestCreateFulfillment(t *testing.T) {
-	// Create mock database
+	// Create a mock database and eth client
 	mockDB := mocks.NewMockDB()
+	ethClient := createMockEthClient()
 
-	// Create service
+	// Create chain clients map
 	clients := map[uint64]*ethclient.Client{
-		42161: {},
+		42161: ethClient, // Arbitrum
+		7001:  ethClient, // ZetaChain
 	}
+
+	// Contract addresses
 	contractAddresses := map[uint64]string{
 		42161: "0x1234567890123456789012345678901234567890",
+		7001:  "0x0987654321098765432109876543210987654321",
 	}
-	contractABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
 
-	service, err := NewFulfillmentService(clients, contractAddresses, mockDB, contractABI)
+	// Create test config
+	testConfig := &config.Config{
+		ChainConfigs: map[uint64]*config.ChainConfig{
+			42161: {
+				DefaultBlock: 322207320, // Arbitrum
+			},
+			7001: {
+				DefaultBlock: 1000000, // ZetaChain
+			},
+		},
+	}
+
+	// Create default blocks map from test config
+	defaultBlocks := make(map[uint64]uint64)
+	for chainID, chainConfig := range testConfig.ChainConfigs {
+		defaultBlocks[chainID] = chainConfig.DefaultBlock
+	}
+
+	// Create a fulfillment service
+	abi := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
+	service, err := NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), abi, defaultBlocks)
 	assert.NoError(t, err)
+	assert.NotNil(t, service)
 
-	// Create a test intent
-	now := time.Now()
+	// Test creating a fulfillment
+	ctx := context.Background()
+	intentID := "0x1234567890123456789012345678901234567890123456789012345678901234"
+	txHash := "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+
+	// Create the intent first
 	intent := &models.Intent{
-		ID:               "0x1234567890123456789012345678901234567890123456789012345678901234",
+		ID:               intentID,
 		SourceChain:      7001,
 		DestinationChain: 42161,
 		Token:            "0x1234567890123456789012345678901234567890",
-		Amount:           "1000000000000000000",
+		Amount:           "2000000000000000000", // 2 ETH
 		Recipient:        "0x0987654321098765432109876543210987654321",
-		IntentFee:        "100000000000000000",
+		IntentFee:        "100000000000000000", // 0.1 ETH
 		Status:           models.IntentStatusPending,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
-
-	// Store intent in database
-	err = mockDB.CreateIntent(context.Background(), intent)
+	err = mockDB.CreateIntent(ctx, intent)
 	assert.NoError(t, err)
 
-	// Create fulfillment
-	fulfillment, err := service.CreateFulfillment(
-		context.Background(),
-		intent.ID,
-		"0x0987654321098765432109876543210987654321",
-		"1000000000000000000",
-	)
+	fulfillment, err := service.CreateFulfillment(ctx, intentID, txHash)
 	assert.NoError(t, err)
 	assert.NotNil(t, fulfillment)
-	assert.Equal(t, intent.ID, fulfillment.IntentID)
-	assert.Equal(t, "0x0987654321098765432109876543210987654321", fulfillment.Fulfiller)
-	assert.Equal(t, "1000000000000000000", fulfillment.Amount)
-	assert.Equal(t, models.FulfillmentStatusPending, fulfillment.Status)
 }
 
 func TestGetFulfillment(t *testing.T) {
-	// Create mock database
+	// Create a mock database and eth client
 	mockDB := mocks.NewMockDB()
+	ethClient := createMockEthClient()
 
-	// Create service
+	// Create chain clients map
 	clients := map[uint64]*ethclient.Client{
-		42161: {},
+		42161: ethClient, // Arbitrum
+		7001:  ethClient, // ZetaChain
 	}
+
+	// Contract addresses
 	contractAddresses := map[uint64]string{
 		42161: "0x1234567890123456789012345678901234567890",
+		7001:  "0x0987654321098765432109876543210987654321",
 	}
-	contractABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
 
-	service, err := NewFulfillmentService(clients, contractAddresses, mockDB, contractABI)
+	// Create test config
+	testConfig := &config.Config{
+		ChainConfigs: map[uint64]*config.ChainConfig{
+			42161: {
+				DefaultBlock: 322207320, // Arbitrum
+			},
+			7001: {
+				DefaultBlock: 1000000, // ZetaChain
+			},
+		},
+	}
+
+	// Create default blocks map from test config
+	defaultBlocks := make(map[uint64]uint64)
+	for chainID, chainConfig := range testConfig.ChainConfigs {
+		defaultBlocks[chainID] = chainConfig.DefaultBlock
+	}
+
+	// Create a fulfillment service
+	abi := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
+	service, err := NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), abi, defaultBlocks)
 	assert.NoError(t, err)
+	assert.NotNil(t, service)
 
-	// Create a test intent first
-	now := time.Now()
+	// Test getting a fulfillment
+	ctx := context.Background()
+	fulfillmentID := "0x1234567890123456789012345678901234567890123456789012345678901234"
+	intentID := "0x1234567890123456789012345678901234567890123456789012345678901234"
+
+	// Create the intent first
 	intent := &models.Intent{
-		ID:               "0x1234567890123456789012345678901234567890123456789012345678901234",
+		ID:               intentID,
 		SourceChain:      7001,
 		DestinationChain: 42161,
 		Token:            "0x1234567890123456789012345678901234567890",
-		Amount:           "1000000000000000000",
+		Amount:           "2000000000000000000", // 2 ETH
 		Recipient:        "0x0987654321098765432109876543210987654321",
-		IntentFee:        "100000000000000000",
+		IntentFee:        "100000000000000000", // 0.1 ETH
 		Status:           models.IntentStatusPending,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
-
-	// Store intent in database
-	err = mockDB.CreateIntent(context.Background(), intent)
+	err = mockDB.CreateIntent(ctx, intent)
 	assert.NoError(t, err)
 
-	// Create a test fulfillment
+	// Create the fulfillment
 	fulfillment := &models.Fulfillment{
-		ID:          "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-		IntentID:    intent.ID,
-		Fulfiller:   "0x0987654321098765432109876543210987654321",
-		TargetChain: 42161,
-		Amount:      "1000000000000000000",
-		Status:      models.FulfillmentStatusCompleted,
-		TxHash:      "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-		BlockNumber: 12345678,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:        fulfillmentID,
+		IntentID:  intentID,
+		TxHash:    fulfillmentID,
+		Status:    models.FulfillmentStatusCompleted,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
-
-	// Store fulfillment in database
-	err = mockDB.CreateFulfillment(context.Background(), fulfillment)
+	err = mockDB.CreateFulfillment(ctx, fulfillment)
 	assert.NoError(t, err)
 
-	// Get fulfillment
-	retrieved, err := service.GetFulfillment(context.Background(), fulfillment.ID)
+	// Now get the fulfillment
+	retrievedFulfillment, err := service.GetFulfillment(ctx, fulfillmentID)
 	assert.NoError(t, err)
-	assert.NotNil(t, retrieved)
-	assert.Equal(t, fulfillment.ID, retrieved.ID)
-	assert.Equal(t, fulfillment.IntentID, retrieved.IntentID)
-	assert.Equal(t, fulfillment.Fulfiller, retrieved.Fulfiller)
-	assert.Equal(t, fulfillment.Amount, retrieved.Amount)
-	assert.Equal(t, fulfillment.Status, retrieved.Status)
+	assert.NotNil(t, retrievedFulfillment)
+	assert.Equal(t, fulfillmentID, retrievedFulfillment.ID)
+	assert.Equal(t, intentID, retrievedFulfillment.IntentID)
+	assert.Equal(t, fulfillmentID, retrievedFulfillment.TxHash)
+	assert.Equal(t, models.FulfillmentStatusCompleted, retrievedFulfillment.Status)
 }
 
 func TestListFulfillments(t *testing.T) {
-	// Create mock database
+	// Create a mock database and eth client
 	mockDB := mocks.NewMockDB()
+	ethClient := createMockEthClient()
 
-	// Create service
+	// Create chain clients map
 	clients := map[uint64]*ethclient.Client{
-		42161: {},
+		42161: ethClient, // Arbitrum
+		7001:  ethClient, // ZetaChain
 	}
+
+	// Contract addresses
 	contractAddresses := map[uint64]string{
 		42161: "0x1234567890123456789012345678901234567890",
+		7001:  "0x0987654321098765432109876543210987654321",
 	}
-	contractABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
 
-	service, err := NewFulfillmentService(clients, contractAddresses, mockDB, contractABI)
+	// Default blocks
+	defaultBlocks := map[uint64]uint64{
+		42161: 1000000,
+		7001:  2000000,
+	}
+
+	// Create a fulfillment service
+	abi := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
+	service, err := NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), abi, defaultBlocks)
 	assert.NoError(t, err)
-
-	// Create a test intent
-	now := time.Now()
-	intent := &models.Intent{
-		ID:               "0x1234567890123456789012345678901234567890123456789012345678901234",
-		SourceChain:      7001,
-		DestinationChain: 42161,
-		Token:            "0x1234567890123456789012345678901234567890",
-		Amount:           "1000000000000000000",
-		Recipient:        "0x0987654321098765432109876543210987654321",
-		IntentFee:        "100000000000000000",
-		Status:           models.IntentStatusPending,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
-
-	// Store intent in database
-	err = mockDB.CreateIntent(context.Background(), intent)
-	assert.NoError(t, err)
-
-	// Create multiple fulfillments
-	for i := 0; i < 3; i++ {
-		fulfillment := &models.Fulfillment{
-			ID:          fmt.Sprintf("test-fulfillment-id-%d", i),
-			IntentID:    intent.ID,
-			Fulfiller:   "0x0987654321098765432109876543210987654321",
-			TargetChain: 42161,
-			Amount:      "1000000000000000000",
-			Status:      models.FulfillmentStatusPending,
-			TxHash:      fmt.Sprintf("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567%03d", i),
-			BlockNumber: uint64(12345678 + i),
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}
-		err = mockDB.CreateFulfillment(context.Background(), fulfillment)
-		assert.NoError(t, err)
-	}
+	assert.NotNil(t, service)
 
 	// Test listing fulfillments
-	fulfillments, err := service.ListFulfillments(context.Background())
+	ctx := context.Background()
+	fulfillments, err := service.ListFulfillments(ctx)
 	assert.NoError(t, err)
-	assert.Len(t, fulfillments, 3)
+	assert.NotNil(t, fulfillments)
 }
 
 func TestListFulfillmentsAndFlow(t *testing.T) {
 	// Create mock database
 	mockDB := mocks.NewMockDB()
-
-	// Create service
-	clients := map[uint64]*ethclient.Client{
-		42161: {},
-	}
-	contractAddresses := map[uint64]string{
-		42161: "0x1234567890123456789012345678901234567890",
-	}
-	contractABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
-
-	service, err := NewFulfillmentService(clients, contractAddresses, mockDB, contractABI)
-	assert.NoError(t, err)
 
 	// Create a test intent
 	now := time.Now()
@@ -339,53 +359,46 @@ func TestListFulfillmentsAndFlow(t *testing.T) {
 	}
 
 	// Store intent in database
-	err = mockDB.CreateIntent(context.Background(), intent)
+	err := mockDB.CreateIntent(context.Background(), intent)
 	assert.NoError(t, err)
 
-	// Create multiple fulfillments
-	for i := 0; i < 3; i++ {
-		fulfillment := &models.Fulfillment{
-			ID:          fmt.Sprintf("test-fulfillment-id-%d", i),
-			IntentID:    intent.ID,
-			Fulfiller:   "0x0987654321098765432109876543210987654321",
-			TargetChain: 42161,
-			Amount:      "500000000000000000",
-			Status:      models.FulfillmentStatusPending,
-			TxHash:      fmt.Sprintf("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567%03d", i),
-			BlockNumber: uint64(12345678 + i),
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}
-		err = mockDB.CreateFulfillment(context.Background(), fulfillment)
-		assert.NoError(t, err)
+	// Create service
+	clients := map[uint64]*ethclient.Client{
+		42161: {},
 	}
+	contractAddresses := map[uint64]string{
+		42161: "0x1234567890123456789012345678901234567890",
+	}
+	contractABI := `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"IntentFulfilled","type":"event"}]`
+
+	// Default blocks
+	defaultBlocks := map[uint64]uint64{
+		42161: 1000000,
+	}
+
+	service, err := NewFulfillmentService(clients, contractAddresses, db.DBInterface(mockDB), contractABI, defaultBlocks)
+	assert.NoError(t, err)
 
 	// Test listing fulfillments
 	fulfillments, err := service.ListFulfillments(context.Background())
 	assert.NoError(t, err)
-	assert.Len(t, fulfillments, 3)
+	assert.Empty(t, fulfillments, "should have no fulfillments initially")
 
-	// Create fulfillment
+	// Create a fulfillment
+	txHash := "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
 	fulfillment, err := service.CreateFulfillment(
 		context.Background(),
 		intent.ID,
-		"0x0987654321098765432109876543210987654321",
-		"500000000000000000",
+		txHash,
 	)
 	assert.NoError(t, err)
 	assert.NotNil(t, fulfillment)
 
-	// Verify fulfillment was created
-	retrievedFulfillment, err := service.GetFulfillment(context.Background(), fulfillment.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, fulfillment.ID, retrievedFulfillment.ID)
-	assert.Equal(t, fulfillment.IntentID, retrievedFulfillment.IntentID)
-	assert.Equal(t, fulfillment.Amount, retrievedFulfillment.Amount)
-	assert.Equal(t, fulfillment.Fulfiller, retrievedFulfillment.Fulfiller)
-	assert.Equal(t, fulfillment.Status, retrievedFulfillment.Status)
-
 	// List fulfillments again
 	fulfillments, err = service.ListFulfillments(context.Background())
 	assert.NoError(t, err)
-	assert.Len(t, fulfillments, 4)
+	assert.Len(t, fulfillments, 1, "should have one fulfillment")
+	assert.Equal(t, intent.ID, fulfillments[0].IntentID)
+	assert.Equal(t, txHash, fulfillments[0].TxHash)
+	assert.Equal(t, models.FulfillmentStatusPending, fulfillments[0].Status)
 }

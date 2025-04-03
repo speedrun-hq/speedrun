@@ -43,16 +43,12 @@ func (h *TestHelper) CreateTestIntent() *models.Intent {
 func (h *TestHelper) CreateTestFulfillment(intentID string) *models.Fulfillment {
 	now := time.Now()
 	return &models.Fulfillment{
-		ID:          "test-fulfillment-id",
-		IntentID:    intentID,
-		Fulfiller:   "0x0987654321098765432109876543210987654321",
-		TargetChain: 42161,
-		Amount:      "1000000000000000000", // 1 ETH
-		Status:      models.FulfillmentStatusPending,
-		TxHash:      "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-		BlockNumber: 12345678,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:        "test-fulfillment-id",
+		IntentID:  intentID,
+		TxHash:    "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		Status:    models.FulfillmentStatusPending,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }
 

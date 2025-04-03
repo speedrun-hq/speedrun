@@ -22,8 +22,8 @@ export interface Fulfillment {
 }
 
 export interface CreateIntentRequest {
-  source_chain: string;
-  destination_chain: string;
+  source_chain: number;
+  destination_chain: number;
   token: string;
   amount: string;
   recipient: string;

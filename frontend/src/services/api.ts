@@ -1,10 +1,18 @@
+'use client';
+
 import { Intent, Fulfillment, CreateIntentRequest, CreateFulfillmentRequest } from '@/types';
 import { ApiError } from '@/utils/errors';
 
+// Get API base URL from environment variable, fallback to localhost in development
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
 class ApiService {
   private async fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    // Only execute fetch in browser environment
+    if (typeof window === 'undefined') {
+      return Promise.resolve([] as unknown as T);
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
@@ -37,12 +45,10 @@ class ApiService {
   }
 
   // Intent endpoints
-  async listIntents(limit: number = 10, offset: number = 0, status?: string): Promise<Intent[]> {
-    let url = `/intents?limit=${limit}&offset=${offset}`;
-    if (status) {
-      url += `&status=${status}`;
-    }
-    return this.fetchApi(url);
+  async listIntents(): Promise<Intent[]> {
+    return this.fetchApi('/intents', {
+      method: 'GET',
+    });
   }
 
   async getIntent(id: string): Promise<Intent> {

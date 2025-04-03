@@ -26,6 +26,8 @@ type Database interface {
 	ListFulfillments(ctx context.Context) ([]*models.Fulfillment, error)
 	GetTotalFulfilledAmount(ctx context.Context, intentID string) (string, error)
 	UpdateIntentStatus(ctx context.Context, id string, status models.IntentStatus) error
+	GetLastProcessedBlock(ctx context.Context, chainID uint64) (uint64, error)
+	UpdateLastProcessedBlock(ctx context.Context, chainID uint64, blockNumber uint64) error
 }
 
 // DB implements the Database interface
@@ -142,13 +144,13 @@ func (db *DB) ListIntents(ctx context.Context) ([]*models.Intent, error) {
 func (db *DB) CreateFulfillment(ctx context.Context, fulfillment *models.Fulfillment) error {
 	query := `
 		INSERT INTO fulfillments (
-			id, intent_id, amount, status, created_at, updated_at
+			id, intent_id, tx_hash, status, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6)
 	`
 	_, err := db.ExecContext(ctx, query,
 		fulfillment.ID,
 		fulfillment.IntentID,
-		fulfillment.Amount,
+		fulfillment.TxHash,
 		fulfillment.Status,
 		fulfillment.CreatedAt,
 		fulfillment.UpdatedAt,
@@ -159,14 +161,14 @@ func (db *DB) CreateFulfillment(ctx context.Context, fulfillment *models.Fulfill
 // GetFulfillment retrieves a fulfillment by ID
 func (db *DB) GetFulfillment(ctx context.Context, id string) (*models.Fulfillment, error) {
 	query := `
-		SELECT id, intent_id, amount, status, created_at, updated_at
+		SELECT id, intent_id, tx_hash, status, created_at, updated_at
 		FROM fulfillments WHERE id = $1
 	`
 	fulfillment := &models.Fulfillment{}
 	err := db.QueryRowContext(ctx, query, id).Scan(
 		&fulfillment.ID,
 		&fulfillment.IntentID,
-		&fulfillment.Amount,
+		&fulfillment.TxHash,
 		&fulfillment.Status,
 		&fulfillment.CreatedAt,
 		&fulfillment.UpdatedAt,
@@ -177,19 +179,53 @@ func (db *DB) GetFulfillment(ctx context.Context, id string) (*models.Fulfillmen
 	return fulfillment, nil
 }
 
-// GetTotalFulfilledAmount calculates the total amount fulfilled for an intent
-func (db *DB) GetTotalFulfilledAmount(ctx context.Context, intentID string) (string, error) {
+// ListFulfillments retrieves all fulfillments
+func (db *DB) ListFulfillments(ctx context.Context) ([]*models.Fulfillment, error) {
 	query := `
-		SELECT COALESCE(SUM(amount), '0')
-		FROM fulfillments
-		WHERE intent_id = $1 AND status = 'completed'
+		SELECT id, intent_id, tx_hash, status, created_at, updated_at
+		FROM fulfillments ORDER BY created_at DESC
 	`
-	var total string
-	err := db.QueryRowContext(ctx, query, intentID).Scan(&total)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
-		return "0", err
+		return nil, err
 	}
-	return total, nil
+	defer rows.Close()
+
+	var fulfillments []*models.Fulfillment
+	for rows.Next() {
+		fulfillment := &models.Fulfillment{}
+		err := rows.Scan(
+			&fulfillment.ID,
+			&fulfillment.IntentID,
+			&fulfillment.TxHash,
+			&fulfillment.Status,
+			&fulfillment.CreatedAt,
+			&fulfillment.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		fulfillments = append(fulfillments, fulfillment)
+	}
+	return fulfillments, nil
+}
+
+// GetTotalFulfilledAmount gets the total amount fulfilled for an intent
+func (db *DB) GetTotalFulfilledAmount(ctx context.Context, intentID string) (string, error) {
+	// Since we no longer track amount in fulfillments, we'll return the intent amount if there's a completed fulfillment
+	query := `
+		SELECT i.amount
+		FROM intents i
+		JOIN fulfillments f ON i.id = f.intent_id
+		WHERE i.id = $1 AND f.status = 'completed'
+		LIMIT 1
+	`
+	var amount string
+	err := db.QueryRowContext(ctx, query, intentID).Scan(&amount)
+	if err == sql.ErrNoRows {
+		return "0", nil
+	}
+	return amount, err
 }
 
 // UpdateIntentStatus updates the status of an intent

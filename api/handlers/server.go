@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/zeta-chain/zetafast/api/models"
 	"github.com/zeta-chain/zetafast/api/services"
@@ -28,6 +29,13 @@ func NewServer(fulfillmentService *services.FulfillmentService, intentService *s
 // Start starts the HTTP server
 func (s *Server) Start(addr string) error {
 	router := gin.Default()
+
+	// Configure CORS
+	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"http://localhost:3000"}
+	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
+	router.Use(cors.New(config))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
@@ -173,26 +181,28 @@ func (s *Server) ListIntents(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// CreateFulfillmentRequest represents the request body for creating a fulfillment
+type CreateFulfillmentRequest struct {
+	IntentID string `json:"intent_id" binding:"required"`
+	TxHash   string `json:"tx_hash" binding:"required"`
+}
+
 // CreateFulfillment handles the creation of a new fulfillment
 func (s *Server) CreateFulfillment(c *gin.Context) {
-	var req struct {
-		IntentID  string `json:"intent_id" binding:"required"`
-		Fulfiller string `json:"fulfiller" binding:"required"`
-		Amount    string `json:"amount" binding:"required"`
-	}
+	var req CreateFulfillmentRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	fulfillment, err := s.fulfillmentService.CreateFulfillment(c.Request.Context(), req.IntentID, req.Fulfiller, req.Amount)
+	fulfillment, err := s.fulfillmentService.CreateFulfillment(c.Request.Context(), req.IntentID, req.TxHash)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, fulfillment)
+	c.JSON(http.StatusOK, fulfillment)
 }
 
 // GetFulfillment handles retrieving a fulfillment by ID

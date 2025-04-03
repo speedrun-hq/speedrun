@@ -20,9 +20,9 @@ const IntentList: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await apiService.listIntents(ITEMS_PER_PAGE, offset);
+        const data = await apiService.listIntents();
         setIntents(data);
-        setHasMore(data.length === ITEMS_PER_PAGE);
+        setHasMore(data.length > offset + ITEMS_PER_PAGE);
       } catch (err) {
         setError(err);
       } finally {
@@ -33,8 +33,10 @@ const IntentList: React.FC = () => {
     fetchIntents();
   }, [offset]);
 
+  const displayedIntents = intents.slice(offset, offset + ITEMS_PER_PAGE);
+
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'pending':
         return 'text-primary-500 border-primary-500';
       case 'completed':
@@ -71,28 +73,43 @@ const IntentList: React.FC = () => {
         <p className="arcade-text text-gray-500 text-center">NO RECORDS FOUND</p>
       ) : (
         <div className="arcade-container">
-          {intents.map((intent, index) => (
+          {displayedIntents.map((intent, index) => (
             <div
               key={intent.id}
-              className="arcade-card"
+              className="arcade-card relative"
             >
-              <div className="flex justify-between items-start">
-                <div className="space-y-2">
-                  <p className="arcade-text text-sm text-primary-500">#{index + 1 + offset}</p>
-                  <p className="arcade-text text-xs text-primary-500">ID: {intent.id}</p>
-                  <p className="arcade-text text-xs text-primary-500">
-                    {intent.source_chain} → {intent.destination_chain}
-                  </p>
-                  <p className="arcade-text text-xs text-primary-500">
-                    AMOUNT: {intent.amount} {intent.token}
-                  </p>
-                  <p className="arcade-text text-xs text-gray-500">
-                    {formatDate(intent.created_at)}
-                  </p>
+              <span className={`arcade-status ${getStatusColor(intent.status)} border-2 absolute top-4 right-4`}>
+                {intent.status}
+              </span>
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <span className="arcade-text text-sm text-yellow-500">RUN</span>
+                  <span className="arcade-text text-sm text-cyan-500">#{index + 1 + offset}</span>
                 </div>
-                <span className={`arcade-status ${getStatusColor(intent.status)} border-2`}>
-                  {intent.status.toUpperCase()}
-                </span>
+                <div className="space-y-1">
+                  <div className="flex flex-col">
+                    <span className="arcade-text text-xs text-gray-500">INTENT ID</span>
+                    <span className="arcade-text text-xs text-magenta-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.id}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="arcade-text text-xs text-gray-500">ROUTE</span>
+                    <span className="arcade-text text-xs text-cyan-500">
+                      CHAIN <span className="text-orange-500">{intent.source_chain}</span> → CHAIN <span className="text-orange-500">{intent.destination_chain}</span>
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="arcade-text text-xs text-gray-500">TOKEN</span>
+                    <span className="arcade-text text-xs text-yellow-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.token}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="arcade-text text-xs text-gray-500">AMOUNT</span>
+                    <span className="arcade-text text-xs text-primary-500">{intent.amount}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="arcade-text text-xs text-gray-500">RECIPIENT</span>
+                    <span className="arcade-text text-xs text-magenta-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.recipient}</span>
+                  </div>
+                </div>
               </div>
             </div>
           ))}
