@@ -49,10 +49,6 @@ export default function CreateNewIntent() {
     <div className="max-w-2xl mx-auto arcade-container border-yellow-500 relative group">
       <div className="absolute inset-0 bg-yellow-500/10 blur-sm group-hover:bg-yellow-500/20 transition-all duration-300" />
       <div className="relative p-6">
-        <h2 className="arcade-text text-2xl text-yellow-500 mb-6 text-center">
-          NEW TRANSFER
-        </h2>
-        
         <form
           onSubmit={handleSubmit}
           className="space-y-6 relative"
@@ -62,7 +58,7 @@ export default function CreateNewIntent() {
           
           {formState.success && (
             <div className="bg-green-500/10 border border-green-500 text-green-500 p-4 rounded-lg mb-4">
-              <p className="arcade-text text-center">RUN CREATED SUCCESSFULLY!</p>
+              <p className="arcade-text text-center">TRANSFER SENT!</p>
             </div>
           )}
 
