@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { base, arbitrum } from 'wagmi/chains';
 
 interface ChainSelectorProps {
@@ -16,6 +16,7 @@ export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disable
     { id: base.id, name: 'BASE' },
     { id: arbitrum.id, name: 'ARBITRUM' }
   ];
+  const selectorRef = useRef<HTMLDivElement>(null);
 
   // Debug logs
   useEffect(() => {
@@ -26,6 +27,22 @@ export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disable
     });
   }, [value, isOpen]);
 
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isOpen]);
+
   const handleClick = () => {
     if (disabled) return;
     console.log('Button clicked, current state:', { isOpen });
@@ -33,7 +50,7 @@ export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disable
   };
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full" ref={selectorRef}>
       <button
         type="button"
         onClick={handleClick}
@@ -47,17 +64,9 @@ export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disable
       {isOpen && (
         <div 
           className="absolute top-full left-0 right-0 mt-2 z-[100]"
-          onClick={() => {
-            console.log('Overlay clicked, closing dropdown');
-            setIsOpen(false);
-          }}
         >
           <div 
             className="bg-black border-2 border-yellow-500 rounded-lg overflow-hidden shadow-lg shadow-yellow-500/50"
-            onClick={e => {
-              console.log('Dropdown content clicked, preventing close');
-              e.stopPropagation();
-            }}
           >
             {chains.map((chain) => (
               <button
