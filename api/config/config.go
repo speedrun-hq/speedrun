@@ -27,7 +27,7 @@ type Config struct {
 	DatabaseURL             string
 	SupportedChains         []uint64
 	ChainConfigs            map[uint64]*ChainConfig
-	ContractABI             string
+	IntentFulfilledEventABI string
 	IntentInitiatedEventABI string
 }
 
@@ -82,6 +82,21 @@ const IntentInitiatedEventABI = `[{
 	"type": "event"
 }]`
 
+// IntentFulfilledEventABI is the ABI for the IntentFulfilled event
+const IntentFulfilledEventABI = `[
+	{
+		"anonymous": false,
+		"inputs": [
+			{"indexed": true, "internalType": "bytes32", "name": "intentId", "type": "bytes32"},
+			{"indexed": true, "internalType": "address", "name": "asset", "type": "address"},
+			{"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"},
+			{"indexed": true, "internalType": "address", "name": "receiver", "type": "address"}
+		],
+		"name": "IntentFulfilled",
+		"type": "event"
+	}
+]`
+
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
 	// Load .env file if it exists
@@ -127,45 +142,12 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	// Default contract ABI
-	defaultABI := `[{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "bytes32",
-				"name": "intentId",
-				"type": "bytes32"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "asset",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "receiver",
-				"type": "address"
-			}
-		],
-		"name": "IntentFulfilled",
-		"type": "event"
-	}]`
-
 	return &Config{
 		Port:                    getEnvOrDefault("PORT", "8080"),
 		DatabaseURL:             getEnvOrDefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/zetafast?sslmode=disable"),
 		SupportedChains:         supportedChains,
 		ChainConfigs:            chainConfigs,
-		ContractABI:             getEnvOrDefault("CONTRACT_ABI", defaultABI),
+		IntentFulfilledEventABI: getEnvOrDefault("INTENT_FULFILLED_EVENT_ABI", IntentFulfilledEventABI),
 		IntentInitiatedEventABI: getEnvOrDefault("INTENT_INITIATED_EVENT_ABI", IntentInitiatedEventABI),
 	}, nil
 }

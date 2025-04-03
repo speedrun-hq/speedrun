@@ -15,14 +15,14 @@ import (
 )
 
 var (
-	database      db.Database
-	intentService *services.IntentService
+	database       db.Database
+	intentServices map[uint64]*services.IntentService
 )
 
 // InitIntentHandlers initializes the intent handlers with required dependencies
-func InitIntentHandlers(db db.Database, service *services.IntentService) {
+func InitIntentHandlers(db db.Database, services map[uint64]*services.IntentService) {
 	database = db
-	intentService = service
+	intentServices = services
 }
 
 // CreateIntent handles the creation of a new intent
@@ -86,18 +86,35 @@ func GetIntent(c *gin.Context) {
 		return
 	}
 
-	intent, err := intentService.GetIntent(c.Request.Context(), id)
+	// Get the intent from the database first
+	intent, err := database.GetIntent(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "intent not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, intent.ToResponse())
+	// Get the intent service for the source chain
+	service, ok := intentServices[intent.SourceChain]
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("no intent service for chain %d", intent.SourceChain)})
+		return
+	}
+
+	// Get the intent from the service to get any updates
+	updatedIntent, err := service.GetIntent(c.Request.Context(), id)
+	if err != nil {
+		// If not found in service, return the database version
+		c.JSON(http.StatusOK, intent.ToResponse())
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedIntent.ToResponse())
 }
 
 // ListIntents handles retrieving all intents
 func ListIntents(c *gin.Context) {
-	intents, err := intentService.ListIntents(c.Request.Context())
+	// Get all intents from the database
+	intents, err := database.ListIntents(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -106,6 +123,14 @@ func ListIntents(c *gin.Context) {
 	// Convert intents to responses
 	responses := make([]*models.IntentResponse, len(intents))
 	for i, intent := range intents {
+		// Try to get updated intent from service
+		if service, ok := intentServices[intent.SourceChain]; ok {
+			if updatedIntent, err := service.GetIntent(c.Request.Context(), intent.ID); err == nil {
+				responses[i] = updatedIntent.ToResponse()
+				continue
+			}
+		}
+		// Fall back to database version if service not found or error
 		responses[i] = intent.ToResponse()
 	}
 
