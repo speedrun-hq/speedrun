@@ -2,6 +2,10 @@
 
 This document provides an overview of the smart contract architecture for the intent-based bridge platform. The system consists of three main components working together to make cross-chain token transfers as fast as possible.
 
+<div align="center">
+  <img src="architecture.png" alt="ZetaFast Architecture" width="600" />
+</div>
+
 ## Main Components
 
 ### Intent Contract
