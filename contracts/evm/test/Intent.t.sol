@@ -462,7 +462,8 @@ contract IntentTest is Test {
             amount,
             address(token),
             user2,
-            tip
+            tip,
+            amount  // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -520,7 +521,8 @@ contract IntentTest is Test {
             amount,
             address(token),
             user2,
-            tip
+            tip,
+            amount  // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement
@@ -578,7 +580,8 @@ contract IntentTest is Test {
             amount,
             address(token),
             user2,
-            tip
+            tip,
+            amount  // actualAmount same as amount in the test case
         );
 
         // Transfer tokens to gateway for settlement

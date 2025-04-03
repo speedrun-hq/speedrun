@@ -96,10 +96,11 @@ contract PayloadUtilsTest is Test {
     function test_EncodeDecodeSettlementPayload() public {
         // Create test data
         bytes32 intentId = keccak256("test-settlement");
-        uint256 amount = 1000 ether;
+        uint256 amount = 100 ether;
         address asset = makeAddr("asset");
         address receiver = makeAddr("receiver");
         uint256 tip = 50 ether;
+        uint256 actualAmount = 95 ether;
 
         // Encode settlement payload
         bytes memory encoded = PayloadUtils.encodeSettlementPayload(
@@ -107,7 +108,8 @@ contract PayloadUtilsTest is Test {
             amount,
             asset,
             receiver,
-            tip
+            tip,
+            actualAmount
         );
 
         // Decode settlement payload
@@ -119,6 +121,7 @@ contract PayloadUtilsTest is Test {
         assertEq(decoded.asset, asset, "Asset mismatch");
         assertEq(decoded.receiver, receiver, "Receiver mismatch");
         assertEq(decoded.tip, tip, "Tip mismatch");
+        assertEq(decoded.actualAmount, actualAmount, "Actual amount mismatch");
     }
 
     function test_EncodeDecodeSettlementPayload_ZeroValues() public pure {
@@ -128,6 +131,7 @@ contract PayloadUtilsTest is Test {
         address asset = address(0);
         address receiver = address(0);
         uint256 tip = 0;
+        uint256 actualAmount = 0;
 
         // Encode settlement payload
         bytes memory encoded = PayloadUtils.encodeSettlementPayload(
@@ -135,7 +139,8 @@ contract PayloadUtilsTest is Test {
             amount,
             asset,
             receiver,
-            tip
+            tip,
+            actualAmount
         );
 
         // Decode settlement payload
@@ -147,6 +152,7 @@ contract PayloadUtilsTest is Test {
         assertEq(decoded.asset, asset, "Asset mismatch");
         assertEq(decoded.receiver, receiver, "Receiver mismatch");
         assertEq(decoded.tip, tip, "Tip mismatch");
+        assertEq(decoded.actualAmount, actualAmount, "Actual amount mismatch");
     }
 
     function test_EncodeDecodeSettlementPayload_LargeValues() public {
@@ -156,6 +162,7 @@ contract PayloadUtilsTest is Test {
         address asset = makeAddr("asset");
         address receiver = makeAddr("receiver");
         uint256 tip = type(uint256).max - 1;
+        uint256 actualAmount = type(uint256).max - 2;
 
         // Encode settlement payload
         bytes memory encoded = PayloadUtils.encodeSettlementPayload(
@@ -163,7 +170,8 @@ contract PayloadUtilsTest is Test {
             amount,
             asset,
             receiver,
-            tip
+            tip,
+            actualAmount
         );
 
         // Decode settlement payload
@@ -175,6 +183,7 @@ contract PayloadUtilsTest is Test {
         assertEq(decoded.asset, asset, "Asset mismatch");
         assertEq(decoded.receiver, receiver, "Receiver mismatch");
         assertEq(decoded.tip, tip, "Tip mismatch");
+        assertEq(decoded.actualAmount, actualAmount, "Actual amount mismatch");
     }
 
     function test_BytesToAddress_ExactSize() public {

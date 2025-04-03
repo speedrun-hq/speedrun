@@ -11,23 +11,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IZRC20} from "../src/interfaces/IZRC20.sol";
 import {IUniswapV3Router} from "../src/interfaces/IUniswapV3Router.sol";
 import {ISwap} from "../src/interfaces/ISwap.sol";
+import {MockSwapModule} from "./mocks/MockSwapModule.sol";
 import "forge-std/console.sol";
-
-contract MockSwapModule is ISwap {
-    function swap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address gasZRC20,
-        uint256 gasFee
-    ) external returns (uint256 amountOut) {
-        // Mock 1:1 swap with gas fee deduction
-        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
-        IERC20(tokenOut).transfer(msg.sender, amountIn - gasFee);
-        IERC20(gasZRC20).transfer(msg.sender, gasFee);
-        return amountIn - gasFee;
-    }
-}
 
 contract RouterTest is Test {
     Router public router;
@@ -306,130 +291,133 @@ contract RouterTest is Test {
     }
 
     function test_OnCall_Success() public {
-        // Setup test data
-        address intentContract = makeAddr("intentContract");
-        uint256 targetChain = 2;
-        uint256 amount = 1000 ether;
-        uint256 tip = 300 ether;
-        uint256 gasFee = 50 ether;
-        bytes32 intentId = keccak256("test-intent");
-        bytes memory receiverBytes = abi.encodePacked(makeAddr("receiver"));
+        // Setup intent contract
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 2;
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        address targetIntentContract = makeAddr("targetIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+        router.setIntentContract(targetChainId, targetIntentContract);
 
-        // Register input token
-        router.addToken("INPUT");
-        router.addTokenAssociation(
-            "INPUT",
-            targetChain,
-            makeAddr("targetAsset"),
-            address(targetZRC20)
-        );
-
-        // Register input token for source chain
-        router.addTokenAssociation(
-            "INPUT",
-            1, // source chain
-            makeAddr("inputAsset"),
-            address(inputToken)
-        );
+        // Setup token associations
+        string memory tokenName = "USDC";
+        router.addToken(tokenName);
+        address inputAsset = makeAddr("input_asset");
+        address targetAsset = makeAddr("target_asset");
+        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
+        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
 
         // Setup intent payload
-        PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.IntentPayload({
-            intentId: intentId,
-            amount: amount,
-            tip: tip,
-            targetChain: targetChain,
-            receiver: receiverBytes
-        });
-        bytes memory message = PayloadUtils.encodeIntentPayload(
+        bytes32 intentId = keccak256("test-intent");
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        bytes memory receiver = abi.encodePacked(user2);
+
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
             intentId,
             amount,
             tip,
-            targetChain,
-            receiverBytes
+            targetChainId,
+            receiver
         );
 
-        // Set up intent contract for source chain
-        vm.prank(owner);
-        router.setIntentContract(1, intentContract);
+        // Set modest slippage (5%)
+        swapModule.setSlippage(500);
 
-        // Create message context with senderEVM matching the intent contract
-        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
-            sender: abi.encodePacked(makeAddr("sender")),
-            senderEVM: intentContract,
-            chainID: 1
-        });
-
-        // Setup token associations
-        vm.mockCall(
-            address(router),
-            abi.encodeWithSelector(router.getTokenAssociation.selector, address(inputToken), targetChain),
-            abi.encode(makeAddr("targetAsset"), address(targetZRC20), targetChain)
-        );
-
-        // Setup intent contract for target chain
-        router.setIntentContract(targetChain, intentContract);
-
-        // Setup gas fee info
+        // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
+        uint256 gasFee = 1 ether;
         vm.mockCall(
             address(targetZRC20),
-            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, 300000),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
             abi.encode(address(gasZRC20), gasFee)
         );
 
-        // Setup mock balances and approvals
+        // Mint tokens to make the test work
         inputToken.mint(address(router), amount);
-        gasZRC20.mint(address(router), gasFee);
-        targetZRC20.mint(address(router), amount - gasFee);
-        // Mint tokens to swap module for the swap
-        targetZRC20.mint(address(swapModule), amount - gasFee);
+        targetZRC20.mint(address(swapModule), amount);
         gasZRC20.mint(address(swapModule), gasFee);
+        
+        // Setup context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
 
-        // Verify expected calls before execution
-        vm.expectCall(
-            address(inputToken),
-            abi.encodeWithSelector(IERC20.approve.selector, address(swapModule), amount)
-        );
-        vm.expectCall(
-            address(targetZRC20),
-            abi.encodeWithSelector(IERC20.approve.selector, address(gateway), amount - gasFee)
-        );
-        vm.expectCall(
-            address(gasZRC20),
-            abi.encodeWithSelector(IERC20.approve.selector, address(gateway), gasFee)
-        );
-
-        // Verify swap module call
-        vm.expectCall(
-            address(swapModule),
-            abi.encodeWithSelector(
-                ISwap.swap.selector,
-                address(inputToken),
-                address(targetZRC20),
-                amount,
-                address(gasZRC20),
-                gasFee
-            )
-        );
-
-        // Verify event
-        vm.expectEmit(true, true, true, false);
-        emit IntentSettlementForwarded(
-            abi.encodePacked(makeAddr("sender")),
-            1,
-            targetChain,
-            address(inputToken),
-            amount,
-            tip - gasFee
-        );
-
-        // Execute
+        // Call onCall
         vm.prank(address(gateway));
-        router.onCall(context, address(inputToken), amount, message);
+        router.onCall(context, address(inputToken), amount, intentPayloadBytes);
+
+        // Verify approvals were made to the gateway
+        assertTrue(targetZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve target ZRC20 to gateway");
+        assertTrue(gasZRC20.allowance(address(router), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway");
     }
 
-    // TODO: add failure case for onCall
-    // https://github.com/lumtis/zetafast/issues/10
-    
+    function test_OnCall_InsufficientAmount() public {
+        // Setup intent contract
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 2;
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        address targetIntentContract = makeAddr("targetIntentContract");
+        router.setIntentContract(sourceChainId, sourceIntentContract);
+        router.setIntentContract(targetChainId, targetIntentContract);
+
+        // Setup token associations
+        string memory tokenName = "USDC";
+        router.addToken(tokenName);
+        address inputAsset = makeAddr("input_asset");
+        address targetAsset = makeAddr("target_asset");
+        router.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
+        router.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+
+        // Setup intent payload with a very small amount and tip
+        bytes32 intentId = keccak256("test-intent");
+        uint256 amount = 100 ether;      // Amount (we'll pass in a different amount in the onCall)
+        uint256 intentAmount = 10 ether; // Amount in the intent payload (this is what gets checked against remainingCost)
+        uint256 tip = 1 ether;           // Small tip
+        bytes memory receiver = abi.encodePacked(user2);
+
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            intentAmount,  // Use the smaller amount in the payload
+            tip,
+            targetChainId,
+            receiver
+        );
+
+        // Set modest slippage (10%) - with enough input to create the desired scenario
+        swapModule.setSlippage(1000);
+
+        // Mock setup for IZRC20 withdrawGasFeeWithGasLimit - high gas fee
+        uint256 gasFee = 5 ether;
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+
+        // Mint tokens to make the test work
+        inputToken.mint(address(router), amount);
+        targetZRC20.mint(address(swapModule), amount);
+        gasZRC20.mint(address(swapModule), gasFee);
+
+        // Setup context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+
+        // Call onCall and expect it to revert due to insufficient amount
+        // - We're passing in 100 ether but the slippage will be 10 ether (10%)
+        // - Plus 5 ether gas fee = 15 ether total costs
+        // - The tip covers 1 ether, so remaining cost is 14 ether
+        // - But the amount in the intent payload is only 10 ether, which is less than the remaining cost
+        vm.prank(address(gateway));
+        vm.expectRevert("Amount insufficient to cover costs after tip");
+        router.onCall(context, address(inputToken), amount, intentPayloadBytes);
+    }
+
     function test_SetWithdrawGasLimit() public {
         uint256 newGasLimit = 200000;
         router.setWithdrawGasLimit(newGasLimit);

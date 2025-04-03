@@ -58,11 +58,26 @@ library PayloadUtils {
      * @dev Struct for settlement payload
      */
     struct SettlementPayload {
+        // The unique identifier of the intent that initiated the cross-chain transfer
         bytes32 intentId;
+        
+        // The original intended amount requested in the intent, used for calculating fulfillment index.
+        // This amount is used to match with pre-existing fulfillments and is NOT necessarily 
+        // the amount that will be transferred.
         uint256 amount;
+        
+        // The ERC20 token address on the destination chain
         address asset;
+        
+        // The receiver address on the destination chain
         address receiver;
+        
+        // The tip amount to be paid to the fulfiller (may be reduced from original tip if it was used to cover costs)
         uint256 tip;
+        
+        // The actual amount to be transferred after deducting any fees, slippage, or gas costs
+        // This may be lower than the original 'amount' if the tip wasn't sufficient to cover all costs
+        uint256 actualAmount;
     }
 
     /**
@@ -73,14 +88,16 @@ library PayloadUtils {
         uint256 amount,
         address asset,
         address receiver,
-        uint256 tip
+        uint256 tip,
+        uint256 actualAmount
     ) internal pure returns (bytes memory) {
         return abi.encode(
             intentId,
             amount,
             asset,
             receiver,
-            tip
+            tip,
+            actualAmount
         );
     }
 
@@ -93,15 +110,17 @@ library PayloadUtils {
             uint256 amount,
             address asset,
             address receiver,
-            uint256 tip
-        ) = abi.decode(payload, (bytes32, uint256, address, address, uint256));
+            uint256 tip,
+            uint256 actualAmount
+        ) = abi.decode(payload, (bytes32, uint256, address, address, uint256, uint256));
 
         return SettlementPayload({
             intentId: intentId,
             amount: amount,
             asset: asset,
             receiver: receiver,
-            tip: tip
+            tip: tip,
+            actualAmount: actualAmount
         });
     }
 

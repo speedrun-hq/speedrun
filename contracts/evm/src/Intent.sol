@@ -244,9 +244,10 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @dev Internal function to settle an intent
      * @param intentId The ID of the intent to settle
      * @param asset The ERC20 token address
-     * @param amount Amount to transfer
+     * @param amount Amount for intent index computation
      * @param receiver Receiver address
      * @param tip Tip for the fulfiller
+     * @param actualAmount Actual amount to transfer after fees
      * @return fulfilled Whether the intent was fulfilled
      */
     function _settle(
@@ -254,9 +255,10 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address asset,
         uint256 amount,
         address receiver,
-        uint256 tip
+        uint256 tip,
+        uint256 actualAmount
     ) internal returns (bool) {
-        // Compute the fulfillment index
+        // Compute the fulfillment index using the original amount
         bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
             intentId,
             asset,
@@ -274,13 +276,13 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         settlement.fulfilled = fulfilled;
         settlement.fulfiller = fulfiller;
 
-        // If there's a fulfiller, transfer the tip to them
-        // Otherwise, transfer amount + tip to the receiver
+        // If there's a fulfiller, transfer the actual amount + tip to them
+        // Otherwise, transfer actual amount + tip to the receiver
         if (fulfilled) {
-            IERC20(asset).transfer(fulfiller, amount + tip);
+            IERC20(asset).transfer(fulfiller, actualAmount + tip);
             settlement.paidTip = tip;
         } else {
-            IERC20(asset).transfer(receiver, amount + tip);
+            IERC20(asset).transfer(receiver, actualAmount + tip);
         }
 
         return fulfilled;
@@ -300,7 +302,8 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         PayloadUtils.SettlementPayload memory payload = PayloadUtils.decodeSettlementPayload(message);
 
         // Transfer tokens from gateway to this contract
-        IERC20(payload.asset).transferFrom(gateway, address(this), payload.amount + payload.tip);
+        uint256 totalTransfer = payload.actualAmount + payload.tip;
+        IERC20(payload.asset).transferFrom(gateway, address(this), totalTransfer);
 
         // Settle the intent
         _settle(
@@ -308,7 +311,8 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             payload.asset,
             payload.amount,
             payload.receiver,
-            payload.tip
+            payload.tip,
+            payload.actualAmount
         );
 
         return "";
