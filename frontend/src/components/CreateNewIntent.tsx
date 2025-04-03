@@ -145,7 +145,7 @@ export default function CreateNewIntent() {
             <div className="space-y-4 pt-2 border-t border-gray-700 mt-4">
               <div className="relative">
                 <FormInput
-                  label="CUSTOM RECIPIENT ADDRESS"
+                  label="CUSTOM RECIPIENT"
                   labelClassName="text-yellow-500 arcade-text"
                   value={formState.recipient}
                   onChange={updateRecipient}
