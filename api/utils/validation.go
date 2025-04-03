@@ -190,7 +190,7 @@ func ValidateFulfillmentRequest(req *models.CreateFulfillmentRequest) error {
 	}
 
 	// Validate intent ID format (bytes32 format)
-	if !IsValidBytes32(req.IntentID) {
+	if !IsValidBytes32(req.ID) {
 		return errors.New("invalid intent ID format")
 	}
 

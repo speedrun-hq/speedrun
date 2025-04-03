@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/zeta-chain/zetafast/api/config"
 	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
 	"github.com/zeta-chain/zetafast/api/utils"
@@ -20,39 +21,27 @@ import (
 
 // Constants for event processing
 const (
-	// EventName is the name of the intent initiated event
-	EventName = "IntentInitiated"
+	// IntentInitiatedEventName is the name of the intent initiated event
+	IntentInitiatedEventName = "IntentInitiated"
 
-	// RequiredTopics is the minimum number of topics required in a log
-	RequiredTopics = 3
+	// IntentInitiatedRequiredTopics is the minimum number of topics required in a log
+	IntentInitiatedRequiredTopics = 3
 
-	// RequiredFields is the number of fields expected in the event data
-	RequiredFields = 5
+	// IntentInitiatedRequiredFields is the number of fields expected in the event data
+	IntentInitiatedRequiredFields = 5
 )
 
 // IntentService handles monitoring and processing of intent events from the blockchain.
 // It subscribes to intent events, processes them, and stores them in the database.
 type IntentService struct {
 	client  *ethclient.Client
-	db      db.DBInterface
+	db      db.Database
 	abi     abi.ABI
 	chainID uint64
 	subs    map[string]ethereum.Subscription
 }
 
-// NewIntentService creates a new IntentService instance with the provided dependencies.
-// It parses the ABI string and initializes the service with the given client and database.
-//
-// Parameters:
-//   - client: The Ethereum client to use for blockchain interactions
-//   - db: The database interface for storing intents
-//   - intentInitiatedEventABI: The ABI string for the IntentInitiated event
-//   - chainID: The chain ID this service is monitoring
-//
-// Returns:
-//   - *IntentService: The initialized service
-//   - error: Any error that occurred during initialization
-func NewIntentService(client *ethclient.Client, db db.DBInterface, intentInitiatedEventABI string, chainID uint64) (*IntentService, error) {
+func NewIntentService(client *ethclient.Client, db db.Database, intentInitiatedEventABI string, chainID uint64) (*IntentService, error) {
 	parsedABI, err := abi.JSON(strings.NewReader(intentInitiatedEventABI))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ABI: %v", err)
@@ -85,7 +74,7 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
-			{s.abi.Events[EventName].ID},
+			{s.abi.Events[IntentInitiatedEventName].ID},
 		},
 	}
 
@@ -109,6 +98,26 @@ func (s *IntentService) catchUpOnMissedEvents(ctx context.Context, contractAddre
 		log.Printf("Error getting last processed block: %v", err)
 		return fmt.Errorf("failed to get last processed block: %v", err)
 	}
+
+	// If no last processed block is found, use the default block from config
+	if lastBlock == 0 {
+		// Get the default block from config
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			log.Printf("Error loading config: %v", err)
+			return fmt.Errorf("failed to load config: %v", err)
+		}
+
+		chainConfig, ok := cfg.ChainConfigs[s.chainID]
+		if !ok {
+			log.Printf("No config found for chain %d", s.chainID)
+			return fmt.Errorf("no config found for chain %d", s.chainID)
+		}
+
+		lastBlock = chainConfig.DefaultBlock
+		log.Printf("Using default block %d for chain %d", lastBlock, s.chainID)
+	}
+
 	log.Printf("Last processed block: %d", lastBlock)
 
 	// Get the current block number
@@ -131,7 +140,7 @@ func (s *IntentService) catchUpOnMissedEvents(ctx context.Context, contractAddre
 		ToBlock:   big.NewInt(int64(currentBlock)),
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
-			{s.abi.Events[EventName].ID},
+			{s.abi.Events[IntentInitiatedEventName].ID},
 		},
 	}
 	log.Printf("Fetching logs with query: FromBlock=%d, ToBlock=%d, Address=%s, EventID=%s",
@@ -139,27 +148,20 @@ func (s *IntentService) catchUpOnMissedEvents(ctx context.Context, contractAddre
 
 	logs, err := s.client.FilterLogs(ctx, query)
 	if err != nil {
-		log.Printf("Error fetching missed logs: %v", err)
-		return fmt.Errorf("failed to fetch missed logs: %v", err)
+		log.Printf("Error fetching intent initiated logs: %v", err)
+		return fmt.Errorf("failed to fetch intent initiated logs: %v", err)
 	}
-	log.Printf("Found %d missed logs to process", len(logs))
+	log.Printf("Found %d intent initiated logs to process", len(logs))
 
 	// Process each missed log
 	for i, txlog := range logs {
 		log.Printf("Processing missed log %d/%d: Block=%d, TxHash=%s", i+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
 		if err := s.processLog(ctx, txlog); err != nil {
-			log.Printf("Error processing missed log: %v", err)
-			return fmt.Errorf("failed to process missed log: %v", err)
+			log.Printf("Error processing intent initiated log: %v", err)
+			return fmt.Errorf("failed to process intent initiated log: %v", err)
 		}
-		log.Printf("Successfully processed missed log %d/%d", i+1, len(logs))
+		log.Printf("Successfully processed intent initiated log %d/%d", i+1, len(logs))
 	}
-
-	// Update the last processed block number
-	if err := s.db.UpdateLastProcessedBlock(ctx, s.chainID, currentBlock); err != nil {
-		log.Printf("Error updating last processed block: %v", err)
-		return fmt.Errorf("failed to update last processed block: %v", err)
-	}
-	log.Printf("Successfully updated last processed block to %d", currentBlock)
 
 	return nil
 }
@@ -204,7 +206,7 @@ func (s *IntentService) handleSubscriptionError(ctx context.Context, oldSub ethe
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
-			{s.abi.Events[EventName].ID},
+			{s.abi.Events[IntentInitiatedEventName].ID},
 		},
 	}
 
@@ -254,8 +256,24 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		intent.CreatedAt,
 		intent.UpdatedAt)
 
+	// Check if intent already exists
+	existingIntent, err := s.db.GetIntent(ctx, intent.ID)
+	if err != nil && !strings.Contains(err.Error(), "not found") {
+		return fmt.Errorf("failed to check for existing intent: %v", err)
+	}
+
+	// Skip if intent already exists
+	if existingIntent != nil {
+		log.Printf("Skipping existing intent: %s", intent.ID)
+		return nil
+	}
+
 	if err := s.db.CreateIntent(ctx, intent); err != nil {
-		log.Printf("Failed to store intent in database: %v", err)
+		// Skip if intent already exists
+		if strings.Contains(err.Error(), "duplicate key") {
+			log.Printf("Skipping duplicate intent: %s", intent.ID)
+			return nil
+		}
 		return fmt.Errorf("failed to store intent in database: %v", err)
 	}
 
@@ -264,8 +282,8 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 
 // validateLog checks if the log has the required structure and data.
 func (s *IntentService) validateLog(vLog types.Log) error {
-	if len(vLog.Topics) < RequiredTopics {
-		return fmt.Errorf("invalid log: expected at least %d topics, got %d", RequiredTopics, len(vLog.Topics))
+	if len(vLog.Topics) < IntentInitiatedRequiredTopics {
+		return fmt.Errorf("invalid log: expected at least %d topics, got %d", IntentInitiatedRequiredTopics, len(vLog.Topics))
 	}
 	return nil
 }
@@ -297,11 +315,11 @@ func (s *IntentService) extractEventData(vLog types.Log) (*models.IntentInitiate
 
 	// Parse non-indexed parameters from data
 	log.Printf("Unpacking event data...")
-	unpacked, err := s.abi.Unpack(EventName, vLog.Data)
+	unpacked, err := s.abi.Unpack(IntentInitiatedEventName, vLog.Data)
 	if err != nil {
 		log.Printf("Error unpacking event data: %v", err)
-		log.Printf("Event signature: %s", s.abi.Events[EventName].ID.Hex())
-		log.Printf("Event inputs: %+v", s.abi.Events[EventName].Inputs)
+		log.Printf("Event signature: %s", s.abi.Events[IntentInitiatedEventName].ID.Hex())
+		log.Printf("Event inputs: %+v", s.abi.Events[IntentInitiatedEventName].Inputs)
 		return nil, fmt.Errorf("failed to unpack event data: %v", err)
 	}
 
@@ -310,8 +328,8 @@ func (s *IntentService) extractEventData(vLog types.Log) (*models.IntentInitiate
 		log.Printf("Unpacked[%d]: %+v (type: %T)", i, data, data)
 	}
 
-	if len(unpacked) < RequiredFields {
-		return nil, fmt.Errorf("invalid event data: expected %d fields, got %d", RequiredFields, len(unpacked))
+	if len(unpacked) < IntentInitiatedRequiredFields {
+		return nil, fmt.Errorf("invalid event data: expected %d fields, got %d", IntentInitiatedRequiredFields, len(unpacked))
 	}
 
 	if err := s.validateEventFields(unpacked, event); err != nil {
@@ -380,12 +398,23 @@ func (s *IntentService) validateEventFields(unpacked []interface{}, event *model
 
 // GetIntent retrieves an intent by ID
 func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Intent, error) {
-	return s.db.GetIntent(ctx, id)
+	// Get intent from database
+	intent, err := s.db.GetIntent(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get intent: %v", err)
+	}
+
+	return intent, nil
 }
 
 // ListIntents retrieves all intents
 func (s *IntentService) ListIntents(ctx context.Context) ([]*models.Intent, error) {
-	return s.db.ListIntents(ctx)
+	intents, err := s.db.ListIntents(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list intents: %v", err)
+	}
+
+	return intents, nil
 }
 
 // CreateIntent creates a new intent

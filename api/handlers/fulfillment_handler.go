@@ -4,12 +4,22 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
 	"github.com/zeta-chain/zetafast/api/services"
 	"github.com/zeta-chain/zetafast/api/utils"
 )
 
-var fulfillmentService *services.FulfillmentService
+var (
+	fulfillmentServices map[uint64]*services.FulfillmentService
+)
+
+// InitFulfillmentHandlers initializes the fulfillment handlers
+func InitFulfillmentHandlers(db db.Database, services map[uint64]*services.FulfillmentService) {
+	database = db
+	fulfillmentServices = services
+}
+
 
 // CreateFulfillment handles the creation of a new fulfillment
 func CreateFulfillment(c *gin.Context) {
@@ -25,7 +35,7 @@ func CreateFulfillment(c *gin.Context) {
 		return
 	}
 
-	fulfillment, err := fulfillmentService.CreateFulfillment(c.Request.Context(), req.IntentID, req.TxHash)
+	err := fulfillmentServices[req.ChainID].CreateFulfillment(c.Request.Context(), req.ID, req.TxHash)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -33,7 +43,6 @@ func CreateFulfillment(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message":     "Fulfillment created successfully",
-		"fulfillment": fulfillment,
 	})
 }
 
@@ -51,7 +60,7 @@ func GetFulfillment(c *gin.Context) {
 		return
 	}
 
-	fulfillment, err := fulfillmentService.GetFulfillment(c.Request.Context(), fulfillmentID)
+	fulfillment, err := database.GetFulfillment(c.Request.Context(), fulfillmentID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

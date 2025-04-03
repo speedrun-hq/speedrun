@@ -92,19 +92,11 @@ type IntentResponse struct {
 // Fulfillment represents a fulfillment of an intent
 type Fulfillment struct {
 	ID        string            `json:"id"`
-	IntentID  string            `json:"intent_id"`
+	Asset     string            `json:"asset"`
+	Amount    string            `json:"amount"`
+	Receiver  string            `json:"receiver"`
+	BlockNumber uint64          `json:"block_number"`
 	TxHash    string            `json:"tx_hash"`
-	Status    FulfillmentStatus `json:"status"`
 	CreatedAt time.Time         `json:"created_at"`
 	UpdatedAt time.Time         `json:"updated_at"`
 }
-
-// FulfillmentStatus represents the possible states of a fulfillment
-type FulfillmentStatus string
-
-const (
-	FulfillmentStatusPending   FulfillmentStatus = "pending"
-	FulfillmentStatusAccepted  FulfillmentStatus = "accepted"
-	FulfillmentStatusRejected  FulfillmentStatus = "rejected"
-	FulfillmentStatusCompleted FulfillmentStatus = "completed"
-)

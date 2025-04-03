@@ -196,13 +196,13 @@ func (s *Server) CreateFulfillment(c *gin.Context) {
 		return
 	}
 
-	fulfillment, err := s.fulfillmentService.CreateFulfillment(c.Request.Context(), req.IntentID, req.TxHash)
+	err := s.fulfillmentService.CreateFulfillment(c.Request.Context(), req.IntentID, req.TxHash)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, fulfillment)
+	c.JSON(http.StatusOK, gin.H{"message": "fulfillment created successfully"})
 }
 
 // GetFulfillment handles retrieving a fulfillment by ID

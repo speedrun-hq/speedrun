@@ -23,24 +23,14 @@ type IntentInitiatedEvent struct {
 	TxHash      string   `json:"txHash"`
 }
 
-// FulfillmentEvent represents the event emitted when a fulfillment occurs
-type FulfillmentEvent struct {
+// IntentFulfilledEvent represents the event emitted when an intent is fulfilled
+type IntentFulfilledEvent struct {
 	IntentID    string
-	TargetChain uint64
+	Asset       string
+	Amount      *big.Int
 	Receiver    string
-	Amount      string
-	TxHash      string
 	BlockNumber uint64
-}
-
-// IntentSettledEvent represents an intent settlement event
-type IntentSettledEvent struct {
-	IntentID  string
-	Asset     string
-	Amount    *big.Int
-	Receiver  string
-	Fulfilled bool
-	TxHash    string
+	TxHash      string
 }
 
 // ToIntent converts an IntentInitiatedEvent to an Intent
@@ -92,15 +82,32 @@ func FromIntent(intent *Intent) *IntentInitiatedEvent {
 	}
 }
 
-// ToFulfillment converts a FulfillmentEvent to a Fulfillment
-func (e *FulfillmentEvent) ToFulfillment() *Fulfillment {
-	now := time.Now()
+func (e *IntentFulfilledEvent) ToFulfillment() *Fulfillment {
+	amount := e.Amount.String()
+
+
 	return &Fulfillment{
-		ID:        e.TxHash, // Using tx hash as ID for uniqueness
-		IntentID:  e.IntentID,
-		TxHash:    e.TxHash,
-		Status:    FulfillmentStatusPending,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          e.IntentID,
+		Asset:       e.Asset,
+		Amount:      amount,
+		Receiver:    e.Receiver,
+		BlockNumber: e.BlockNumber,
+		TxHash:      e.TxHash,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+}
+
+func FromFulfillment(fulfillment *Fulfillment) *IntentFulfilledEvent {
+	amount := new(big.Int)
+	amount.SetString(fulfillment.Amount, 10)
+
+	return &IntentFulfilledEvent{
+		IntentID:    fulfillment.ID,
+		Asset:       fulfillment.Asset,
+		Amount:      amount,
+		Receiver:    fulfillment.Receiver,
+		BlockNumber: fulfillment.BlockNumber,
+		TxHash:      fulfillment.TxHash,
 	}
 }
