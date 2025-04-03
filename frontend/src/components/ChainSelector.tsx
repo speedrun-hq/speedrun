@@ -80,6 +80,22 @@ export function ChainSelector({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isOpen]);
+
   const handleClick = () => {
     if (disabled) return;
     console.log('Button clicked, current state:', { isOpen });
