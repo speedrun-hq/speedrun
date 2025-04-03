@@ -25,6 +25,17 @@ type IntentFulfilledEvent struct {
 	Asset    common.Address
 	Amount   *big.Int
 	Receiver common.Address
+	TxHash   common.Hash
+}
+
+// IntentSettledEvent represents the event emitted when an intent is settled
+type IntentSettledEvent struct {
+	IntentID  string
+	Asset     string
+	Receiver  string
+	TxHash    string
+	Amount    *big.Int
+	Fulfilled bool
 }
 
 // ChainClient represents a client for a specific chain
@@ -293,6 +304,7 @@ func (s *FulfillmentService) parseIntentFulfilledEvent(eventLog types.Log) (*Int
 		IntentID: eventLog.Topics[1],                            // intentId is indexed (topic 1)
 		Asset:    common.HexToAddress(eventLog.Topics[2].Hex()), // asset is indexed (topic 2)
 		Receiver: common.HexToAddress(eventLog.Topics[3].Hex()), // receiver is indexed (topic 3)
+		TxHash:   eventLog.TxHash,
 	}
 
 	// Decode the non-indexed data (amount)
@@ -323,9 +335,40 @@ func (s *FulfillmentService) parseIntentFulfilledEvent(eventLog types.Log) (*Int
 	return event, nil
 }
 
+// parseIntentSettledEvent parses a log entry into an IntentSettledEvent
+func (s *FulfillmentService) parseIntentSettledEvent(eventLog types.Log) (*IntentSettledEvent, error) {
+	// Validate topics count
+	if len(eventLog.Topics) < 4 {
+		return nil, fmt.Errorf("invalid number of topics: expected at least 4, got %d", len(eventLog.Topics))
+	}
+
+	// Create a new event instance with indexed parameters from topics
+	event := &IntentSettledEvent{
+		IntentID: eventLog.Topics[1].Hex(),                            // intentId is indexed (topic 1)
+		Asset:    common.HexToAddress(eventLog.Topics[2].Hex()).Hex(), // asset is indexed (topic 2)
+		Receiver: common.HexToAddress(eventLog.Topics[3].Hex()).Hex(), // receiver is indexed (topic 3)
+		TxHash:   eventLog.TxHash.Hex(),
+	}
+
+	// Decode the non-indexed data (amount and fulfilled)
+	type NonIndexed struct {
+		Amount    *big.Int
+		Fulfilled bool
+	}
+	var decoded NonIndexed
+	err := s.abi.UnpackIntoInterface(&decoded, "IntentSettled", eventLog.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack log data: %v", err)
+	}
+	event.Amount = decoded.Amount
+	event.Fulfilled = decoded.Fulfilled
+
+	return event, nil
+}
+
 // processLog processes a single fulfillment event log
 func (s *FulfillmentService) processLog(ctx context.Context, client *ChainClient, eventLog types.Log) error {
-	log.Printf("Processing fulfillment event - Chain: %d, Contract: %s",
+	log.Printf("Processing event - Chain: %d, Contract: %s",
 		client.chainID,
 		client.contractAddress.Hex())
 	log.Printf("Event details - Block: %d, TxHash: %s, LogIndex: %d",
@@ -333,30 +376,74 @@ func (s *FulfillmentService) processLog(ctx context.Context, client *ChainClient
 		eventLog.TxHash.Hex(),
 		eventLog.Index)
 
-	// Parse the event
-	event, err := s.parseIntentFulfilledEvent(eventLog)
-	if err != nil {
-		log.Printf("Error parsing fulfillment event: %v", err)
-		return fmt.Errorf("failed to parse event: %w", err)
+	// Determine event type based on the first topic
+	eventID := eventLog.Topics[0]
+
+	if eventID == s.abi.Events["IntentFulfilled"].ID {
+		// Handle IntentFulfilled event
+		event, err := s.parseIntentFulfilledEvent(eventLog)
+		if err != nil {
+			return fmt.Errorf("failed to parse fulfillment event: %w", err)
+		}
+		return s.processFulfillmentEvent(ctx, event)
+	} else if eventID == s.abi.Events["IntentSettled"].ID {
+		// Handle IntentSettled event
+		event, err := s.parseIntentSettledEvent(eventLog)
+		if err != nil {
+			return fmt.Errorf("failed to parse settlement event: %w", err)
+		}
+		return s.processSettlementEvent(ctx, event)
 	}
 
+	return fmt.Errorf("unknown event type: %s", eventID.Hex())
+}
+
+// processSettlementEvent handles an IntentSettled event
+func (s *FulfillmentService) processSettlementEvent(ctx context.Context, event *IntentSettledEvent) error {
 	// Get the intent
-	intent, err := s.db.GetIntent(ctx, event.IntentID.Hex())
+	intent, err := s.db.GetIntent(ctx, event.IntentID)
 	if err != nil {
-		log.Printf("Error getting intent %s: %v", event.IntentID.Hex(), err)
 		return fmt.Errorf("failed to get intent: %w", err)
 	}
 
-	log.Printf("Found intent - ID: %s, SourceChain: %d, DestinationChain: %d",
-		intent.ID,
-		intent.SourceChain,
-		intent.DestinationChain)
+	log.Printf("Processing settlement event for intent %s - Current status: %s", intent.ID, intent.Status)
+
+	// Update intent status based on whether it was fulfilled
+	var newStatus models.IntentStatus
+	if event.Fulfilled {
+		newStatus = models.IntentStatusFulfilled
+		log.Printf("Intent %s was fulfilled by a fulfiller, updating status to %s", intent.ID, newStatus)
+	} else {
+		newStatus = models.IntentStatusCompleted
+		log.Printf("Intent %s was settled without a fulfiller, updating status to %s", intent.ID, newStatus)
+	}
+
+	// Update intent status
+	err = s.db.UpdateIntentStatus(ctx, intent.ID, newStatus)
+	if err != nil {
+		log.Printf("Failed to update intent %s status to %s: %v", intent.ID, newStatus, err)
+		return fmt.Errorf("failed to update intent status: %w", err)
+	}
+
+	log.Printf("Successfully processed settlement event for intent %s - Final status: %s", intent.ID, newStatus)
+	return nil
+}
+
+// processFulfillmentEvent handles an IntentFulfilled event
+func (s *FulfillmentService) processFulfillmentEvent(ctx context.Context, event *IntentFulfilledEvent) error {
+	// Get the intent
+	intent, err := s.db.GetIntent(ctx, event.IntentID.Hex())
+	if err != nil {
+		return fmt.Errorf("failed to get intent: %w", err)
+	}
+
+	log.Printf("Processing fulfillment event for intent %s - Current status: %s", intent.ID, intent.Status)
 
 	// Create fulfillment
 	fulfillment := &models.Fulfillment{
-		ID:        eventLog.TxHash.Hex(), // Use transaction hash as ID for uniqueness
+		ID:        event.TxHash.Hex(),
 		IntentID:  event.IntentID.Hex(),
-		TxHash:    eventLog.TxHash.Hex(),
+		TxHash:    event.TxHash.Hex(),
 		Status:    models.FulfillmentStatusCompleted,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -364,28 +451,15 @@ func (s *FulfillmentService) processLog(ctx context.Context, client *ChainClient
 
 	err = s.db.CreateFulfillment(ctx, fulfillment)
 	if err != nil {
-		log.Printf("Error creating fulfillment for intent %s: %v", event.IntentID.Hex(), err)
+		log.Printf("Failed to create fulfillment for intent %s: %v", intent.ID, err)
 		return fmt.Errorf("failed to create fulfillment: %w", err)
 	}
 
-	log.Printf("Created fulfillment - ID: %s, Status: %s", fulfillment.ID, fulfillment.Status)
-
-	// Check if intent is fully fulfilled
-	totalFulfilled, err := s.db.GetTotalFulfilledAmount(ctx, intent.ID)
-	if err != nil {
-		log.Printf("Error getting total fulfilled amount for intent %s: %v", intent.ID, err)
-		return fmt.Errorf("failed to get total fulfilled amount: %w", err)
-	}
-
-	log.Printf("Total fulfilled amount for intent %s: %s (Required: %s)",
-		intent.ID,
-		totalFulfilled,
-		intent.Amount)
+	log.Printf("Created fulfillment for intent %s - TxHash: %s", intent.ID, fulfillment.TxHash)
 
 	// Get the number of completed fulfillments
 	fulfillments, err := s.db.ListFulfillments(ctx)
 	if err != nil {
-		log.Printf("Error listing fulfillments: %v", err)
 		return fmt.Errorf("failed to list fulfillments: %w", err)
 	}
 
@@ -396,29 +470,20 @@ func (s *FulfillmentService) processLog(ctx context.Context, client *ChainClient
 		}
 	}
 
-	log.Printf("Completed fulfillments for intent %s: %d", intent.ID, completedCount)
+	log.Printf("Intent %s has %d completed fulfillments", intent.ID, completedCount)
 
 	// Mark intent as fulfilled after the second fulfillment
 	if completedCount >= 2 {
+		log.Printf("Intent %s has reached required number of fulfillments (%d), marking as fulfilled", intent.ID, completedCount)
 		err = s.db.UpdateIntentStatus(ctx, intent.ID, models.IntentStatusFulfilled)
 		if err != nil {
-			log.Printf("Error updating intent status for %s: %v", intent.ID, err)
+			log.Printf("Failed to update intent %s status to fulfilled: %v", intent.ID, err)
 			return fmt.Errorf("failed to update intent status: %w", err)
 		}
-		log.Printf("Intent %s marked as fulfilled", intent.ID)
+		log.Printf("Successfully marked intent %s as fulfilled", intent.ID)
+	} else {
+		log.Printf("Intent %s needs %d more fulfillments to be marked as fulfilled", intent.ID, 2-completedCount)
 	}
-
-	// Update the last processed block
-	err = s.db.UpdateLastProcessedBlock(ctx, client.chainID, eventLog.BlockNumber)
-	if err != nil {
-		log.Printf("Error updating last processed block for chain %d: %v", client.chainID, err)
-		return fmt.Errorf("failed to update last processed block: %w", err)
-	}
-
-	log.Printf("Successfully processed event - Chain: %d, Block: %d, TxHash: %s",
-		client.chainID,
-		eventLog.BlockNumber,
-		eventLog.TxHash.Hex())
 
 	return nil
 }

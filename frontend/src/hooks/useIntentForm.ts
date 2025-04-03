@@ -15,6 +15,7 @@ interface FormState {
   selectedToken: TokenSymbol;
   amount: string;
   recipient: string;
+  tip: string;
   isSubmitting: boolean;
   error: Error | null;
   success: boolean;
@@ -31,6 +32,7 @@ export function useIntentForm() {
     selectedToken: 'USDC',
     amount: '',
     recipient: '',
+    tip: '0.01',
     isSubmitting: false,
     error: null,
     success: false,
@@ -46,7 +48,9 @@ export function useIntentForm() {
   const isValid = Boolean(
     formState.amount &&
     formState.recipient &&
+    formState.tip &&
     parseFloat(formState.amount) > 0 &&
+    parseFloat(formState.tip) > 0 &&
     parseFloat(formState.amount) <= (balance ? parseFloat(balance) : 0)
   );
 
@@ -70,7 +74,7 @@ export function useIntentForm() {
         tokenAddress,
         formState.amount,
         formState.recipient,
-        '0.01' // Fixed tip amount for now
+        formState.tip
       );
 
       // Create intent in the backend
@@ -80,7 +84,7 @@ export function useIntentForm() {
         token: formState.selectedToken,
         amount: formState.amount,
         recipient: formState.recipient,
-        intent_fee: '0.01',
+        intent_fee: formState.tip,
       });
 
       setFormState(prev => ({
@@ -88,6 +92,7 @@ export function useIntentForm() {
         success: true,
         amount: '',
         recipient: '',
+        tip: '0.01',
       }));
     } catch (err) {
       setFormState(prev => ({
@@ -128,6 +133,13 @@ export function useIntentForm() {
     setFormState(prev => ({ ...prev, recipient: value }));
   }, []);
 
+  const updateTip = useCallback((value: string) => {
+    setFormState(prev => ({
+      ...prev,
+      tip: value,
+    }));
+  }, []);
+
   return {
     formState,
     balance,
@@ -142,5 +154,6 @@ export function useIntentForm() {
     updateToken,
     updateAmount,
     updateRecipient,
+    updateTip,
   };
 } 

@@ -242,12 +242,8 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		event.Tip.String(),
 		event.Salt.String())
 
-	chainID, err := s.client.ChainID(ctx)
-	if err != nil {
-		log.Printf("Failed to get chain ID: %v", err)
-		return fmt.Errorf("failed to get chain ID: %v", err)
-	}
-	event.ChainID = chainID.Uint64()
+	// Use the target chain from the event data
+	event.ChainID = s.chainID
 
 	intent := event.ToIntent()
 	log.Printf("Created intent - ID: %s, SourceChain: %d, DestinationChain: %d, Status: %s, CreatedAt: %v, UpdatedAt: %v",

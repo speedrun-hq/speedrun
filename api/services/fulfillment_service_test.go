@@ -139,7 +139,7 @@ func TestProcessFulfillmentEvent(t *testing.T) {
 	// Create a test log entry
 	log := types.Log{
 		Topics: []common.Hash{
-			common.HexToHash("0x1234567890123456789012345678901234567890123456789012345678901234"),
+			service.abi.Events["IntentFulfilled"].ID,
 			event.IntentID,
 			common.BytesToHash(event.Asset.Bytes()),
 			common.BytesToHash(event.Receiver.Bytes()),

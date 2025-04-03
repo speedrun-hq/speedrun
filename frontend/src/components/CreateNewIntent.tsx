@@ -23,6 +23,7 @@ export default function CreateNewIntent() {
     updateToken,
     updateAmount,
     updateRecipient,
+    updateTip,
   } = useIntentForm();
 
   if (!isConnected) {
@@ -111,6 +112,30 @@ export default function CreateNewIntent() {
               step="0.01"
             />
           </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-[hsl(var(--yellow))] font-mono">TIP ({symbol})</label>
+              <span className="text-[#00ff00] font-mono">
+                Recommended: 0.01 {symbol}
+              </span>
+            </div>
+            <FormInput
+              type="number"
+              value={formState.tip}
+              onChange={updateTip}
+              placeholder="0.01"
+              disabled={formState.isSubmitting}
+              min="0.01"
+              step="0.01"
+            />
+          </div>
+
+          {formState.error && (
+            <div className="text-red-500 text-sm font-mono">
+              {formState.error.message}
+            </div>
+          )}
         </div>
 
         <button
@@ -118,7 +143,7 @@ export default function CreateNewIntent() {
           disabled={!isValid || formState.isSubmitting}
           className="w-full arcade-btn bg-[hsl(var(--yellow))] text-black hover:bg-[hsl(var(--yellow)/0.8)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {formState.isSubmitting ? 'CREATING RUN...' : 'START RUN'}
+          {formState.isSubmitting ? 'APPROVING TOKENS...' : 'START RUN'}
         </button>
       </form>
     </div>

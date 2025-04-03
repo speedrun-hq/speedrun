@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -148,14 +149,40 @@ func (p *PostgresDB) CreateIntent(ctx context.Context, intent *models.Intent) er
 
 // UpdateIntentStatus updates the status of an intent
 func (p *PostgresDB) UpdateIntentStatus(ctx context.Context, id string, status models.IntentStatus) error {
+	// Get current intent status
+	var currentStatus string
+	err := p.db.QueryRowContext(ctx, "SELECT status FROM intents WHERE id = $1", id).Scan(&currentStatus)
+	if err != nil {
+		log.Printf("Error getting current status for intent %s: %v", id, err)
+		return fmt.Errorf("failed to get current intent status: %v", err)
+	}
+
+	// Update the status
 	query := `
 		UPDATE intents
 		SET status = $1,
 			updated_at = NOW()
 		WHERE id = $2
 	`
-	_, err := p.db.ExecContext(ctx, query, string(status), id)
-	return err
+	result, err := p.db.ExecContext(ctx, query, string(status), id)
+	if err != nil {
+		log.Printf("Error updating status for intent %s: %v", id, err)
+		return fmt.Errorf("failed to update intent status: %v", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected for intent %s: %v", id, err)
+		return fmt.Errorf("failed to get rows affected: %v", err)
+	}
+
+	if rowsAffected == 0 {
+		log.Printf("No rows affected when updating status for intent %s", id)
+		return fmt.Errorf("intent not found: %s", id)
+	}
+
+	log.Printf("Intent status updated - ID: %s, Previous: %s, New: %s", id, currentStatus, status)
+	return nil
 }
 
 // GetFulfillment retrieves a fulfillment by ID

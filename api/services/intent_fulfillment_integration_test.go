@@ -102,12 +102,12 @@ func TestIntentFulfillmentFlow(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, models.IntentStatusPending, retrievedIntent.Status)
 
-	// Create a fulfillment event
+	// Create a test log entry
 	fulfillmentLog := types.Log{
 		Address: common.HexToAddress(contractAddresses[42161]),
 		Topics: []common.Hash{
-			common.HexToHash("0x1234567890123456789012345678901234567890123456789012345678901234"), // Event ID
-			common.HexToHash(intentID),                                     // Intent ID
+			fulfillmentService.abi.Events["IntentFulfilled"].ID, // Use the correct event signature hash
+			common.HexToHash(intentID),
 			common.HexToHash("0x1234567890123456789012345678901234567890"), // Asset
 			common.HexToHash("0x0987654321098765432109876543210987654321"), // Receiver
 		},
@@ -137,8 +137,8 @@ func TestIntentFulfillmentFlow(t *testing.T) {
 	fulfillmentLog2 := types.Log{
 		Address: common.HexToAddress(contractAddresses[42161]),
 		Topics: []common.Hash{
-			common.HexToHash("0x1234567890123456789012345678901234567890123456789012345678901234"), // Event ID
-			common.HexToHash(intentID),                                     // Intent ID
+			fulfillmentService.abi.Events["IntentFulfilled"].ID, // Use the correct event signature hash
+			common.HexToHash(intentID),
 			common.HexToHash("0x1234567890123456789012345678901234567890"), // Asset
 			common.HexToHash("0x0987654321098765432109876543210987654321"), // Receiver
 		},
