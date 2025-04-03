@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS fulfillments (
 -- Table to store last processed block numbers
 CREATE TABLE IF NOT EXISTS last_processed_blocks (
     chain_id VARCHAR(10) PRIMARY KEY,
-    last_block BIGINT NOT NULL,
+    block_number BIGINT NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
