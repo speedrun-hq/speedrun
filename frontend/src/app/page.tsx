@@ -17,8 +17,8 @@ export default function Home() {
       <div className="z-10 max-w-5xl w-full relative">
         <div className="text-center mb-12">
           <p className="arcade-text text-xl text-primary-500 relative">
-            <span className="absolute inset-0 blur-sm opacity-50">Intent-based token transfers backed by ZetaChain</span>
-            Intent-based token transfers backed by ZetaChain
+            <span className="absolute inset-0 blur-sm opacity-50">Cheap and fast cross-chain transfers</span>
+            Cheap and fast cross-chain transfers
           </p>
         </div>
 
@@ -94,6 +94,12 @@ export default function Home() {
             </div>
           </div>
         )}
+      </div>
+      <div className="z-10 pt-8 text-center">
+        <p className="arcade-text text-sm text-primary-300 relative">
+          <span className="absolute inset-0 blur-sm opacity-50">Backed by ZetaChain</span>
+          Backed by ZetaChain
+        </p>
       </div>
     </main>
   );
