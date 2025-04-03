@@ -152,6 +152,41 @@ contract IntentTest is Test {
         assertTrue(nextIntentId2 != nextIntentId);
     }
 
+    function test_GetFulfillmentIndex() public {
+        // Test parameters
+        bytes32 intentId = bytes32(uint256(123));
+        address asset = address(token);
+        uint256 amount = 50 ether;
+        address receiver = user2;
+        
+        // Expected result calculated using PayloadUtils directly
+        bytes32 expectedIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+        
+        // Call the function and verify result
+        bytes32 actualIndex = intent.getFulfillmentIndex(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+        
+        // Verify the computed index matches what we expect
+        assertEq(actualIndex, expectedIndex, "Fulfillment index computation does not match expected value");
+        
+        // Verify it matches with the internal computation too
+        assertEq(actualIndex, keccak256(abi.encodePacked(
+            intentId,
+            asset,
+            amount,
+            receiver
+        )), "Index doesn't match raw computation");
+    }
+
     function test_Initiate() public {
         // Test parameters
         uint256 amount = 100 ether;

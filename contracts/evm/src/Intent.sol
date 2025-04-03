@@ -106,6 +106,28 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /**
+     * @dev Calculates the fulfillment index for the given parameters
+     * @param intentId The ID of the intent
+     * @param asset The ERC20 token address
+     * @param amount Amount to transfer
+     * @param receiver Receiver address
+     * @return The computed fulfillment index
+     */
+    function getFulfillmentIndex(
+        bytes32 intentId,
+        address asset,
+        uint256 amount,
+        address receiver
+    ) public pure returns (bytes32) {
+        return PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            asset,
+            amount,
+            receiver
+        );
+    }
+
+    /**
      * @dev Initiates a new intent for cross-chain transfer
      * @param asset The ERC20 token address
      * @param amount Amount to receive on target chain
