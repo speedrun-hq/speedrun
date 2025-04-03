@@ -1,7 +1,8 @@
-import { useAccount, useContractWrite, useContractRead } from 'wagmi';
-import { parseUnits } from 'viem';
+import { useAccount, useNetwork, useWalletClient, useContractWrite, useContractRead, usePublicClient } from 'wagmi';
+import { parseUnits, getContract } from 'viem';
 import { TOKENS } from '@/constants/tokens';
-import { getChainId } from '@/utils/chain';
+import { base, arbitrum } from 'wagmi/chains';
+import { useState, useCallback } from 'react';
 
 // ERC20 ABI for approve and allowance
 const ERC20_ABI = [
@@ -27,56 +28,87 @@ const ERC20_ABI = [
   },
 ] as const;
 
+type ChainName = 'BASE' | 'ARBITRUM';
+type TokenSymbol = keyof typeof TOKENS[typeof base.id];
+
+function getChainId(chainName: ChainName): number {
+  switch (chainName) {
+    case 'BASE':
+      return base.id;
+    case 'ARBITRUM':
+      return arbitrum.id;
+    default:
+      throw new Error(`Unsupported chain: ${chainName}`);
+  }
+}
+
 export function useTokenApproval() {
   const { address } = useAccount();
-  const { writeAsync: approve } = useContractWrite({
-    abi: ERC20_ABI,
-    functionName: 'approve',
-  });
+  const { chain } = useNetwork();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
 
-  const { data: allowance, isLoading: isLoadingAllowance } = useContractRead({
-    abi: ERC20_ABI,
-    functionName: 'allowance',
-  });
-
-  const approveToken = async (
-    chainName: string,
-    tokenSymbol: string,
-    spender: string,
+  const approveToken = useCallback(async (
+    chainName: ChainName,
+    tokenSymbol: TokenSymbol,
+    spender: `0x${string}`,
     amount: string
-  ) => {
-    if (!address) throw new Error('Wallet not connected');
+  ): Promise<`0x${string}` | undefined> => {
+    try {
+      // Check wallet connection
+      if (!address) {
+        throw new Error('Wallet address not available');
+      }
+      if (!walletClient) {
+        throw new Error('Wallet client not initialized');
+      }
+      if (!publicClient) {
+        throw new Error('Public client not initialized');
+      }
 
-    const chainId = getChainId(chainName);
-    const tokenConfig = TOKENS[chainId]?.[tokenSymbol];
-    if (!tokenConfig) throw new Error('Invalid token configuration');
+      // Get chain ID and validate network
+      const chainId = getChainId(chainName);
+      if (chain?.id !== chainId) {
+        throw new Error(`Please switch to ${chainName} network`);
+      }
 
-    const amountWei = parseUnits(amount, tokenConfig.decimals);
+      // Get token configuration
+      const tokenAddress = TOKENS[chainId][tokenSymbol].address as `0x${string}`;
+      if (!tokenAddress) {
+        throw new Error('Token not found');
+      }
 
-    // Check current allowance
-    const currentAllowance = await allowance?.({
-      address: tokenConfig.address,
-      args: [address, spender],
-      chainId,
-    });
+      // Create contract instance
+      const contract = getContract({
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        walletClient,
+        publicClient,
+      });
 
-    // If current allowance is sufficient, no need to approve
-    if (currentAllowance && currentAllowance >= amountWei) {
-      return;
+      // Calculate amount in wei
+      const amountWei = parseUnits(amount, TOKENS[chainId][tokenSymbol].decimals);
+
+      // Check current allowance
+      const currentAllowance = await contract.read.allowance([address, spender]);
+      
+      // If current allowance is sufficient, no need to approve
+      if (currentAllowance >= amountWei) {
+        return;
+      }
+
+      // Approve tokens
+      const hash = await contract.write.approve([spender, amountWei]);
+
+      return hash;
+    } catch (error) {
+      console.error('Error approving token:', error);
+      throw error;
     }
-
-    // Approve tokens
-    const { hash } = await approve({
-      address: tokenConfig.address,
-      args: [spender, amountWei],
-      chainId,
-    });
-
-    return hash;
-  };
+  }, [address, walletClient, publicClient, chain?.id]);
 
   return {
     approveToken,
-    isLoadingAllowance,
+    isLoadingAllowance: false,
   };
 } 

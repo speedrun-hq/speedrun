@@ -36,7 +36,7 @@ const IntentList: React.FC = () => {
   const displayedIntents = intents.slice(offset, offset + ITEMS_PER_PAGE);
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'pending':
         return 'text-primary-500 border-primary-500';
       case 'completed':
@@ -79,7 +79,7 @@ const IntentList: React.FC = () => {
               className="arcade-card relative"
             >
               <span className={`arcade-status ${getStatusColor(intent.status)} border-2 absolute top-4 right-4`}>
-                {intent.status.toUpperCase()}
+                {intent.status}
               </span>
               <div className="space-y-3">
                 <div className="flex items-center space-x-2">
@@ -89,7 +89,7 @@ const IntentList: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex flex-col">
                     <span className="arcade-text text-xs text-gray-500">INTENT ID</span>
-                    <span className="arcade-text text-xs text-magenta-500 break-all">{intent.id}</span>
+                    <span className="arcade-text text-xs text-magenta-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.id}</span>
                   </div>
                   <div className="flex flex-col">
                     <span className="arcade-text text-xs text-gray-500">ROUTE</span>
@@ -99,7 +99,7 @@ const IntentList: React.FC = () => {
                   </div>
                   <div className="flex flex-col">
                     <span className="arcade-text text-xs text-gray-500">TOKEN</span>
-                    <span className="arcade-text text-xs text-yellow-500 break-all">{intent.token}</span>
+                    <span className="arcade-text text-xs text-yellow-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.token}</span>
                   </div>
                   <div className="flex flex-col">
                     <span className="arcade-text text-xs text-gray-500">AMOUNT</span>
@@ -107,7 +107,7 @@ const IntentList: React.FC = () => {
                   </div>
                   <div className="flex flex-col">
                     <span className="arcade-text text-xs text-gray-500">RECIPIENT</span>
-                    <span className="arcade-text text-xs text-magenta-500 break-all">{intent.recipient}</span>
+                    <span className="arcade-text text-xs text-magenta-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.recipient}</span>
                   </div>
                 </div>
               </div>

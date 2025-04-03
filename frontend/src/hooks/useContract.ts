@@ -7,6 +7,8 @@ import { parseEther } from 'viem';
 import { useTokenApproval } from './useTokenApproval';
 import { TOKENS } from '@/constants/tokens';
 import { useCallback, useRef, useState } from 'react';
+import { Abi } from 'viem';
+import { keccak256, toUtf8Bytes } from 'ethers';
 
 type ContractType = {
   write: {
@@ -18,6 +20,14 @@ type ContractType = {
       bigint,        // tip
       bigint         // salt
     ]) => Promise<`0x${string}`>;
+  };
+  createEventFilter: {
+    IntentInitiated: (
+      args?: {
+        intentId?: `0x${string}`;
+        asset?: `0x${string}`;
+      }
+    ) => Promise<any>;
   };
 };
 
@@ -56,8 +66,31 @@ export function useContract() {
         throw new Error('Component unmounted');
       }
 
+      // Enhanced wallet connection checks
+      if (!address) {
+        throw new Error('Wallet address not available');
+      }
+      if (!publicClient) {
+        throw new Error('Public client not initialized');
+      }
+      if (!walletClient) {
+        throw new Error('Wallet client not initialized');
+      }
+
+      // Wait for wallet connection to be fully established
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Verify wallet is still connected after delay
       if (!address || !publicClient || !walletClient) {
-        throw new Error('Wallet not connected');
+        throw new Error('Wallet connection lost');
+      }
+
+      // Validate numeric inputs
+      if (typeof sourceChain !== 'number' || isNaN(sourceChain)) {
+        throw new Error('Invalid source chain ID');
+      }
+      if (typeof destinationChain !== 'number' || isNaN(destinationChain)) {
+        throw new Error('Invalid destination chain ID');
       }
 
       const contractAddress = IntentContract.address[sourceChain as keyof typeof IntentContract.address];
@@ -65,13 +98,19 @@ export function useContract() {
         throw new Error(`No contract address for chain ${sourceChain}`);
       }
 
-      // Validate chain IDs
-      if (typeof sourceChain !== 'number' || typeof destinationChain !== 'number') {
-        throw new Error('Invalid chain IDs');
+      // Validate amount and tip
+      const amountNum = parseFloat(amount);
+      const tipNum = parseFloat(tip);
+      
+      if (isNaN(amountNum) || amountNum <= 0) {
+        throw new Error('Invalid amount');
+      }
+      if (isNaN(tipNum) || tipNum < 0) {
+        throw new Error('Invalid tip amount');
       }
 
       // Calculate total amount (amount + tip)
-      const totalAmount = (parseFloat(amount) + parseFloat(tip)).toString();
+      const totalAmount = (amountNum + tipNum).toString();
 
       // Determine token symbol
       const tokenSymbol = token === TOKENS[sourceChain].USDC.address ? 'USDC' : 'USDT';
@@ -119,7 +158,6 @@ export function useContract() {
         address: contractAddress as `0x${string}`,
         abi: IntentContract.abi,
         walletClient,
-        publicClient,
       }) as unknown as ContractType;
 
       if (!contract?.write?.initiate) {
@@ -127,8 +165,8 @@ export function useContract() {
       }
 
       // Convert amount and tip to wei (assuming 6 decimals for USDC)
-      const amountWei = BigInt(Math.floor(parseFloat(amount) * 1e6));
-      const tipWei = BigInt(Math.floor(parseFloat(tip) * 1e6));
+      const amountWei = BigInt(Math.floor(amountNum * 1e6));
+      const tipWei = BigInt(Math.floor(tipNum * 1e6));
       const salt = BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
 
       // Ensure chain IDs are in the correct format
@@ -139,6 +177,14 @@ export function useContract() {
         destinationChain,
         targetChainId: targetChainId.toString(),
       });
+
+      // Validate all BigInt values before creating args
+      if (amountWei <= BigInt(0)) {
+        throw new Error('Amount must be greater than 0');
+      }
+      if (targetChainId <= BigInt(0)) {
+        throw new Error('Invalid target chain ID');
+      }
 
       const args: [
         `0x${string}`,
@@ -166,7 +212,7 @@ export function useContract() {
       });
 
       // Call the initiate function on the contract
-      const { hash } = await contract.write.initiate(args);
+      const hash = await contract.write.initiate(args);
       intentHash = hash;
 
       if (!isMounted.current) {
@@ -189,27 +235,26 @@ export function useContract() {
 
       // Find the IntentInitiated event in the receipt
       const event = receipt.logs.find((log) => {
-        try {
-          const { eventName } = contract.interface.parseLog(log);
-          return eventName === 'IntentInitiated';
-        } catch {
-          return false;
-        }
+        // The first topic is the event signature
+        const eventSignature = 'IntentInitiated(bytes32,address,uint256,uint256,bytes,uint256,uint256)';
+        const eventSignatureHash = keccak256(toUtf8Bytes(eventSignature));
+        return log.topics[0] === eventSignatureHash;
       });
 
-      if (!event) {
-        throw new Error('Failed to find IntentInitiated event');
+      if (!event || !event.topics[1] || !event.topics[2]) {
+        throw new Error('Failed to find IntentInitiated event or missing required topics');
       }
 
-      // Decode the event data
-      const { args: eventArgs } = contract.interface.parseLog(event);
+      // Parse the event data
+      const intentId = event.topics[1] as `0x${string}`; // First indexed parameter (intentId)
+      const asset = `0x${event.topics[2].slice(26)}` as `0x${string}`; // Second indexed parameter (asset), convert to address format
 
       if (!isMounted.current) {
         throw new Error('Component unmounted during event processing');
       }
 
       return {
-        id: eventArgs.intentId,
+        id: intentId,
         source_chain: sourceChain === base.id ? 'BASE' : 'ARBITRUM',
         destination_chain: destinationChain === base.id ? 'BASE' : 'ARBITRUM',
         token,

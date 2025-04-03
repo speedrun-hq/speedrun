@@ -68,7 +68,7 @@ export function useIntentForm() {
       const destinationChainId = getChainId(formState.destinationChain);
       const tokenAddress = TOKENS[sourceChainId][formState.selectedToken].address;
 
-      const intent = await createIntent(
+      await createIntent(
         sourceChainId,
         destinationChainId,
         tokenAddress,
@@ -76,16 +76,6 @@ export function useIntentForm() {
         formState.recipient,
         formState.tip
       );
-
-      // Create intent in the backend
-      await apiService.createIntent({
-        source_chain: formState.sourceChain,
-        destination_chain: formState.destinationChain,
-        token: formState.selectedToken,
-        amount: formState.amount,
-        recipient: formState.recipient,
-        intent_fee: formState.tip,
-      });
 
       setFormState(prev => ({
         ...prev,
