@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -31,8 +32,9 @@ func (s *Server) Start(addr string) error {
 	router := gin.Default()
 
 	// Configure CORS
+	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:3000"}
+	config.AllowOrigins = strings.Split(allowedOrigins, ",")
 	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
 	router.Use(cors.New(config))
