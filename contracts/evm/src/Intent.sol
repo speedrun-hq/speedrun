@@ -225,8 +225,8 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Check if intent is already fulfilled with these parameters
         require(fulfillments[fulfillmentIndex] == address(0), "Intent already fulfilled with these parameters");
 
-        // Transfer tokens from this contract to the receiver
-        IERC20(asset).transfer(receiver, amount);
+        // Transfer tokens from the sender to the receiver
+        IERC20(asset).transferFrom(msg.sender, receiver, amount);
 
         // Register the fulfillment
         fulfillments[fulfillmentIndex] = msg.sender;

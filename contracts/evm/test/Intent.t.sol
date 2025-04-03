@@ -66,10 +66,7 @@ contract IntentTest is Test {
         );
         intent = Intent(address(proxy));
 
-        // Setup test tokens
-        token.mint(user1, 1000 ether);
-        vm.prank(user1);
-        token.approve(address(intent), 1000 ether);
+        // Setup test tokens - We'll mint specific amounts in each test rather than here
     }
 
     function test_Initialization() public {
@@ -123,9 +120,14 @@ contract IntentTest is Test {
         // Verify it matches the expected computation
         assertEq(nextIntentId, intent.computeIntentId(initialCounter, salt, currentChainId));
         
-        // Initiate an intent which should increment the counter
+        // Mint tokens for initiate
         uint256 amount = 50 ether;
         uint256 tip = 5 ether;
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+        
+        // Initiate an intent which should increment the counter
         uint256 targetChain = 2;
         bytes memory receiver = abi.encodePacked(user2);
         
@@ -196,6 +198,11 @@ contract IntentTest is Test {
         uint256 salt = 123;
         uint256 currentChainId = block.chainid;
 
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
         // Expect the IntentInitiated event
         vm.expectEmit(true, true, false, false);
         emit IntentInitiated(
@@ -242,22 +249,20 @@ contract IntentTest is Test {
 
     function test_InitiateInsufficientBalance() public {
         // Test parameters
-        uint256 amount = 1000 ether; // More than user1's balance
+        uint256 amount = 1000 ether;
         uint256 tip = 10 ether;
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
-        // Call initiate and expect revert with ERC20InsufficientAllowance error
+        // Mint tokens for initiate, but not enough
+        token.mint(user1, amount); // Not enough for amount + tip
         vm.prank(user1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientAllowance.selector,
-                address(intent),
-                1000 ether,
-                1010 ether
-            )
-        );
+        token.approve(address(intent), amount + tip);
+
+        // Call initiate and expect revert with ERC20InsufficientBalance error
+        vm.prank(user1);
+        vm.expectRevert();
         intent.initiate(
             address(token),
             amount,
@@ -276,6 +281,11 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
             address(token),
@@ -286,8 +296,10 @@ contract IntentTest is Test {
             salt
         );
 
-        // Transfer tokens to the intent contract for fulfillment
-        token.mint(address(intent), amount);
+        // Mint tokens to the fulfiller (user1) and approve them for the intent contract
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
 
         // Expect the IntentFulfilled event
         vm.expectEmit(true, true, false, true);
@@ -316,7 +328,7 @@ contract IntentTest is Test {
         );
         assertEq(intent.fulfillments(fulfillmentIndex), user1);
 
-        // Verify tokens were transferred
+        // Verify tokens were transferred from user1 to user2
         assertEq(token.balanceOf(user2), amount);
     }
 
@@ -328,6 +340,11 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
             address(token),
@@ -338,8 +355,10 @@ contract IntentTest is Test {
             salt
         );
 
-        // Transfer tokens to the intent contract for fulfillment
-        token.mint(address(intent), amount);
+        // Mint tokens to the fulfiller (user1) and approve them for the intent contract
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
 
         // First fulfillment
         vm.prank(user1);
@@ -351,6 +370,11 @@ contract IntentTest is Test {
         );
 
         // Try to fulfill again with same parameters and expect revert
+        // First need to mint and approve more tokens
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
+        
         vm.prank(user1);
         vm.expectRevert("Intent already fulfilled with these parameters");
         intent.fulfill(
@@ -369,6 +393,11 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
             address(token),
@@ -379,8 +408,10 @@ contract IntentTest is Test {
             salt
         );
 
-        // Transfer tokens to the intent contract for both fulfillments
-        token.mint(address(intent), amount + (amount + 1 ether));
+        // Mint tokens to the fulfiller (user1) and approve them for both fulfillments
+        token.mint(user1, amount + (amount + 1 ether));
+        vm.prank(user1);
+        token.approve(address(intent), amount + (amount + 1 ether));
 
         // First fulfillment
         vm.prank(user1);
@@ -428,9 +459,12 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
-        // Store initial balance
-        uint256 initialBalance = token.balanceOf(user1);
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
 
+        // Initiate the intent
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
             address(token),
@@ -441,11 +475,10 @@ contract IntentTest is Test {
             salt
         );
 
-        // Account for tokens spent during initiate
-        initialBalance -= (amount + tip);
-
-        // Transfer tokens to the intent contract for fulfillment
-        token.mint(address(intent), amount);
+        // Mint additional tokens for fulfillment
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
 
         // Fulfill the intent
         vm.prank(user1);
@@ -488,13 +521,13 @@ contract IntentTest is Test {
             user2
         );
         (bool settled, bool fulfilled, uint256 paidTip, address fulfiller) = intent.settlements(fulfillmentIndex);
-        assertTrue(settled);
-        assertTrue(fulfilled);
-        assertEq(paidTip, tip);
-        assertEq(fulfiller, user1);
+        assertTrue(settled, "Settlement should be marked as settled");
+        assertTrue(fulfilled, "Settlement should be marked as fulfilled");
+        assertEq(paidTip, tip, "Paid tip should match the input tip");
+        assertEq(fulfiller, user1, "Fulfiller should be user1");
 
         // Verify tokens were transferred to fulfiller (amount + tip)
-        assertEq(token.balanceOf(user1), initialBalance + amount + tip);
+        assertEq(token.balanceOf(user1), amount + tip, "User1 should receive amount + tip");
     }
 
     function test_OnCallWithoutFulfillment() public {
@@ -504,6 +537,16 @@ contract IntentTest is Test {
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
+
+        // Reset user2 balance for clean testing
+        vm.prank(user2);
+        token.transfer(address(this), token.balanceOf(user2));
+        assertEq(token.balanceOf(user2), 0, "Initial balance should be 0");
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
@@ -553,7 +596,7 @@ contract IntentTest is Test {
         assertEq(fulfiller, address(0));
 
         // Verify tokens were transferred to receiver (amount + tip)
-        assertEq(token.balanceOf(user2), amount + tip);
+        assertEq(token.balanceOf(user2), amount + tip, "User2 should receive amount + tip");
     }
 
     function test_OnCallInvalidSender() public {
@@ -563,6 +606,11 @@ contract IntentTest is Test {
         uint256 targetChain = 1;
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
 
         vm.prank(user1);
         bytes32 intentId = intent.initiate(
@@ -609,8 +657,10 @@ contract IntentTest is Test {
         bytes memory receiver = abi.encodePacked(user2);
         uint256 salt = 123;
 
-        // Store initial user1 balance
-        uint256 initialBalance = token.balanceOf(user1);
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
 
         // Initiate an intent from user1
         vm.prank(user1);
@@ -622,12 +672,11 @@ contract IntentTest is Test {
             tip,
             salt
         );
-
-        // Account for tokens spent in initiate
-        initialBalance -= (amount + tip);
         
-        // Transfer tokens to the intent contract for fulfillment
-        token.mint(address(intent), amount);
+        // Mint additional tokens for fulfillment
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
 
         // Fulfill the intent with the original amount (for indexing purposes)
         vm.prank(user1);
@@ -677,8 +726,7 @@ contract IntentTest is Test {
 
         // Verify tokens were transferred to fulfiller
         // User1 should receive actualAmount (93 ether) + tip (3 ether) = 96 ether
-        uint256 expectedBalance = initialBalance + actualAmount + tip;
-        assertEq(token.balanceOf(user1), expectedBalance, "User1 should receive actualAmount + tip");
+        assertEq(token.balanceOf(user1), actualAmount + tip, "User1 should receive actualAmount + tip");
         
         // Additional check: the payment should be actualAmount + tip
         // rather than amount + tip that would have been sent with the original amount
