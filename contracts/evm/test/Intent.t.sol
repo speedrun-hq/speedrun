@@ -734,6 +734,154 @@ contract IntentTest is Test {
         assertLt(actualAmount, amount, "Actual amount should be less than original amount");
     }
 
+    function test_FulfillAlreadySettled() public {
+        // First create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Prepare settlement payload
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,
+            address(token),
+            user2,
+            tip,
+            amount  // actualAmount same as amount in the test case
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+
+        // Call onCall through gateway to settle the intent
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+
+        // Verify settlement was recorded
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        (bool settled, ,, ) = intent.settlements(fulfillmentIndex);
+        assertTrue(settled, "Settlement should be marked as settled");
+        
+        // Now try to fulfill the already settled intent
+        // Mint tokens to the fulfiller (user1) and approve them for the intent contract
+        token.mint(user1, amount);
+        vm.prank(user1);
+        token.approve(address(intent), amount);
+        
+        // Expect revert with "Intent already settled" error
+        vm.prank(user1);
+        vm.expectRevert("Intent already settled");
+        intent.fulfill(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+    }
+
+    function test_SettleAlreadySettled() public {
+        // First create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Prepare settlement payload
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,
+            address(token),
+            user2,
+            tip,
+            amount  // actualAmount same as amount in the test case
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+
+        // Call onCall through gateway to settle the intent the first time
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+
+        // Verify settlement was recorded
+        bytes32 fulfillmentIndex = PayloadUtils.computeFulfillmentIndex(
+            intentId,
+            address(token),
+            amount,
+            user2
+        );
+        (bool settled, ,, ) = intent.settlements(fulfillmentIndex);
+        assertTrue(settled, "Settlement should be marked as settled");
+        
+        // Now try to settle the already settled intent again
+        // Transfer more tokens to gateway for the second settlement attempt
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+        
+        // Expect revert with "Intent already settled" error
+        vm.prank(address(gateway));
+        vm.expectRevert("Intent already settled");
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+    }
+
     // TODO: Add more tests for:
     // - complete
     // - onCall

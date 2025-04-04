@@ -225,6 +225,9 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Check if intent is already fulfilled with these parameters
         require(fulfillments[fulfillmentIndex] == address(0), "Intent already fulfilled with these parameters");
 
+        // Check if intent has already been settled
+        require(!settlements[fulfillmentIndex].settled, "Intent already settled");
+
         // Transfer tokens from the sender to the receiver
         IERC20(asset).transferFrom(msg.sender, receiver, amount);
 
@@ -265,6 +268,9 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             amount,
             receiver
         );
+
+        // Check if intent has already been settled
+        require(!settlements[fulfillmentIndex].settled, "Intent already settled");
 
         // Get the fulfiller if it exists
         address fulfiller = fulfillments[fulfillmentIndex];
