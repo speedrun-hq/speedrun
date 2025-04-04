@@ -1,5 +1,19 @@
 # Deployment
 
+## Chain IDs and RPC URLs
+
+This table provides chain IDs and RPC URLs for the supported networks:
+
+| Network   | Chain ID | RPC URL                                     |
+|-----------|----------|---------------------------------------------|
+| Ethereum  | 1        | https://eth.llamarpc.com                    |
+| BNB Chain | 56       | https://bsc-dataseed.bnbchain.org            |
+| Polygon   | 137      | https://polygon-rpc.com                     |
+| Base      | 8453     | https://mainnet.base.org                    |
+| Avalanche | 43114    | https://avalanche-c-chain-rpc.publicnode.com       |
+| Arbitrum  | 42161    | https://arb1.arbitrum.io/rpc                |
+| ZetaChain | 7000     | https://zetachain-evm.blockpi.network/v1/rpc/public |
+
 ## Deploying on Mainnet to Enable USDT on Base and Arbitrum
 
 These commands showcase how the infrastucture can be deployed on Mainnet to support USDC between Base and Arbitrum.
@@ -124,6 +138,13 @@ forge script script/IntentImplementation.s.sol \
   --chain-id 8453 \
   --broadcast
 
+# Deploy new implementation on Arbitrum
+forge script script/IntentImplementation.s.sol \
+  --rpc-url https://arb1.arbitrum.io/rpc \
+  --chain-id 42161 \
+  --broadcast
+```
+
 Note down the address of the new implementation contract that was deployed.
 
 ### 2. Upgrade Existing Proxy
@@ -141,4 +162,11 @@ forge script script/UpgradeIntent.s.sol \
   --rpc-url https://mainnet.base.org \
   --chain-id 8453 \
   --broadcast
+
+# Upgrade proxy on Arbitrum
+forge script script/UpgradeIntent.s.sol \
+  --rpc-url https://arb1.arbitrum.io/rpc \
+  --chain-id 42161 \
+  --broadcast
+```
 
