@@ -11,8 +11,18 @@ const arcade = Press_Start_2P({
 });
 
 export const metadata: Metadata = {
-  title: 'ZetaFast',
-  description: 'Fast cross-chain transfers powered by ZetaChain',
+  title: 'SpeedRun',
+  description: 'Fast cross-chain token transfers powered by ZetaChain',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/favicon.svg' },
+    ],
+  },
+  manifest: '/site.webmanifest',
 };
 
 export default function RootLayout({
