@@ -66,8 +66,15 @@ const CompletedAnimation: React.FC<CompletedAnimationProps> = ({ time = "1:42" }
   return (
     <div className="flex flex-col items-center my-4">
       <div className="border-2 border-green-500 bg-black p-4 w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-center mb-2">
-          <span className="text-green-500 text-xs arcade-text">LEVEL COMPLETE</span>
+        <div className="flex justify-between mb-2">
+          <div className="flex flex-col items-center">
+            <span className="text-green-500 text-xs arcade-text">TRANSFER</span>
+            <span className="text-green-500 text-xs arcade-text">DONE</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-green-500 text-xs arcade-text">LEVEL</span>
+            <span className="text-green-500 text-xs arcade-text">COMPLETE</span>
+          </div>
         </div>
         
         <div className="relative flex justify-center py-3 min-h-[60px]">

@@ -9,8 +9,6 @@ import { useIntentForm } from '@/hooks/useIntentForm';
 import { base } from 'wagmi/chains';
 import { getChainId } from '@/utils/chain';
 import { useAccount } from 'wagmi';
-import PendingAnimation from './PendingAnimation';
-import CompletedAnimation from './CompletedAnimation';
 
 export default function CreateNewIntent() {
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -141,12 +139,6 @@ export default function CreateNewIntent() {
           >
             {!isConnected ? 'CONNECT WALLET TO SUBMIT' : formState.isSubmitting ? 'APPROVING TOKENS...' : 'START'}
           </button>
-          
-          {/* Temporarily display the animations */}
-          <div className="space-y-1 mb-4">
-            <PendingAnimation />
-            <CompletedAnimation time="1:42" />
-          </div>
           
           <div className="mt-3 text-center">
             <button
