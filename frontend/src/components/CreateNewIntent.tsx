@@ -71,6 +71,7 @@ export default function CreateNewIntent() {
                   onChange={(value) => updateSourceChain(value === base.id ? 'BASE' : 'ARBITRUM')}
                   label="SELECT SOURCE CHAIN"
                   disabled={formState.isSubmitting}
+                  selectorType="from"
                 />
               </div>
 
@@ -81,6 +82,7 @@ export default function CreateNewIntent() {
                   onChange={(value) => updateDestinationChain(value === base.id ? 'BASE' : 'ARBITRUM')}
                   label="SELECT DESTINATION CHAIN"
                   disabled={formState.isSubmitting}
+                  selectorType="to"
                 />
               </div>
             </div>
