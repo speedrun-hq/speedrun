@@ -115,7 +115,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	// Check for any errors from intent catch-ups
 	for err := range intentErrors {
 		if err != nil {
-			return err
+			log.Printf("Error during intent catch-up: %v", err)
 		}
 	}
 
@@ -177,7 +177,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	// Check for any errors from fulfillment catch-ups
 	for err := range fulfillmentErrors {
 		if err != nil {
-			return err
+			log.Printf("Error during fulfillment catch-up: %v", err)
 		}
 	}
 
@@ -239,7 +239,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	// Check for any errors from settlement catch-ups
 	for err := range settlementErrors {
 		if err != nil {
-			return err
+			log.Printf("Error during settlement catch-up: %v", err)
 		}
 	}
 
