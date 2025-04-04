@@ -12,6 +12,7 @@ import {IZRC20} from "../src/interfaces/IZRC20.sol";
 import {IUniswapV3Router} from "../src/interfaces/IUniswapV3Router.sol";
 import {ISwap} from "../src/interfaces/ISwap.sol";
 import {MockSwapModule} from "./mocks/MockSwapModule.sol";
+import {MockFixedOutputSwapModule} from "./mocks/MockFixedOutputSwapModule.sol";
 import "forge-std/console.sol";
 
 contract RouterTest is Test {
@@ -21,6 +22,7 @@ contract RouterTest is Test {
     MockToken public gasZRC20;
     MockToken public targetZRC20;
     MockSwapModule public swapModule;
+    MockFixedOutputSwapModule public fixedOutputSwapModule;
     address public owner;
     address public user1;
     address public user2;
@@ -50,9 +52,15 @@ contract RouterTest is Test {
         gasZRC20 = new MockToken("Gas Token", "GAS");
         targetZRC20 = new MockToken("Target Token", "TARGET");
         swapModule = new MockSwapModule();
+        fixedOutputSwapModule = new MockFixedOutputSwapModule();
 
         // Deploy router directly (no proxy)
         router = new Router(address(gateway), address(swapModule));
+    }
+
+    // Helper function to create a router with the fixed output swap module
+    function createFixedOutputRouter() internal returns (Router) {
+        return new Router(address(gateway), address(fixedOutputSwapModule));
     }
 
     function test_SetIntentContract() public {
@@ -372,7 +380,7 @@ contract RouterTest is Test {
 
         // Setup intent payload with a very small amount and tip
         bytes32 intentId = keccak256("test-intent");
-        uint256 amount = 100 ether;      // Amount (we'll pass in a different amount in the onCall)
+        uint256 amount = 11 ether;      // Amount (we'll pass in a different amount in the onCall)
         uint256 intentAmount = 10 ether; // Amount in the intent payload (this is what gets checked against remainingCost)
         uint256 tip = 1 ether;           // Small tip
         bytes memory receiver = abi.encodePacked(user2);
@@ -389,7 +397,7 @@ contract RouterTest is Test {
         swapModule.setSlippage(1000);
 
         // Mock setup for IZRC20 withdrawGasFeeWithGasLimit - high gas fee
-        uint256 gasFee = 5 ether;
+        uint256 gasFee = 11 ether;
         vm.mockCall(
             address(targetZRC20),
             abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, router.withdrawGasLimit()),
@@ -520,5 +528,104 @@ contract RouterTest is Test {
         // 2. The tip (3 ether) was fully used (tip = 0 in the event)
         // 3. The remaining 7 ether was deducted from the amount
         // 4. Expected actualAmount is 93 ether (100 - 7)
+    }
+
+
+
+    function test_OnCall_DifferentDecimals() public {
+        // Create a router using the fixed output swap module
+        Router fixedRouter = createFixedOutputRouter();
+        
+        // Setup intent contract
+        uint256 sourceChainId = 1;
+        uint256 targetChainId = 2;
+        address sourceIntentContract = makeAddr("sourceIntentContract");
+        address targetIntentContract = makeAddr("targetIntentContract");
+        fixedRouter.setIntentContract(sourceChainId, sourceIntentContract);
+        fixedRouter.setIntentContract(targetChainId, targetIntentContract);
+
+        // Setup token associations
+        string memory tokenName = "USDC";
+        fixedRouter.addToken(tokenName);
+        address inputAsset = makeAddr("input_asset");
+        address targetAsset = makeAddr("target_asset");
+        fixedRouter.addTokenAssociation(tokenName, sourceChainId, inputAsset, address(inputToken));
+        fixedRouter.addTokenAssociation(tokenName, targetChainId, targetAsset, address(targetZRC20));
+
+        // Setup intent payload
+        bytes32 intentId = keccak256("test-intent");
+        uint256 amount = 100 * 10**6; // 100 USDC with 6 decimals
+        uint256 tip = 10 * 10**6;     // 10 USDC with 6 decimals
+        bytes memory receiver = abi.encodePacked(user2);
+
+        bytes memory intentPayloadBytes = PayloadUtils.encodeIntentPayload(
+            intentId,
+            amount,
+            tip,
+            targetChainId,
+            receiver
+        );
+
+        // Mock decimals for input token (6 decimals like USDC)
+        vm.mockCall(
+            address(inputToken),
+            abi.encodeWithSelector(IZRC20.decimals.selector),
+            abi.encode(uint8(6))
+        );
+        
+        // Mock decimals for target token (18 decimals like most tokens)
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.decimals.selector),
+            abi.encode(uint8(18))
+        );
+
+        // Calculate the expected amount in target decimals
+        uint256 expectedAmountInTargetDecimals = amount * 10**12; // 100e6 * 10^12 = 100e18
+        uint256 expectedTipInTargetDecimals = tip * 10**12;       // 10e6 * 10^12 = 10e18
+        uint256 expectedTotal = expectedAmountInTargetDecimals + expectedTipInTargetDecimals;
+
+        // Set a fixed output amount that's slightly less than the converted total
+        // This simulates some slippage
+        fixedOutputSwapModule.setFixedOutputAmount(expectedTotal);
+
+        // Mock setup for IZRC20 withdrawGasFeeWithGasLimit
+        uint256 gasFee = 1 ether; // 1 token with 18 decimals for gas fee
+        vm.mockCall(
+            address(targetZRC20),
+            abi.encodeWithSelector(IZRC20.withdrawGasFeeWithGasLimit.selector, fixedRouter.withdrawGasLimit()),
+            abi.encode(address(gasZRC20), gasFee)
+        );
+        
+        // Mint tokens to make the test work
+        inputToken.mint(address(fixedRouter), amount + tip);
+        targetZRC20.mint(address(fixedOutputSwapModule), expectedTotal);
+        gasZRC20.mint(address(fixedOutputSwapModule), gasFee);
+        
+        // Setup context
+        IGateway.ZetaChainMessageContext memory context = IGateway.ZetaChainMessageContext({
+            chainID: sourceChainId,
+            sender: abi.encodePacked(sourceIntentContract),
+            senderEVM: sourceIntentContract
+        });
+
+        // Check event is emitted with correct values - tip should be slightly reduced due to slippage
+        vm.expectEmit();
+        emit IntentSettlementForwarded(
+            context.sender,
+            context.chainID,
+            targetChainId,
+            address(inputToken),
+            amount + tip,
+            expectedTipInTargetDecimals
+        );
+
+        // Call onCall
+        vm.prank(address(gateway));
+        fixedRouter.onCall(context, address(inputToken), amount + tip, intentPayloadBytes);
+
+        // Verify approvals were made to the gateway
+        assertTrue(targetZRC20.allowance(address(fixedRouter), address(gateway)) > 0, "Router should approve target ZRC20 to gateway");
+        assertTrue(gasZRC20.allowance(address(fixedRouter), address(gateway)) > 0, "Router should approve gas ZRC20 to gateway");
     }
 } 

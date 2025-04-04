@@ -8,6 +8,7 @@ import "./interfaces/IGateway.sol";
 import "./interfaces/IZRC20.sol";
 import "./interfaces/ISwap.sol";
 import "./utils/PayloadUtils.sol";
+// import "forge-std/console.sol";
 
 /**
  * @title Router
@@ -84,6 +85,36 @@ contract Router {
     }
 
     /**
+     * @dev Calculates the expected amount when converting between tokens with different decimal places
+     * @param amountIn The input amount with the source token's decimal precision
+     * @param decimalsIn The decimal places of the source token
+     * @param decimalsOut The decimal places of the destination token
+     * @return The expected amount with the destination token's decimal precision
+     */
+    function calculateExpectedAmount(
+        uint256 amountIn,
+        uint8 decimalsIn,
+        uint8 decimalsOut
+    ) public pure returns (uint256) {
+        // If decimals are the same, no conversion needed
+        if (decimalsIn == decimalsOut) {
+            return amountIn;
+        }
+        
+        // If destination has more decimals, multiply
+        if (decimalsOut > decimalsIn) {
+            uint256 factor = 10 ** (decimalsOut - decimalsIn);
+            return amountIn * factor;
+        }
+        
+        // If destination has fewer decimals, divide
+        uint256 factor = 10 ** (decimalsIn - decimalsOut);
+        
+        // Round down by default (matches typical token behavior)
+        return amountIn / factor;
+    }
+
+    /**
      * @dev Modifier to restrict access to the admin
      */
     modifier onlyAdmin() {
@@ -102,20 +133,20 @@ contract Router {
      * @dev Handles incoming messages from the gateway
      * @param context The message context containing sender and chain information
      * @param zrc20 The ZRC20 token address
-     * @param amount The amount of tokens
-     * @param message The encoded message containing intent payload
+     * @param amountWithTip The amount of tokens with tip
+     * @param payload The encoded message containing intent payload
      */
     function onCall(
         IGateway.ZetaChainMessageContext calldata context,
         address zrc20,
-        uint256 amount,
-        bytes calldata message
+        uint256 amountWithTip,
+        bytes calldata payload
     ) external onlyGateway {
         // Verify the call is coming from the intent contract for this chain
         require(intentContracts[context.chainID] == context.senderEVM, "Call must be from intent contract");
 
         // Decode intent payload
-        PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(message);
+        PayloadUtils.IntentPayload memory intentPayload = PayloadUtils.decodeIntentPayload(payload);
 
         // Get token association for target chain
         (address targetAsset, address targetZRC20, uint256 chainIdValue) = getTokenAssociation(zrc20, intentPayload.targetChain);
@@ -124,35 +155,49 @@ contract Router {
         address intentContract = intentContracts[intentPayload.targetChain];
         require(intentContract != address(0), "Intent contract not set for target chain");
 
+        // Get decimals for source and target tokens
+        uint8 sourceDecimals = IZRC20(zrc20).decimals();
+        uint8 targetDecimals = IZRC20(targetZRC20).decimals();
+        
+        // Convert amounts to target token decimal representation
+        (uint256 wantedAmount, uint256 wantedTip, uint256 wantedAmountWithTip) = 
+            _convertAmountsForDecimals(
+                intentPayload.amount,
+                intentPayload.tip,
+                amountWithTip,
+                sourceDecimals,
+                targetDecimals
+            );
+
         // Get gas fee info from target ZRC20
         (address gasZRC20, uint256 gasFee) = IZRC20(targetZRC20).withdrawGasFeeWithGasLimit(withdrawGasLimit);
 
         // Approve swap module to spend tokens
-        IERC20(zrc20).approve(swapModule, amount);
+        IERC20(zrc20).approve(swapModule, amountWithTip);
 
         // Perform swap through swap module
-        uint256 amountOut = ISwap(swapModule).swap(zrc20, targetZRC20, amount, gasZRC20, gasFee);
+        uint256 amountWithTipOut = ISwap(swapModule).swap(zrc20, targetZRC20, amountWithTip, gasZRC20, gasFee);
 
         // Calculate slippage difference and adjust tip accordingly
-        uint256 slippageAndFeeCost = amount - amountOut;
+        uint256 slippageAndFeeCost = wantedAmountWithTip - amountWithTipOut;
         
         // Initialize tip and actual amount
         uint256 tipAfterSwap;
-        uint256 actualAmount = intentPayload.amount;
+        uint256 actualAmount = wantedAmount;
 
         // Check if tip covers the slippage and fee costs
-        if (intentPayload.tip > slippageAndFeeCost) {
+        if (wantedTip > slippageAndFeeCost) {
             // Tip covers all costs, subtract from tip only
-            tipAfterSwap = intentPayload.tip - slippageAndFeeCost;
+            tipAfterSwap = wantedTip - slippageAndFeeCost;
         } else {
             // Tip doesn't cover costs, use it all and reduce the amount
             tipAfterSwap = 0;
             // Calculate how much remaining slippage to cover from the amount
-            uint256 remainingCost = slippageAndFeeCost - intentPayload.tip;
+            uint256 remainingCost = slippageAndFeeCost - wantedTip;
             // Ensure the amount is greater than the remaining cost, otherwise fail
-            require(intentPayload.amount > remainingCost, "Amount insufficient to cover costs after tip");
+            require(wantedAmount > remainingCost, "Amount insufficient to cover costs after tip");
             // Reduce the actual amount by the remaining cost
-            actualAmount = intentPayload.amount - remainingCost;
+            actualAmount = wantedAmount - remainingCost;
         }
 
         // Convert receiver from bytes to address
@@ -161,7 +206,7 @@ contract Router {
         // Encode settlement payload
         bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
             intentPayload.intentId,
-            intentPayload.amount, // original amount for index computation
+            wantedAmount, // amount for index computation
             targetAsset,
             receiverAddress,
             tipAfterSwap,
@@ -184,13 +229,13 @@ contract Router {
         });
 
         // Approve gateway to spend tokens
-        IERC20(targetZRC20).approve(gateway, amountOut);
+        IERC20(targetZRC20).approve(gateway, amountWithTipOut);
         IERC20(gasZRC20).approve(gateway, gasFee);
 
         // Call gateway to withdraw and call intent contract
         IGateway(gateway).withdrawAndCall(
             abi.encodePacked(intentContract),
-            amountOut,
+            amountWithTipOut,
             targetZRC20,
             settlementPayload,
             callOptions,
@@ -202,9 +247,49 @@ contract Router {
             context.chainID,
             intentPayload.targetChain,
             zrc20,
-            amount,
+            amountWithTip,
             tipAfterSwap
         );
+    }
+    
+    /**
+     * @dev Helper function to convert amounts between different token decimal representations
+     * @param amount The original amount
+     * @param tip The original tip
+     * @param amountWithTip The original amount with tip
+     * @param sourceDecimals The source token's decimal places
+     * @param targetDecimals The target token's decimal places
+     * @return wantedAmount The adjusted amount in target decimal representation
+     * @return wantedTip The adjusted tip in target decimal representation
+     * @return wantedAmountWithTip The adjusted total amount in target decimal representation
+     */
+    function _convertAmountsForDecimals(
+        uint256 amount,
+        uint256 tip,
+        uint256 amountWithTip,
+        uint8 sourceDecimals,
+        uint8 targetDecimals
+    ) private pure returns (
+        uint256 wantedAmount,
+        uint256 wantedTip,
+        uint256 wantedAmountWithTip
+    ) {
+        // Convert the individual amount and the total amount with tip
+        wantedAmount = calculateExpectedAmount(amount, sourceDecimals, targetDecimals);
+        wantedAmountWithTip = calculateExpectedAmount(amountWithTip, sourceDecimals, targetDecimals);
+        
+        // Calculate tip as the difference to maintain the invariant:
+        // wantedAmount + wantedTip == wantedAmountWithTip
+        if (wantedAmountWithTip > wantedAmount) {
+            wantedTip = wantedAmountWithTip - wantedAmount;
+        } else {
+            // Edge case handling if there's some rounding issue
+            wantedTip = 0;
+            // Ensure the invariant holds even in edge cases
+            wantedAmountWithTip = wantedAmount;
+        }
+        
+        return (wantedAmount, wantedTip, wantedAmountWithTip);
     }
 
     /**

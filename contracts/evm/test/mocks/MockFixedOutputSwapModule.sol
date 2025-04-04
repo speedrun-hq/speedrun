@@ -5,13 +5,13 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../../src/interfaces/ISwap.sol";
 import "../../src/interfaces/IZRC20.sol";
 
-contract MockSwapModule is ISwap {
-    // Control parameters to simulate different swap behaviors
-    uint256 public slippage = 0; // 0 = no slippage (1:1 swap), higher means more slippage
-    bool public useDecimalAdjustment = false; // Flag to enable/disable decimal adjustment
+contract MockFixedOutputSwapModule is ISwap {
+    // Fixed output amount to return
+    uint256 public fixedOutputAmount;
     
-    function setSlippage(uint256 _slippage) external {
-        slippage = _slippage;
+    // Set the fixed output amount to return
+    function setFixedOutputAmount(uint256 _fixedOutputAmount) external {
+        fixedOutputAmount = _fixedOutputAmount;
     }
     
     function swap(
@@ -24,12 +24,8 @@ contract MockSwapModule is ISwap {
         // Transfer tokens from sender to this contract
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
         
-        // Calculate amount out based on slippage settings
-        uint256 slippageCost = (amountIn * slippage) / 10000; // slippage in basis points (e.g., 100 = 1%)
-
-        require(amountIn > slippageCost + gasFee, "Amount insufficient to cover costs after tip");
-
-        amountOut = amountIn - slippageCost - gasFee;
+        // Just return the fixed output amount, ignoring all calculations
+        amountOut = fixedOutputAmount;
         
         // Transfer tokens back to the sender
         IERC20(tokenOut).transfer(msg.sender, amountOut);
