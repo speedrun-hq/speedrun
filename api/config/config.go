@@ -103,7 +103,7 @@ func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
 	// Get supported chains
-	supportedChainsStr := strings.Split(getEnvOrDefault("SUPPORTED_CHAINS", "42161,8453"), ",")
+	supportedChainsStr := strings.Split(getEnvOrDefault("SUPPORTED_CHAINS", "42161,8453,137,1,43114"), ",")
 	supportedChains := make([]uint64, len(supportedChainsStr))
 	for i, chain := range supportedChainsStr {
 		chainID, err := strconv.ParseUint(chain, 10, 64)
@@ -126,6 +126,14 @@ func LoadConfig() (*Config, error) {
 			prefix = "BASE"
 		case 7001:
 			prefix = "ZETA"
+		case 137:
+			prefix = "POLYGON"
+		case 1:
+			prefix = "ETHEREUM"
+		case 56:
+			prefix = "BSC"
+		case 43114:
+			prefix = "AVALANCHE"
 		default:
 			return nil, fmt.Errorf("unsupported chain ID: %d", chainID)
 		}

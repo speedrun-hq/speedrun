@@ -55,9 +55,10 @@ type Intent struct {
 
 // FulfillerService handles the intent fulfillment process
 type FulfillerService struct {
-	config     *Config
-	httpClient *http.Client
-	mu         sync.Mutex
+	config         *Config
+	httpClient     *http.Client
+	mu             sync.Mutex
+	tokenAddresses map[int]common.Address
 }
 
 // NewFulfillerService creates a new fulfiller service
@@ -97,9 +98,35 @@ func NewFulfillerService(config *Config) (*FulfillerService, error) {
 		chainConfig.Auth = auth
 	}
 
+	// Initialize token addresses map
+	tokenAddresses := make(map[int]common.Address)
+
+	// Set token addresses for each chain
+	if baseUSDC := os.Getenv("BASE_USDC_ADDRESS"); baseUSDC != "" {
+		tokenAddresses[8453] = common.HexToAddress(baseUSDC)
+	}
+
+	if arbitrumUSDC := os.Getenv("ARBITRUM_USDC_ADDRESS"); arbitrumUSDC != "" {
+		tokenAddresses[42161] = common.HexToAddress(arbitrumUSDC)
+	}
+
+	if polygonUSDC := os.Getenv("POLYGON_USDC_ADDRESS"); polygonUSDC != "" {
+		tokenAddresses[137] = common.HexToAddress(polygonUSDC)
+	}
+
+	if ethereumUSDC := os.Getenv("ETHEREUM_USDC_ADDRESS"); ethereumUSDC != "" {
+		tokenAddresses[1] = common.HexToAddress(ethereumUSDC)
+	}
+
+	if avalancheUSDC := os.Getenv("AVALANCHE_USDC_ADDRESS"); avalancheUSDC != "" {
+		tokenAddresses[43114] = common.HexToAddress(avalancheUSDC)
+	}
+
+
 	return &FulfillerService{
-		config:     config,
-		httpClient: &http.Client{},
+		config:         config,
+		httpClient:     &http.Client{},
+		tokenAddresses: tokenAddresses,
 	}, nil
 }
 
@@ -157,14 +184,6 @@ func (s *FulfillerService) fulfillIntent(intent Intent) error {
 		return fmt.Errorf("invalid amount: %s", intent.Amount)
 	}
 
-	// Add intent fee to amount
-	intentFee, ok := new(big.Int).SetString(intent.IntentFee, 10)
-	if !ok {
-		return fmt.Errorf("invalid intent fee: %s", intent.IntentFee)
-	}
-	amount.Add(amount, intentFee)
-	approveAmount := new(big.Int).Add(amount, big.NewInt(1000000))
-
 	log.Printf("Fulfilling intent %s on chain %d with amount %s", intent.ID, intent.DestinationChain, amount.String())
 
 	// Convert addresses
@@ -172,6 +191,17 @@ func (s *FulfillerService) fulfillIntent(intent Intent) error {
 
 	// Get the Intent contract address
 	intentAddress := common.HexToAddress(chainConfig.IntentAddress)
+
+	// Get token address from the map
+	s.mu.Lock()
+	tokenAddress, exists := s.tokenAddresses[intent.DestinationChain]
+	s.mu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("token address not configured for chain: %d", intent.DestinationChain)
+	}
+
+	log.Printf("Using token address %s for chain %d", tokenAddress.Hex(), intent.DestinationChain)
 
 	// First, approve the token transfer
 	// We need to approve the Intent contract to spend our tokens
@@ -227,14 +257,6 @@ func (s *FulfillerService) fulfillIntent(intent Intent) error {
 		return fmt.Errorf("failed to parse ERC20 ABI: %v", err)
 	}
 
-	var tokenAddress common.Address
-	if intent.DestinationChain == 8453 {
-		tokenAddress = common.HexToAddress(os.Getenv("BASE_USDC_ADDRESS"))
-	} else if intent.DestinationChain == 42161 {
-		tokenAddress = common.HexToAddress(os.Getenv("ARBITRUM_USDC_ADDRESS"))
-	} else {
-		return fmt.Errorf("unsupported chain: %d", intent.DestinationChain)
-	}
 	// Create ERC20 contract binding
 	erc20Contract := bind.NewBoundContract(
 		tokenAddress,
@@ -245,7 +267,7 @@ func (s *FulfillerService) fulfillIntent(intent Intent) error {
 	)
 
 	// Send the approve transaction
-	approveTx, err := erc20Contract.Transact(chainConfig.Auth, "approve", intentAddress, approveAmount)
+	approveTx, err := erc20Contract.Transact(chainConfig.Auth, "approve", intentAddress, amount)
 	if err != nil {
 		return fmt.Errorf("failed to approve token transfer: %v", err)
 	}
@@ -336,6 +358,30 @@ func main() {
 		chains[42161] = &ChainConfig{
 			RPCURL:        rpcURL,
 			IntentAddress: os.Getenv("ARBITRUM_INTENT_ADDRESS"),
+		}
+	}
+
+	// Polygon chain
+	if rpcURL := os.Getenv("POLYGON_RPC_URL"); rpcURL != "" {
+		chains[137] = &ChainConfig{
+			RPCURL:        rpcURL,
+			IntentAddress: os.Getenv("POLYGON_INTENT_ADDRESS"),
+		}
+	}
+
+	// Ethereum chain
+	if rpcURL := os.Getenv("ETHEREUM_RPC_URL"); rpcURL != "" {
+		chains[1] = &ChainConfig{
+			RPCURL:        rpcURL,
+			IntentAddress: os.Getenv("ETHEREUM_INTENT_ADDRESS"),
+		}
+	}		
+
+	// Avalanche chain
+	if rpcURL := os.Getenv("AVALANCHE_RPC_URL"); rpcURL != "" {
+		chains[43114] = &ChainConfig{
+			RPCURL:        rpcURL,
+			IntentAddress: os.Getenv("AVALANCHE_INTENT_ADDRESS"),
 		}
 	}
 
