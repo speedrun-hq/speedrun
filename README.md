@@ -14,6 +14,10 @@ ZetaFast is a novel cross-chain transfer system that leverages ZetaChain's infra
 - **Simple Interface**: Clean, intuitive web interface for transfer initiation
 - **Extensible Architecture**: Ready for future features like intent-based swaps
 
+## Smart Contracts
+
+[Learn more about the smart contracts](./contracts/evm/README.md)
+
 ## Architecture
 
 ### Core Components
