@@ -29,6 +29,7 @@ type ChainConfig struct {
 	Client        *ethclient.Client
 	Contract      *contracts.Intent
 	Auth          *bind.TransactOpts
+	MinFee        *big.Int
 }
 
 // Config holds the configuration for the fulfiller service
@@ -122,6 +123,9 @@ func NewFulfillerService(config *Config) (*FulfillerService, error) {
 		tokenAddresses[43114] = common.HexToAddress(avalancheUSDC)
 	}
 
+	if bscUSDC := os.Getenv("BSC_USDC_ADDRESS"); bscUSDC != "" {
+		tokenAddresses[56] = common.HexToAddress(bscUSDC)
+	}
 
 	return &FulfillerService{
 		config:         config,
@@ -161,8 +165,40 @@ func filterPendingIntents(intents []Intent) []Intent {
 			pendingIntents = append(pendingIntents, intent)
 		}
 	}
-	log.Printf("Found %d pending intents", len(pendingIntents))
 	return pendingIntents
+}
+
+// filterViableIntents filters intents that are viable for fulfillment
+func (s *FulfillerService) filterViableIntents(intents []Intent) []Intent {
+	viableIntents := []Intent{}
+	for _, intent := range intents {
+		fee, success := new(big.Int).SetString(intent.IntentFee, 10)
+		if !success {
+			log.Printf("Error parsing intent fee for %s: invalid format", intent.ID)
+			continue
+		}
+		if fee.Cmp(big.NewInt(0)) <= 0 {
+			continue
+		}
+
+		// Check if fee meets minimum requirement for the chain
+		s.mu.Lock()
+		chainConfig, exists := s.config.Chains[intent.DestinationChain]
+		s.mu.Unlock()
+
+		if !exists {
+			log.Printf("Chain configuration not found for %d", intent.DestinationChain)
+			continue
+		}
+
+		if chainConfig.MinFee != nil && fee.Cmp(chainConfig.MinFee) < 0 {
+			log.Printf("Fee %s below minimum %s for chain %d", fee.String(), chainConfig.MinFee.String(), intent.DestinationChain)
+			continue
+		}
+
+		viableIntents = append(viableIntents, intent)
+	}
+	return viableIntents
 }
 
 // fulfillIntent attempts to fulfill a single intent
@@ -182,6 +218,13 @@ func (s *FulfillerService) fulfillIntent(intent Intent) error {
 	amount, ok := new(big.Int).SetString(intent.Amount, 10)
 	if !ok {
 		return fmt.Errorf("invalid amount: %s", intent.Amount)
+	}
+
+	//convert for BSC unit difference
+	if intent.SourceChain == 56 {
+		amount = new(big.Int).Div(amount, big.NewInt(1000000000000))
+	} else if intent.DestinationChain == 56 {
+		amount = new(big.Int).Mul(amount, big.NewInt(1000000000000))
 	}
 
 	log.Printf("Fulfilling intent %s on chain %d with amount %s", intent.ID, intent.DestinationChain, amount.String())
@@ -316,17 +359,39 @@ func (s *FulfillerService) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			intents, err := s.fetchPendingIntents()
+			log.Printf("Intents: %v", intents)
+			viableIntents := s.filterViableIntents(intents)
+			log.Printf("Viable intents: %v", viableIntents)
 			if err != nil {
 				log.Printf("Error fetching intents: %v", err)
 				continue
 			}
 
-			for _, intent := range intents {
+			for _, intent := range viableIntents {
 				if err := s.fulfillIntent(intent); err != nil {
 					log.Printf("Error fulfilling intent %s: %v", intent.ID, err)
 				}
 			}
 		}
+	}
+}
+
+// Helper function to set up chain configuration
+func setupChainConfig(chainID int, rpcURL string, intentAddress string, minFee string) *ChainConfig {
+	minFeeBig := big.NewInt(0)
+	if minFee != "" {
+		var success bool
+		minFeeBig, success = new(big.Int).SetString(minFee, 10)
+		if !success {
+			log.Printf("Warning: Invalid min fee format for chain %d: %s", chainID, minFee)
+			minFeeBig = big.NewInt(0)
+		}
+	}
+
+	return &ChainConfig{
+		RPCURL:        rpcURL,
+		IntentAddress: intentAddress,
+		MinFee:        minFeeBig,
 	}
 }
 
@@ -345,43 +410,30 @@ func main() {
 	// Initialize chain configurations
 	chains := make(map[int]*ChainConfig)
 
-	// BASE chain
-	if rpcURL := os.Getenv("BASE_RPC_URL"); rpcURL != "" {
-		chains[8453] = &ChainConfig{
-			RPCURL:        rpcURL,
-			IntentAddress: os.Getenv("BASE_INTENT_ADDRESS"),
-		}
+	// Define chain configurations
+	chainConfigs := []struct {
+		chainID      int
+		rpcEnvVar    string
+		intentEnvVar string
+		minFeeEnvVar string
+	}{
+		{8453, "BASE_RPC_URL", "BASE_INTENT_ADDRESS", "BASE_MIN_FEE"},
+		{42161, "ARBITRUM_RPC_URL", "ARBITRUM_INTENT_ADDRESS", "ARBITRUM_MIN_FEE"},
+		{137, "POLYGON_RPC_URL", "POLYGON_INTENT_ADDRESS", "POLYGON_MIN_FEE"},
+		{1, "ETHEREUM_RPC_URL", "ETHEREUM_INTENT_ADDRESS", "ETHEREUM_MIN_FEE"},
+		{43114, "AVALANCHE_RPC_URL", "AVALANCHE_INTENT_ADDRESS", "AVALANCHE_MIN_FEE"},
+		{56, "BSC_RPC_URL", "BSC_INTENT_ADDRESS", "BSC_MIN_FEE"},
 	}
 
-	// Arbitrum chain
-	if rpcURL := os.Getenv("ARBITRUM_RPC_URL"); rpcURL != "" {
-		chains[42161] = &ChainConfig{
-			RPCURL:        rpcURL,
-			IntentAddress: os.Getenv("ARBITRUM_INTENT_ADDRESS"),
-		}
-	}
-
-	// Polygon chain
-	if rpcURL := os.Getenv("POLYGON_RPC_URL"); rpcURL != "" {
-		chains[137] = &ChainConfig{
-			RPCURL:        rpcURL,
-			IntentAddress: os.Getenv("POLYGON_INTENT_ADDRESS"),
-		}
-	}
-
-	// Ethereum chain
-	if rpcURL := os.Getenv("ETHEREUM_RPC_URL"); rpcURL != "" {
-		chains[1] = &ChainConfig{
-			RPCURL:        rpcURL,
-			IntentAddress: os.Getenv("ETHEREUM_INTENT_ADDRESS"),
-		}
-	}		
-
-	// Avalanche chain
-	if rpcURL := os.Getenv("AVALANCHE_RPC_URL"); rpcURL != "" {
-		chains[43114] = &ChainConfig{
-			RPCURL:        rpcURL,
-			IntentAddress: os.Getenv("AVALANCHE_INTENT_ADDRESS"),
+	// Set up each chain configuration
+	for _, config := range chainConfigs {
+		if rpcURL := os.Getenv(config.rpcEnvVar); rpcURL != "" {
+			chains[config.chainID] = setupChainConfig(
+				config.chainID,
+				rpcURL,
+				os.Getenv(config.intentEnvVar),
+				os.Getenv(config.minFeeEnvVar),
+			)
 		}
 	}
 

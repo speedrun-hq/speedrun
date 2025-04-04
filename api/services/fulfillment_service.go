@@ -120,7 +120,6 @@ func (s *FulfillmentService) handleSubscriptionError(ctx context.Context, oldSub
 
 	_, err := s.client.SubscribeFilterLogs(ctx, query, logs)
 	if err != nil {
-		log.Printf("Failed to resubscribe: %v", err)
 		return err
 	}
 
@@ -129,31 +128,16 @@ func (s *FulfillmentService) handleSubscriptionError(ctx context.Context, oldSub
 
 // processLog processes a single fulfillment event log
 func (s *FulfillmentService) processLog(ctx context.Context, vLog types.Log) error {
-	log.Printf("Processing log - Block: %d, TxHash: %s, Topics: %v", vLog.BlockNumber, vLog.TxHash.Hex(), vLog.Topics)
 	if err := s.validateLog(vLog); err != nil {
-		log.Printf("Log validation failed: %v", err)
 		return err
 	}
+
 	event, err := s.extractEventData(vLog)
 	if err != nil {
-		log.Printf("Failed to extract event data: %v", err)
 		return err
 	}
 
-	log.Printf("Extracted event - IntentID: %s, Asset: %s, Amount: %s, Receiver: %s, TxHash: %s",
-		event.IntentID,
-		event.Asset,
-		event.Amount.String(),
-		event.Receiver,
-		event.TxHash)
-
 	fulfillment := event.ToFulfillment()
-	log.Printf("Created fulfillment - ID: %s, Asset: %s, Amount: %s, Receiver: %s, TxHash: %s",
-		fulfillment.ID,
-		fulfillment.Asset,
-		fulfillment.Amount,
-		fulfillment.Receiver,
-		fulfillment.TxHash)
 
 	// Process the event
 	return s.CreateFulfillment(ctx, event.IntentID, fulfillment.TxHash)

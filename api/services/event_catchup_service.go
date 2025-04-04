@@ -19,20 +19,24 @@ import (
 type EventCatchupService struct {
 	intentServices     map[uint64]*IntentService
 	fulfillmentServices map[uint64]*FulfillmentService
+	settlementServices  map[uint64]*SettlementService
 	db                  db.Database
 	mu                  sync.Mutex
 	intentProgress      map[uint64]uint64 // chainID -> last processed block
 	fulfillmentProgress map[uint64]uint64 // chainID -> last processed block
+	settlementProgress  map[uint64]uint64 // chainID -> last processed block
 }
 
 // NewEventCatchupService creates a new EventCatchupService instance
-func NewEventCatchupService(intentServices map[uint64]*IntentService, fulfillmentServices map[uint64]*FulfillmentService, db db.Database) *EventCatchupService {
+func NewEventCatchupService(intentServices map[uint64]*IntentService, fulfillmentServices map[uint64]*FulfillmentService, settlementServices map[uint64]*SettlementService, db db.Database) *EventCatchupService {
 	return &EventCatchupService{
 		intentServices:     intentServices,
 		fulfillmentServices: fulfillmentServices,
+		settlementServices:  settlementServices,
 		db:                 db,
 		intentProgress:     make(map[uint64]uint64),
 		fulfillmentProgress: make(map[uint64]uint64),
+		settlementProgress:  make(map[uint64]uint64),
 	}
 }
 
@@ -179,6 +183,68 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 
 	log.Printf("All fulfillment services have completed catch-up")
 
+	log.Printf("Starting settlement catch-up")
+
+	// Initialize progress tracking for all chains
+	s.mu.Lock()
+	for chainID := range s.settlementServices {
+		lastBlock, err := s.db.GetLastProcessedBlock(ctx, chainID)
+		if err != nil {
+			s.mu.Unlock()
+			return fmt.Errorf("failed to get last processed block for chain %d: %v", chainID, err)
+		}
+		if lastBlock < cfg.ChainConfigs[chainID].DefaultBlock {
+			lastBlock = cfg.ChainConfigs[chainID].DefaultBlock
+		}
+		s.settlementProgress[chainID] = lastBlock
+	}
+	s.mu.Unlock()
+
+	var settlementWg sync.WaitGroup
+	settlementErrors := make(chan error, len(s.settlementServices))
+
+	for chainID, settlementService := range s.settlementServices {
+		lastBlock := s.settlementProgress[chainID]
+		currentBlock := currentBlocks[chainID]
+		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+		if lastBlock >= currentBlock {
+			log.Printf("No missed events to process for chain %d", chainID)
+			continue
+		}
+
+		settlementWg.Add(1)
+		go func(chainID uint64, settlementService *SettlementService, lastBlock, currentBlock uint64) {
+			defer settlementWg.Done()
+
+			log.Printf("Starting settlement event catch-up for chain %d (blocks %d to %d)",
+				chainID, lastBlock+1, currentBlock)
+
+			if err := s.catchUpOnSettlementEvents(ctx, settlementService, contractAddress, lastBlock, currentBlock); err != nil {
+				settlementErrors <- fmt.Errorf("failed to catch up on settlement events for chain %d: %v", chainID, err)
+				return
+			}
+
+			// Update progress
+			s.UpdateSettlementProgress(chainID, currentBlock)
+			log.Printf("Completed settlement event catch-up for chain %d", chainID)
+		}(chainID, settlementService, lastBlock, currentBlock)
+	}
+
+	// Wait for all settlement catch-ups to complete
+	go func() {
+		settlementWg.Wait()
+		close(settlementErrors)
+	}()
+
+	// Check for any errors from settlement catch-ups
+	for err := range settlementErrors {
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Printf("All settlement services have completed catch-up")
+
 	// Update last processed blocks for all chains only after all services have completed
 	for chainID, currentBlock := range currentBlocks {
 		if err := s.db.UpdateLastProcessedBlock(ctx, chainID, currentBlock); err != nil {
@@ -225,6 +291,25 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		go fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs)
 	}
 
+	// Start live event settlement listeners for each chain
+	for chainID, settlementService := range s.settlementServices {
+		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+		settlementQuery := ethereum.FilterQuery{
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{settlementService.abi.Events[IntentSettledEventName].ID},
+			},
+		}
+
+		settlementLogs := make(chan types.Log)
+		settlementSub, err := settlementService.client.SubscribeFilterLogs(ctx, settlementQuery, settlementLogs)
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to settlement logs for chain %d: %v", chainID, err)
+		}
+
+		go settlementService.processEventLogs(ctx, settlementSub, settlementLogs)
+	}
+
 	return nil
 }
 
@@ -240,6 +325,13 @@ func (s *EventCatchupService) UpdateFulfillmentProgress(chainID, blockNumber uin
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.fulfillmentProgress[chainID] = blockNumber
+}
+
+// UpdateSettlementProgress updates the progress of a settlement service
+func (s *EventCatchupService) UpdateSettlementProgress(chainID, blockNumber uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.settlementProgress[chainID] = blockNumber
 }
 
 // catchUpOnIntentEvents processes missed intent events for a specific chain
@@ -342,7 +434,8 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 			// Check if intent already exists
 			_, err := s.db.GetIntent(ctx, intentID)
 			if err != nil && !strings.Contains(err.Error(), "not found") {
-				return fmt.Errorf("failed to check for existing intent: %v", err)
+				log.Printf("failed to check for existing intent: %v", err)
+				continue
 			}
 
 			if err := fulfillmentService.processLog(ctx, txlog); err != nil {
@@ -360,6 +453,65 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 			lastBlock := batch[len(batch)-1].BlockNumber
 			s.UpdateFulfillmentProgress(fulfillmentService.chainID, lastBlock)
 			log.Printf("Updated progress for chain %d to block %d", fulfillmentService.chainID, lastBlock)
+		}
+	}
+
+	return nil
+}
+
+// catchUpOnSettlementEvents processes missed settlement events for a specific chain
+func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, settlementService *SettlementService, contractAddress common.Address, fromBlock, toBlock uint64) error {
+	query := ethereum.FilterQuery{
+		FromBlock: big.NewInt(int64(fromBlock + 1)),
+		ToBlock:   big.NewInt(int64(toBlock)),
+		Addresses: []common.Address{contractAddress},
+		Topics: [][]common.Hash{
+			{settlementService.abi.Events[IntentSettledEventName].ID},
+		},
+	}
+
+	logs, err := settlementService.client.FilterLogs(ctx, query)
+	if err != nil {
+		return fmt.Errorf("failed to fetch settlement logs: %v", err)
+	}
+
+	// Process logs in batches to report progress
+	batchSize := 100
+	for i := 0; i < len(logs); i += batchSize {
+		end := i + batchSize
+		if end > len(logs) {
+			end = len(logs)
+		}
+
+		batch := logs[i:end]
+		for j, txlog := range batch {
+			log.Printf("Processing settlement log %d/%d: Block=%d, TxHash=%s",
+				i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+
+			// Extract intent ID from the log
+			intentID := txlog.Topics[1].Hex()
+
+			// Check if intent already exists
+			_, err := s.db.GetIntent(ctx, intentID)
+			if err != nil && !strings.Contains(err.Error(), "not found") {
+				return fmt.Errorf("failed to check for existing intent: %v", err)
+			}
+
+			if err := settlementService.processLog(ctx, txlog); err != nil {
+				// Skip if settlement already exists
+				if strings.Contains(err.Error(), "duplicate key") {
+					log.Printf("Skipping duplicate settlement: %s", intentID)
+					continue
+				}
+				return fmt.Errorf("failed to process settlement log: %v", err)
+			}
+		}
+
+		// Update progress after each batch
+		if len(batch) > 0 {
+			lastBlock := batch[len(batch)-1].BlockNumber
+			s.UpdateSettlementProgress(settlementService.chainID, lastBlock)
+			log.Printf("Updated progress for chain %d to block %d", settlementService.chainID, lastBlock)
 		}
 	}
 

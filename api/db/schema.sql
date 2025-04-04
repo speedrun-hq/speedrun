@@ -23,6 +23,21 @@ CREATE TABLE IF NOT EXISTS fulfillments (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create settlements table
+CREATE TABLE IF NOT EXISTS settlements (
+    id VARCHAR(66) PRIMARY KEY,
+    asset VARCHAR(42) NOT NULL,
+    amount VARCHAR(78) NOT NULL,
+    receiver VARCHAR(42) NOT NULL,
+    fulfilled BOOLEAN NOT NULL,
+    fulfiller VARCHAR(42) NOT NULL,
+    actual_amount VARCHAR(78) NOT NULL,
+    paid_tip VARCHAR(78) NOT NULL,
+    tx_hash VARCHAR(66) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create last_processed_blocks table
 CREATE TABLE IF NOT EXISTS last_processed_blocks (
     chain_id BIGINT PRIMARY KEY,
@@ -33,3 +48,4 @@ CREATE TABLE IF NOT EXISTS last_processed_blocks (
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_intents_status ON intents(status);
 CREATE INDEX IF NOT EXISTS idx_fulfillments_id ON fulfillments(id);
+CREATE INDEX IF NOT EXISTS idx_settlements_id ON settlements(id);

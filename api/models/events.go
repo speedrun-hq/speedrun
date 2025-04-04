@@ -33,6 +33,18 @@ type IntentFulfilledEvent struct {
 	TxHash      string
 }
 
+type IntentSettledEvent struct {
+	IntentID    string
+	Asset       string
+	Amount      *big.Int
+	Receiver    string
+	Fulfilled   bool
+	Fulfiller   string
+	ActualAmount *big.Int
+	PaidTip      *big.Int
+	BlockNumber  uint64
+	TxHash       string
+}
 // ToIntent converts an IntentInitiatedEvent to an Intent
 func (e *IntentInitiatedEvent) ToIntent() *Intent {
 	// Convert big.Int to string for amount and tip
@@ -85,7 +97,6 @@ func FromIntent(intent *Intent) *IntentInitiatedEvent {
 func (e *IntentFulfilledEvent) ToFulfillment() *Fulfillment {
 	amount := e.Amount.String()
 
-
 	return &Fulfillment{
 		ID:          e.IntentID,
 		Asset:       e.Asset,
@@ -109,5 +120,41 @@ func FromFulfillment(fulfillment *Fulfillment) *IntentFulfilledEvent {
 		Receiver:    fulfillment.Receiver,
 		BlockNumber: fulfillment.BlockNumber,
 		TxHash:      fulfillment.TxHash,
+	}
+}
+
+
+func (e *IntentSettledEvent) ToSettlement() *Settlement {
+	return &Settlement{
+		ID:    e.IntentID,
+		Asset:       e.Asset,
+		Amount:      e.Amount.String(),
+		Receiver:    e.Receiver,
+		Fulfilled:   e.Fulfilled,
+		Fulfiller:   e.Fulfiller,
+		ActualAmount: e.ActualAmount.String(),
+		PaidTip:      e.PaidTip.String(),
+		BlockNumber:  e.BlockNumber,
+		TxHash:       e.TxHash,
+	}
+}
+
+func FromSettlement(settlement *Settlement) *IntentSettledEvent {
+	amount := new(big.Int)
+	amount.SetString(settlement.Amount, 10)
+
+	paidTip := new(big.Int)
+	paidTip.SetString(settlement.PaidTip, 10)
+
+	return &IntentSettledEvent{
+		IntentID:    settlement.ID,
+		Asset:       settlement.Asset,
+		Amount:      amount,
+		Receiver:    settlement.Receiver,
+		Fulfilled:   settlement.Fulfilled,
+		Fulfiller:   settlement.Fulfiller,
+		ActualAmount: amount,
+		PaidTip:      paidTip,
+		TxHash:       settlement.TxHash,
 	}
 }
