@@ -46,35 +46,28 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 	return clients, nil
 }
 
-// startEventListeners initializes and starts the event listeners for intents and fulfillments
-func startEventListeners(ctx context.Context, clients map[uint64]*ethclient.Client, db db.Database, cfg *config.Config) error {
-	// Create services for each chain
+// createServices creates and returns the intent and fulfillment services for each chain
+func createServices(clients map[uint64]*ethclient.Client, db db.Database, cfg *config.Config) (map[uint64]*services.IntentService, map[uint64]*services.FulfillmentService, error) {
 	intentServices := make(map[uint64]*services.IntentService)
+	fulfillmentServices := make(map[uint64]*services.FulfillmentService)
+
 	for chainID, client := range clients {
 		// Create intent service
 		intentService, err := services.NewIntentService(client, db, cfg.IntentInitiatedEventABI, chainID)
 		if err != nil {
-			return fmt.Errorf("failed to create intent service for chain %d: %v", chainID, err)
+			return nil, nil, fmt.Errorf("failed to create intent service for chain %d: %v", chainID, err)
 		}
 		intentServices[chainID] = intentService
 
 		// Create fulfillment service
 		fulfillmentService, err := services.NewFulfillmentService(client, db, cfg.IntentFulfilledEventABI, chainID)
 		if err != nil {
-			return fmt.Errorf("failed to create fulfillment service for chain %d: %v", chainID, err)
+			return nil, nil, fmt.Errorf("failed to create fulfillment service for chain %d: %v", chainID, err)
 		}
-
-		// Create event catchup service
-		eventCatchupService := services.NewEventCatchupService(map[uint64]*services.IntentService{chainID: intentService}, fulfillmentService, db)
-
-		// Start coordinated event listening
-		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
-		if err := eventCatchupService.StartListening(ctx, contractAddress); err != nil {
-			return fmt.Errorf("failed to start event listening for chain %d: %v", chainID, err)
-		}
+		fulfillmentServices[chainID] = fulfillmentService
 	}
 
-	return nil
+	return intentServices, fulfillmentServices, nil
 }
 
 func main() {
@@ -99,23 +92,39 @@ func main() {
 		log.Fatalf("Failed to initialize Ethereum clients: %v", err)
 	}
 
-	// Start event listeners
+	// Create services for all chains
+	intentServices, fulfillmentServices, err := createServices(clients, database, cfg)
+	if err != nil {
+		log.Fatalf("Failed to create services: %v", err)
+	}
+
+	// Start event listeners for each chain
 	ctx := context.Background()
-	err = startEventListeners(ctx, clients, database, cfg)
-	if err != nil {
-		log.Fatalf("Failed to start event listeners: %v", err)
+	for chainID, intentService := range intentServices {
+		fulfillmentService := fulfillmentServices[chainID]
+		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+		// Create event catchup service for this chain
+		eventCatchupService := services.NewEventCatchupService(
+			map[uint64]*services.IntentService{chainID: intentService},
+			fulfillmentService,
+			database,
+		)
+
+		// Start event listening
+		if err := eventCatchupService.StartListening(ctx, contractAddress); err != nil {
+			log.Fatalf("Failed to start event listening for chain %d: %v", chainID, err)
+		}
 	}
 
-	// Create services for the server
-	intentService, err := services.NewIntentService(clients[1], database, cfg.IntentInitiatedEventABI, 1)
-	if err != nil {
-		log.Fatalf("Failed to create intent service: %v", err)
+	// Get the first chain's services for the HTTP server
+	firstChainID := uint64(0)
+	for chainID := range intentServices {
+		firstChainID = chainID
+		break
 	}
-
-	fulfillmentService, err := services.NewFulfillmentService(clients[1], database, cfg.IntentFulfilledEventABI, 1)
-	if err != nil {
-		log.Fatalf("Failed to create fulfillment service: %v", err)
-	}
+	intentService := intentServices[firstChainID]
+	fulfillmentService := fulfillmentServices[firstChainID]
 
 	// Create and start the server
 	server := handlers.NewServer(fulfillmentService, intentService)

@@ -120,8 +120,41 @@ func (s *EventCatchupService) StartListening(ctx context.Context, contractAddres
 		}
 	}
 
-	// Start live event listeners
-	return s.startLiveListeners(ctx, contractAddress)
+	// Start live event listeners for each chain
+	for chainID, intentService := range s.intentServices {
+		intentQuery := ethereum.FilterQuery{
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{intentService.abi.Events[IntentInitiatedEventName].ID},
+			},
+		}
+
+		intentLogs := make(chan types.Log)
+		intentSub, err := intentService.client.SubscribeFilterLogs(ctx, intentQuery, intentLogs)
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to intent logs for chain %d: %v", chainID, err)
+		}
+
+		go intentService.processEventLogs(ctx, intentSub, intentLogs)
+	}
+
+	// Start fulfillment event listener
+	fulfillmentQuery := ethereum.FilterQuery{
+		Addresses: []common.Address{contractAddress},
+		Topics: [][]common.Hash{
+			{s.fulfillmentService.abi.Events[IntentFulfilledEventName].ID},
+		},
+	}
+
+	fulfillmentLogs := make(chan types.Log)
+	fulfillmentSub, err := s.fulfillmentService.client.SubscribeFilterLogs(ctx, fulfillmentQuery, fulfillmentLogs)
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to fulfillment logs: %v", err)
+	}
+
+	go s.fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs)
+
+	return nil
 }
 
 // waitForIntentCatchup waits for all intent services to catch up to the target block
@@ -268,45 +301,6 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, co
 			return fmt.Errorf("failed to process fulfillment log: %v", err)
 		}
 	}
-
-	return nil
-}
-
-// startLiveListeners starts the live event listeners for both services
-func (s *EventCatchupService) startLiveListeners(ctx context.Context, contractAddress common.Address) error {
-	// Start intent event listeners for each chain
-	for chainID, intentService := range s.intentServices {
-		intentQuery := ethereum.FilterQuery{
-			Addresses: []common.Address{contractAddress},
-			Topics: [][]common.Hash{
-				{intentService.abi.Events[IntentInitiatedEventName].ID},
-			},
-		}
-
-		intentLogs := make(chan types.Log)
-		intentSub, err := intentService.client.SubscribeFilterLogs(ctx, intentQuery, intentLogs)
-		if err != nil {
-			return fmt.Errorf("failed to subscribe to intent logs for chain %d: %v", chainID, err)
-		}
-
-		go intentService.processEventLogs(ctx, intentSub, intentLogs)
-	}
-
-	// Start fulfillment event listener
-	fulfillmentQuery := ethereum.FilterQuery{
-		Addresses: []common.Address{contractAddress},
-		Topics: [][]common.Hash{
-			{s.fulfillmentService.abi.Events[IntentFulfilledEventName].ID},
-		},
-	}
-
-	fulfillmentLogs := make(chan types.Log)
-	fulfillmentSub, err := s.fulfillmentService.client.SubscribeFilterLogs(ctx, fulfillmentQuery, fulfillmentLogs)
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to fulfillment logs: %v", err)
-	}
-
-	go s.fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs)
 
 	return nil
 }
