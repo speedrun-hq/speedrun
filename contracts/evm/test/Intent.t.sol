@@ -39,6 +39,18 @@ contract IntentTest is Test {
         address indexed receiver
     );
 
+    // Define the event for intent settlement
+    event IntentSettled(
+        bytes32 indexed intentId,
+        address indexed asset,
+        uint256 amount,
+        address indexed receiver,
+        bool fulfilled,
+        address fulfiller,
+        uint256 actualAmount,
+        uint256 paidTip
+    );
+
     function setUp() public {
         owner = address(this);
         user1 = makeAddr("user1");
@@ -879,6 +891,139 @@ contract IntentTest is Test {
                 sender: router
             }),
             settlementPayload
+        );
+    }
+
+    function test_OnCallEmitsSettlementEvent() public {
+        // First create an intent
+        uint256 amount = 100 ether;
+        uint256 tip = 10 ether;
+        uint256 targetChain = 1;
+        bytes memory receiver = abi.encodePacked(user2);
+        uint256 salt = 123;
+
+        // Mint tokens for initiate
+        token.mint(user1, amount + tip);
+        vm.prank(user1);
+        token.approve(address(intent), amount + tip);
+
+        vm.prank(user1);
+        bytes32 intentId = intent.initiate(
+            address(token),
+            amount,
+            targetChain,
+            receiver,
+            tip,
+            salt
+        );
+
+        // Prepare settlement payload
+        bytes memory settlementPayload = PayloadUtils.encodeSettlementPayload(
+            intentId,
+            amount,
+            address(token),
+            user2,
+            tip,
+            amount  // actualAmount same as amount in the test case
+        );
+
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount + tip);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount + tip);
+        
+        // Test case 1: Settle without fulfillment
+        // Expect the IntentSettled event (with fulfilled=false)
+        vm.expectEmit(true, true, false, true);
+        emit IntentSettled(
+            intentId,
+            address(token),
+            amount,
+            user2,
+            false,  // fulfilled
+            address(0),  // fulfiller
+            amount,  // actualAmount
+            0  // paidTip
+        );
+
+        // Call onCall through gateway to settle the intent
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload
+        );
+        
+        // Test case 2: Intent with fulfillment
+        // Create another intent
+        uint256 amount2 = 150 ether;
+        uint256 tip2 = 15 ether;
+        uint256 salt2 = 456;
+        
+        // Mint tokens for the second initiate
+        token.mint(user1, amount2 + tip2);
+        vm.prank(user1);
+        token.approve(address(intent), amount2 + tip2);
+        
+        vm.prank(user1);
+        bytes32 intentId2 = intent.initiate(
+            address(token),
+            amount2,
+            targetChain,
+            receiver,
+            tip2,
+            salt2
+        );
+        
+        // Fulfill the intent first
+        token.mint(user1, amount2);
+        vm.prank(user1);
+        token.approve(address(intent), amount2);
+        
+        vm.prank(user1);
+        intent.fulfill(
+            intentId2,
+            address(token),
+            amount2,
+            user2
+        );
+        
+        // Prepare settlement payload for the second intent
+        bytes memory settlementPayload2 = PayloadUtils.encodeSettlementPayload(
+            intentId2,
+            amount2,
+            address(token),
+            user2,
+            tip2,
+            amount2  // actualAmount
+        );
+        
+        // Transfer tokens to gateway for settlement
+        token.mint(address(gateway), amount2 + tip2);
+        vm.prank(address(gateway));
+        token.approve(address(intent), amount2 + tip2);
+        
+        // Expect the IntentSettled event (with fulfilled=true)
+        vm.expectEmit(true, true, false, true);
+        emit IntentSettled(
+            intentId2,
+            address(token),
+            amount2,
+            user2,
+            true,  // fulfilled
+            user1,  // fulfiller
+            amount2,  // actualAmount
+            tip2  // paidTip
+        );
+        
+        // Call onCall through gateway to settle the second intent
+        vm.prank(address(gateway));
+        intent.onCall(
+            Intent.MessageContext({
+                sender: router
+            }),
+            settlementPayload2
         );
     }
 

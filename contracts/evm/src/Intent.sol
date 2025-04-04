@@ -60,6 +60,18 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address indexed receiver
     );
 
+    // Event emitted when an intent is settled
+    event IntentSettled(
+        bytes32 indexed intentId,
+        address indexed asset,
+        uint256 amount,
+        address indexed receiver,
+        bool fulfilled,
+        address fulfiller,
+        uint256 actualAmount,
+        uint256 paidTip
+    );
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -282,14 +294,30 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         settlement.fulfilled = fulfilled;
         settlement.fulfiller = fulfiller;
 
+        // Set paid tip
+        uint256 paidTip = 0;
+
         // If there's a fulfiller, transfer the actual amount + tip to them
         // Otherwise, transfer actual amount + tip to the receiver
         if (fulfilled) {
             IERC20(asset).transfer(fulfiller, actualAmount + tip);
             settlement.paidTip = tip;
+            paidTip = tip;
         } else {
             IERC20(asset).transfer(receiver, actualAmount + tip);
         }
+
+        // Emit the IntentSettled event
+        emit IntentSettled(
+            intentId,
+            asset,
+            amount,
+            receiver,
+            fulfilled,
+            fulfiller,
+            actualAmount,
+            paidTip
+        );
 
         return fulfilled;
     }
