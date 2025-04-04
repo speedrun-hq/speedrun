@@ -1,8 +1,8 @@
 import { useAccount, useNetwork, useWalletClient, useContractWrite, useContractRead, usePublicClient } from 'wagmi';
 import { parseUnits, getContract } from 'viem';
 import { TOKENS } from '@/constants/tokens';
-import { base, arbitrum } from 'wagmi/chains';
 import { useState, useCallback } from 'react';
+import { ChainName, CHAIN_NAME_TO_ID } from '@/types';
 
 // ERC20 ABI for approve and allowance
 const ERC20_ABI = [
@@ -28,19 +28,7 @@ const ERC20_ABI = [
   },
 ] as const;
 
-type ChainName = 'BASE' | 'ARBITRUM';
-type TokenSymbol = keyof typeof TOKENS[typeof base.id];
-
-function getChainId(chainName: ChainName): number {
-  switch (chainName) {
-    case 'BASE':
-      return base.id;
-    case 'ARBITRUM':
-      return arbitrum.id;
-    default:
-      throw new Error(`Unsupported chain: ${chainName}`);
-  }
-}
+type TokenSymbol = keyof typeof TOKENS[8453]; // Using BASE chain as reference for token symbols
 
 export function useTokenApproval() {
   const { address } = useAccount();
@@ -66,8 +54,8 @@ export function useTokenApproval() {
         throw new Error('Public client not initialized');
       }
 
-      // Get chain ID and validate network
-      const chainId = getChainId(chainName);
+      // Get chain ID from the chain name using the mapping
+      const chainId = CHAIN_NAME_TO_ID[chainName];
       if (chain?.id !== chainId) {
         throw new Error(`Please switch to ${chainName} network`);
       }
