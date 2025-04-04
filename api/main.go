@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gin-gonic/gin"
@@ -100,21 +99,16 @@ func main() {
 
 	// Start event listeners for each chain
 	ctx := context.Background()
-	for chainID, intentService := range intentServices {
-		fulfillmentService := fulfillmentServices[chainID]
-		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
-		// Create event catchup service for this chain
-		eventCatchupService := services.NewEventCatchupService(
-			map[uint64]*services.IntentService{chainID: intentService},
-			fulfillmentService,
-			database,
-		)
-
-		// Start event listening
-		if err := eventCatchupService.StartListening(ctx, contractAddress); err != nil {
-			log.Fatalf("Failed to start event listening for chain %d: %v", chainID, err)
-		}
+	// Create event catchup service for this chain
+	eventCatchupService := services.NewEventCatchupService(
+		intentServices,
+		fulfillmentServices,
+		database,
+	)
+	err = eventCatchupService.StartListening(ctx)
+	if err != nil {
+		log.Fatalf("Failed to catchup on events: %v", err)
 	}
 
 	// Get the first chain's services for the HTTP server
