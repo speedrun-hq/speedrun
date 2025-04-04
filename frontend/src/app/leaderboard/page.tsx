@@ -24,13 +24,15 @@ interface LeaderboardTableProps {
 
 // LeaderboardTable component to display a single chain's leaderboard
 function LeaderboardTable({ chainName, colorClasses, runners }: LeaderboardTableProps) {
-  // Helper function to ensure 'x' is lowercase in addresses
-  const formatAddress = (address: string) => {
-    return address.replace('0X', '0x');
+  // Helper function to truncate address for display
+  const truncateAddress = (address: string) => {
+    address = address.replace('0X', '0x');
+    if (address.length <= 10) return address;
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
 
   return (
-    <div className={`arcade-container ${colorClasses.container} relative group`}>
+    <div className={`arcade-container ${colorClasses.container} relative group h-full`}>
       <div className={`absolute inset-0 ${colorClasses.glowBg} blur-sm group-hover:${colorClasses.glowBgHover} transition-all duration-300`} />
       <div className="relative">
         <h3 className={`arcade-text text-lg mb-4 ${colorClasses.headerText} text-center`}>
@@ -41,16 +43,16 @@ function LeaderboardTable({ chainName, colorClasses, runners }: LeaderboardTable
           <table className="w-full">
             <thead>
               <tr className={`border-b ${colorClasses.headerBorder}`}>
-                <th className={`py-2 px-4 text-left arcade-text text-xs ${colorClasses.headerText}`}>RANK</th>
+                <th className={`py-2 px-4 text-left arcade-text text-xs ${colorClasses.headerText} w-16`}>RANK</th>
                 <th className={`py-2 px-4 text-left arcade-text text-xs ${colorClasses.headerText}`}>SPEEDRUNNER</th>
-                <th className={`py-2 px-4 text-right arcade-text text-xs ${colorClasses.headerText}`}>SCORE</th>
+                <th className={`py-2 px-4 text-right arcade-text text-xs ${colorClasses.headerText} w-24`}>SCORE</th>
               </tr>
             </thead>
             <tbody>
               {runners.map((runner, index) => (
                 <tr key={index} className={`border-b ${colorClasses.rowBorder} hover:${colorClasses.hoverBg}`}>
                   <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText}`}>#{index + 1}</td>
-                  <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText}`}>{formatAddress(runner.address)}</td>
+                  <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText}`}>{truncateAddress(runner.address)}</td>
                   <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right`}>{runner.score}</td>
                 </tr>
               ))}
@@ -63,11 +65,13 @@ function LeaderboardTable({ chainName, colorClasses, runners }: LeaderboardTable
 }
 
 export default function Leaderboard() {
-  // Sample placeholder data for all chains
+  // Sample placeholder data with 5 entries
   const placeholderRunners = [
-    { address: '0x0000000000000000000000000000000000000000', score: '0:00' },
-    { address: '0x0000000000000000000000000000000000000000', score: '0:00' },
-    { address: '0x0000000000000000000000000000000000000000', score: '0:00' },
+    { address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F', score: '1:26' },
+    { address: '0x2546BcD3c84621e976D8185a91A922aE77ECEc30', score: '1:42' },
+    { address: '0xbDA5747bFD65F08deb54cb465eB87D40e51B197E', score: '2:05' },
+    { address: '0xdD870fA1b7C4700F2BD7f44238821C26f7392148', score: '2:31' },
+    { address: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199', score: '3:17' },
   ];
 
   // Chain configurations with fixed class names
@@ -160,7 +164,7 @@ export default function Leaderboard() {
       {/* Neon glow effects */}
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(255,255,0,0.1)_0%,_transparent_50%)]" />
       
-      <div className="z-10 max-w-5xl w-full relative">
+      <div className="z-10 max-w-6xl w-full relative">
         <div className="text-center mb-8">
           <h1 className="arcade-text text-3xl text-primary-500 relative mb-4">
             <span className="absolute inset-0 blur-sm opacity-50">LEADERBOARD</span>
@@ -174,15 +178,17 @@ export default function Leaderboard() {
           </p>
         </div>
 
-        <div className="mt-12 space-y-8">
-          {chains.map((chain, index) => (
-            <LeaderboardTable
-              key={index}
-              chainName={chain.name}
-              colorClasses={chain.colorClasses}
-              runners={placeholderRunners}
-            />
-          ))}
+        <div className="mt-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {chains.map((chain, index) => (
+              <LeaderboardTable
+                key={index}
+                chainName={chain.name}
+                colorClasses={chain.colorClasses}
+                runners={placeholderRunners}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </main>

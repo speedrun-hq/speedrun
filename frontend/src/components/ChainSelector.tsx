@@ -7,9 +7,10 @@ import { base, arbitrum, mainnet, bsc, polygon, avalanche } from 'wagmi/chains';
 const BITCOIN_CHAIN_ID = 9997;
 const SOLANA_CHAIN_ID = 9999;
 const SUI_CHAIN_ID = 9998;
+const ZETACHAIN_CHAIN_ID = 7000; // ZetaChain actual mainnet ID
 
 // Type to include both real and custom chain IDs
-type ChainId = typeof mainnet.id | typeof bsc.id | typeof polygon.id | typeof base.id | typeof arbitrum.id | typeof avalanche.id | typeof BITCOIN_CHAIN_ID | typeof SOLANA_CHAIN_ID | typeof SUI_CHAIN_ID;
+type ChainId = typeof mainnet.id | typeof bsc.id | typeof polygon.id | typeof base.id | typeof arbitrum.id | typeof avalanche.id | typeof BITCOIN_CHAIN_ID | typeof SOLANA_CHAIN_ID | typeof SUI_CHAIN_ID | typeof ZETACHAIN_CHAIN_ID;
 
 // Define a color palette for each chain
 const chainColorMap: Record<number, { text: string, border: string, hoverBg: string }> = {
@@ -22,6 +23,7 @@ const chainColorMap: Record<number, { text: string, border: string, hoverBg: str
   [BITCOIN_CHAIN_ID]: { text: 'text-orange-500', border: 'border-orange-500', hoverBg: 'hover:bg-orange-500' },
   [SOLANA_CHAIN_ID]: { text: 'text-purple-400', border: 'border-purple-400', hoverBg: 'hover:bg-purple-400' },
   [SUI_CHAIN_ID]: { text: 'text-teal-400', border: 'border-teal-400', hoverBg: 'hover:bg-teal-400' },
+  [ZETACHAIN_CHAIN_ID]: { text: 'text-green-500', border: 'border-green-500', hoverBg: 'hover:bg-green-500' },
 };
 
 interface ChainSelectorProps {
@@ -54,15 +56,17 @@ export function ChainSelector({
   let comingSoonChains: {id: ChainId, name: string}[] = [];
   
   if (selectorType === 'from') {
-    // Bitcoin is "coming soon" in the FROM selector
+    // Add ZetaChain to the FROM selector
     comingSoonChains = [
+      { id: ZETACHAIN_CHAIN_ID, name: 'ZETACHAIN' },
       { id: SOLANA_CHAIN_ID, name: 'SOLANA' },
       { id: SUI_CHAIN_ID, name: 'SUI' },
       { id: BITCOIN_CHAIN_ID, name: 'BITCOIN' }
     ];
   } else {
-    // Bitcoin doesn't appear at all in the TO selector
+    // Add ZetaChain to the TO selector
     comingSoonChains = [
+      { id: ZETACHAIN_CHAIN_ID, name: 'ZETACHAIN' },
       { id: SOLANA_CHAIN_ID, name: 'SOLANA' },
       { id: SUI_CHAIN_ID, name: 'SUI' }
     ];
@@ -112,7 +116,7 @@ export function ChainSelector({
       
       {isOpen && (
         <div 
-          className="absolute top-full left-0 right-0 mt-2 z-[100]"
+          className="absolute top-full left-0 right-0 mt-2 z-[1000]"
         >
           <div 
             className={`bg-black border-2 ${colorScheme.border} rounded-lg overflow-hidden shadow-lg shadow-${colorScheme.text.replace('text-', '')}/50`}
