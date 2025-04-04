@@ -17,9 +17,9 @@ export function TokenSelector({
   disabled = false 
 }: TokenSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const tokens: TokenSymbol[] = ['USDC', 'USDT'];
+  const tokens: TokenSymbol[] = ['USDC'];
   // Coming soon tokens
-  const comingSoonTokens = ['BTC'];
+  const comingSoonTokens = ['BTC', 'USDT'];
   const selectorRef = useRef<HTMLDivElement>(null);
 
   const handleClick = () => {
