@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { base, arbitrum } from 'wagmi/chains';
+import { base, arbitrum, mainnet, bsc, polygon, avalanche } from 'wagmi/chains';
 
 // Custom chain IDs for coming soon chains
 const BITCOIN_CHAIN_ID = 9997;
@@ -9,7 +9,20 @@ const SOLANA_CHAIN_ID = 9999;
 const SUI_CHAIN_ID = 9998;
 
 // Type to include both real and custom chain IDs
-type ChainId = typeof base.id | typeof arbitrum.id | typeof BITCOIN_CHAIN_ID | typeof SOLANA_CHAIN_ID | typeof SUI_CHAIN_ID;
+type ChainId = typeof mainnet.id | typeof bsc.id | typeof polygon.id | typeof base.id | typeof arbitrum.id | typeof avalanche.id | typeof BITCOIN_CHAIN_ID | typeof SOLANA_CHAIN_ID | typeof SUI_CHAIN_ID;
+
+// Define a color palette for each chain
+const chainColorMap: Record<number, { text: string, border: string, hoverBg: string }> = {
+  [mainnet.id]: { text: 'text-blue-500', border: 'border-blue-500', hoverBg: 'hover:bg-blue-500' },
+  [bsc.id]: { text: 'text-yellow-400', border: 'border-yellow-400', hoverBg: 'hover:bg-yellow-400' },
+  [polygon.id]: { text: 'text-purple-500', border: 'border-purple-500', hoverBg: 'hover:bg-purple-500' },
+  [base.id]: { text: 'text-blue-400', border: 'border-blue-400', hoverBg: 'hover:bg-blue-400' },
+  [arbitrum.id]: { text: 'text-blue-600', border: 'border-blue-600', hoverBg: 'hover:bg-blue-600' },
+  [avalanche.id]: { text: 'text-red-600', border: 'border-red-600', hoverBg: 'hover:bg-red-600' },
+  [BITCOIN_CHAIN_ID]: { text: 'text-orange-500', border: 'border-orange-500', hoverBg: 'hover:bg-orange-500' },
+  [SOLANA_CHAIN_ID]: { text: 'text-purple-400', border: 'border-purple-400', hoverBg: 'hover:bg-purple-400' },
+  [SUI_CHAIN_ID]: { text: 'text-teal-400', border: 'border-teal-400', hoverBg: 'hover:bg-teal-400' },
+};
 
 interface ChainSelectorProps {
   value: number;
@@ -29,8 +42,12 @@ export function ChainSelector({
   const [isOpen, setIsOpen] = useState(false);
   
   const chains: {id: ChainId, name: string}[] = [
+    { id: mainnet.id, name: 'ETHEREUM' },
+    { id: bsc.id, name: 'BSC' },
+    { id: polygon.id, name: 'POLYGON' },
     { id: base.id, name: 'BASE' },
-    { id: arbitrum.id, name: 'ARBITRUM' }
+    { id: arbitrum.id, name: 'ARBITRUM' },
+    { id: avalanche.id, name: 'AVALANCHE' }
   ];
   
   // Coming soon chains with placeholder IDs - different based on selector type
@@ -53,33 +70,13 @@ export function ChainSelector({
   
   const selectorRef = useRef<HTMLDivElement>(null);
 
-  // Debug logs
-  useEffect(() => {
-    console.log('ChainSelector mounted with:', {
-      currentValue: value,
-      isOpen,
-      availableChains: chains,
-      comingSoonChains,
-      selectorType
-    });
-  }, [value, isOpen, selectorType]);
+  // Get color scheme for the selected chain
+  const selectedChain = chains.find(chain => chain.id === value);
+  const colorScheme = selectedChain 
+    ? chainColorMap[selectedChain.id] 
+    : { text: 'text-yellow-500', border: 'border-yellow-500', hoverBg: 'hover:bg-yellow-500' };
 
-  useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
-      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleOutsideClick);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-    };
-  }, [isOpen]);
-
+  // Handle click outside to close dropdown
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
       if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
@@ -98,7 +95,6 @@ export function ChainSelector({
 
   const handleClick = () => {
     if (disabled) return;
-    console.log('Button clicked, current state:', { isOpen });
     setIsOpen(!isOpen);
   };
 
@@ -108,7 +104,7 @@ export function ChainSelector({
         type="button"
         onClick={handleClick}
         disabled={disabled}
-        className="w-full px-4 py-2 bg-black border-2 border-yellow-500 rounded-lg text-yellow-500 arcade-text text-xs focus:outline-none focus:border-yellow-400 flex justify-between items-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`w-full px-4 py-2 bg-black border-2 ${colorScheme.border} rounded-lg ${colorScheme.text} arcade-text text-xs focus:outline-none flex justify-between items-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         <span>{chains.find(chain => chain.id === value)?.name || label}</span>
         <span className="ml-2">{isOpen ? '▲' : '▼'}</span>
@@ -119,35 +115,42 @@ export function ChainSelector({
           className="absolute top-full left-0 right-0 mt-2 z-[100]"
         >
           <div 
-            className="bg-black border-2 border-yellow-500 rounded-lg overflow-hidden shadow-lg shadow-yellow-500/50"
+            className={`bg-black border-2 ${colorScheme.border} rounded-lg overflow-hidden shadow-lg shadow-${colorScheme.text.replace('text-', '')}/50`}
           >
-            {chains.map((chain) => (
-              <button
-                key={chain.id}
-                type="button"
-                onClick={() => {
-                  console.log('Chain selected:', chain.name);
-                  onChange(chain.id);
-                  setIsOpen(false);
-                }}
-                className={`w-full px-4 py-3 text-left arcade-text text-xs hover:bg-yellow-500 hover:text-black transition-colors cursor-pointer ${
-                  chain.id === value ? 'text-[#00ff00] bg-black/50' : 'text-yellow-500'
-                }`}
-              >
-                {chain.name}
-              </button>
-            ))}
+            {chains.map((chain) => {
+              const chainColor = chainColorMap[chain.id];
+              return (
+                <button
+                  key={chain.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(chain.id);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full px-4 py-3 text-left arcade-text text-xs ${chainColor.hoverBg} hover:text-black transition-colors cursor-pointer ${
+                    chain.id === value ? 'text-white bg-black/50' : chainColor.text
+                  }`}
+                >
+                  {chain.name}
+                </button>
+              );
+            })}
             
             {/* Coming Soon Chains */}
-            {comingSoonChains.map((chain) => (
-              <div
-                key={chain.id}
-                className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex justify-between items-center"
-              >
-                <span>{chain.name}</span>
-                <span className="text-yellow-500 opacity-70 text-[10px]">COMING SOON</span>
-              </div>
-            ))}
+            {comingSoonChains.map((chain) => {
+              const chainColor = chainColorMap[chain.id];
+              return (
+                <div
+                  key={chain.id}
+                  className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex justify-between items-center"
+                >
+                  <span>{chain.name}</span>
+                  <span className={`${chainColor.text} opacity-70 text-[10px]`}>
+                    COMING SOON
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -6,8 +6,7 @@ import { TokenSelector } from './TokenSelector';
 import { FormInput } from './FormInput';
 import ErrorMessage from '@/components/ErrorMessage';
 import { useIntentForm } from '@/hooks/useIntentForm';
-import { base } from 'wagmi/chains';
-import { getChainId } from '@/utils/chain';
+import { getChainId, getChainName } from '@/utils/chain';
 import { useAccount } from 'wagmi';
 
 export default function CreateNewIntent() {
@@ -45,6 +44,17 @@ export default function CreateNewIntent() {
     setShowAdvanced(!showAdvanced);
   };
 
+  // Handle chain selection
+  const handleSourceChainChange = (chainId: number) => {
+    const chainName = getChainName(chainId);
+    updateSourceChain(chainName);
+  };
+
+  const handleDestinationChainChange = (chainId: number) => {
+    const chainName = getChainName(chainId);
+    updateDestinationChain(chainName);
+  };
+
   return (
     <div className="max-w-2xl mx-auto arcade-container border-yellow-500 relative group">
       <div className="absolute inset-0 bg-yellow-500/10 blur-sm group-hover:bg-yellow-500/20 transition-all duration-300" />
@@ -68,7 +78,7 @@ export default function CreateNewIntent() {
                 <label className="block text-yellow-500 mb-2 arcade-text">FROM</label>
                 <ChainSelector
                   value={getChainId(formState.sourceChain)}
-                  onChange={(value) => updateSourceChain(value === base.id ? 'BASE' : 'ARBITRUM')}
+                  onChange={handleSourceChainChange}
                   label="SELECT SOURCE CHAIN"
                   disabled={formState.isSubmitting}
                   selectorType="from"
@@ -79,7 +89,7 @@ export default function CreateNewIntent() {
                 <label className="block text-yellow-500 mb-2 arcade-text">TO</label>
                 <ChainSelector
                   value={getChainId(formState.destinationChain)}
-                  onChange={(value) => updateDestinationChain(value === base.id ? 'BASE' : 'ARBITRUM')}
+                  onChange={handleDestinationChainChange}
                   label="SELECT DESTINATION CHAIN"
                   disabled={formState.isSubmitting}
                   selectorType="to"
