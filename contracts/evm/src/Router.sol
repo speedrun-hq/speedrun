@@ -84,6 +84,36 @@ contract Router {
     }
 
     /**
+     * @dev Calculates the expected amount when converting between tokens with different decimal places
+     * @param amountIn The input amount with the source token's decimal precision
+     * @param decimalsIn The decimal places of the source token
+     * @param decimalsOut The decimal places of the destination token
+     * @return The expected amount with the destination token's decimal precision
+     */
+    function calculateExpectedAmount(
+        uint256 amountIn,
+        uint8 decimalsIn,
+        uint8 decimalsOut
+    ) public pure returns (uint256) {
+        // If decimals are the same, no conversion needed
+        if (decimalsIn == decimalsOut) {
+            return amountIn;
+        }
+        
+        // If destination has more decimals, multiply
+        if (decimalsOut > decimalsIn) {
+            uint256 factor = 10 ** (decimalsOut - decimalsIn);
+            return amountIn * factor;
+        }
+        
+        // If destination has fewer decimals, divide
+        uint256 factor = 10 ** (decimalsIn - decimalsOut);
+        
+        // Round down by default (matches typical token behavior)
+        return amountIn / factor;
+    }
+
+    /**
      * @dev Modifier to restrict access to the admin
      */
     modifier onlyAdmin() {
