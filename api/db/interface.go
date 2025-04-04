@@ -28,6 +28,11 @@ type Database interface {
 	ListFulfillments(ctx context.Context) ([]*models.Fulfillment, error)
 	GetTotalFulfilledAmount(ctx context.Context, intentID string) (string, error)
 
+	// Settlement operations
+	CreateSettlement(ctx context.Context, settlement *models.Settlement) error
+	GetSettlement(ctx context.Context, id string) (*models.Settlement, error)
+	ListSettlements(ctx context.Context) ([]*models.Settlement, error)
+
 	// Block tracking operations
 	GetLastProcessedBlock(ctx context.Context, chainID uint64) (uint64, error)
 	UpdateLastProcessedBlock(ctx context.Context, chainID uint64, blockNumber uint64) error

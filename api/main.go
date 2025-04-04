@@ -46,27 +46,34 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 }
 
 // createServices creates and returns the intent and fulfillment services for each chain
-func createServices(clients map[uint64]*ethclient.Client, db db.Database, cfg *config.Config) (map[uint64]*services.IntentService, map[uint64]*services.FulfillmentService, error) {
+func createServices(clients map[uint64]*ethclient.Client, db db.Database, cfg *config.Config) (map[uint64]*services.IntentService, map[uint64]*services.FulfillmentService, map[uint64]*services.SettlementService, error) {
 	intentServices := make(map[uint64]*services.IntentService)
 	fulfillmentServices := make(map[uint64]*services.FulfillmentService)
-
+	settlementServices := make(map[uint64]*services.SettlementService)
 	for chainID, client := range clients {
 		// Create intent service
 		intentService, err := services.NewIntentService(client, db, cfg.IntentInitiatedEventABI, chainID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create intent service for chain %d: %v", chainID, err)
+			return nil, nil, nil, fmt.Errorf("failed to create intent service for chain %d: %v", chainID, err)
 		}
 		intentServices[chainID] = intentService
 
 		// Create fulfillment service
 		fulfillmentService, err := services.NewFulfillmentService(client, db, cfg.IntentFulfilledEventABI, chainID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create fulfillment service for chain %d: %v", chainID, err)
+			return nil, nil, nil, fmt.Errorf("failed to create fulfillment service for chain %d: %v", chainID, err)
 		}
 		fulfillmentServices[chainID] = fulfillmentService
+
+		// Create settlement service
+		settlementService, err := services.NewSettlementService(client, db, cfg.IntentSettledEventABI, chainID)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to create settlement service for chain %d: %v", chainID, err)
+		}
+		settlementServices[chainID] = settlementService
 	}
 
-	return intentServices, fulfillmentServices, nil
+	return intentServices, fulfillmentServices, settlementServices, nil
 }
 
 func main() {
@@ -92,7 +99,7 @@ func main() {
 	}
 
 	// Create services for all chains
-	intentServices, fulfillmentServices, err := createServices(clients, database, cfg)
+	intentServices, fulfillmentServices, settlementServices, err := createServices(clients, database, cfg)
 	if err != nil {
 		log.Fatalf("Failed to create services: %v", err)
 	}
@@ -104,11 +111,12 @@ func main() {
 	eventCatchupService := services.NewEventCatchupService(
 		intentServices,
 		fulfillmentServices,
+		settlementServices,
 		database,
 	)
 	err = eventCatchupService.StartListening(ctx)
 	if err != nil {
-		log.Fatalf("Failed to catchup on events: %v", err)
+		log.Printf("Failed to catchup on events: %v", err)
 	}
 
 	// Get the first chain's services for the HTTP server
@@ -119,7 +127,6 @@ func main() {
 	}
 	intentService := intentServices[firstChainID]
 	fulfillmentService := fulfillmentServices[firstChainID]
-
 	// Create and start the server
 	server := handlers.NewServer(fulfillmentService, intentService)
 	if err := server.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil {

@@ -301,6 +301,113 @@ func (p *PostgresDB) GetTotalFulfilledAmount(ctx context.Context, intentID strin
 	return "0", nil
 }
 
+// GetSettlement retrieves a settlement by ID
+func (p *PostgresDB) GetSettlement(ctx context.Context, id string) (*models.Settlement, error) {
+	query := `
+		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, created_at, updated_at
+		FROM settlements
+		WHERE id = $1
+	`
+
+	var settlement models.Settlement
+	err := p.db.QueryRowContext(ctx, query, id).Scan(
+		&settlement.ID,
+		&settlement.Asset,
+		&settlement.Amount,
+		&settlement.Receiver,
+		&settlement.Fulfilled,
+		&settlement.Fulfiller,
+		&settlement.ActualAmount,
+		&settlement.PaidTip,
+		&settlement.TxHash,
+		&settlement.CreatedAt,
+		&settlement.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("settlement not found: %s", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get settlement: %v", err)
+	}
+	return &settlement, nil
+}
+
+// ListSettlements retrieves all settlements
+func (p *PostgresDB) ListSettlements(ctx context.Context) ([]*models.Settlement, error) {
+	query := `
+		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, created_at, updated_at
+		FROM settlements
+		ORDER BY created_at DESC
+	`
+
+	rows, err := p.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query settlements: %v", err)
+	}
+	defer rows.Close()
+
+	var settlements []*models.Settlement
+	for rows.Next() {
+		var s models.Settlement
+		err := rows.Scan(
+			&s.ID,
+			&s.Asset,
+			&s.Amount,
+			&s.Receiver,
+			&s.Fulfilled,
+			&s.Fulfiller,
+			&s.ActualAmount,
+			&s.PaidTip,
+			&s.TxHash,
+			&s.CreatedAt,
+			&s.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan settlement: %v", err)
+		}
+		settlements = append(settlements, &s)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating settlements: %v", err)
+	}
+	return settlements, nil
+}
+
+// CreateSettlement creates a new settlement
+func (p *PostgresDB) CreateSettlement(ctx context.Context, settlement *models.Settlement) error {
+	query := `
+		INSERT INTO settlements (
+			id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`
+
+	// Ensure timestamps are set
+	if settlement.CreatedAt.IsZero() {
+		settlement.CreatedAt = time.Now()
+	}
+	if settlement.UpdatedAt.IsZero() {
+		settlement.UpdatedAt = time.Now()
+	}
+
+	_, err := p.db.ExecContext(ctx, query,
+		settlement.ID,
+		settlement.Asset,
+		settlement.Amount,
+		settlement.Receiver,
+		settlement.Fulfilled,
+		settlement.Fulfiller,
+		settlement.ActualAmount,
+		settlement.PaidTip,
+		settlement.TxHash,
+		settlement.CreatedAt,
+		settlement.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create settlement: %v", err)
+	}
+	return nil
+}
+
 // ListIntents retrieves all intents
 func (p *PostgresDB) ListIntents(ctx context.Context) ([]*models.Intent, error) {
 	query := `

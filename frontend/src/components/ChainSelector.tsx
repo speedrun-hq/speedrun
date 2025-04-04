@@ -47,6 +47,7 @@ export function ChainSelector({
 }: ChainSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   
+  // All supported chains
   const chains: {id: ChainId, name: string}[] = [
     { id: mainnet.id, name: 'ETHEREUM' },
     { id: bsc.id, name: 'BSC' },
