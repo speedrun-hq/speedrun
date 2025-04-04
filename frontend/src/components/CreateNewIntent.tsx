@@ -6,8 +6,7 @@ import { TokenSelector } from './TokenSelector';
 import { FormInput } from './FormInput';
 import ErrorMessage from '@/components/ErrorMessage';
 import { useIntentForm } from '@/hooks/useIntentForm';
-import { base } from 'wagmi/chains';
-import { getChainId } from '@/utils/chain';
+import { getChainId, getChainName } from '@/utils/chain';
 import { useAccount } from 'wagmi';
 
 export default function CreateNewIntent() {
@@ -36,13 +35,24 @@ export default function CreateNewIntent() {
     updateRecipient(address);
   }
 
-  // Set default tip to recommended value (0.01) if not set
+  // Set default tip to recommended value (0.1) if not set
   if (!formState.tip) {
-    updateTip('0.01');
+    updateTip('0.1');
   }
   
   const toggleAdvanced = () => {
     setShowAdvanced(!showAdvanced);
+  };
+
+  // Handle chain selection
+  const handleSourceChainChange = (chainId: number) => {
+    const chainName = getChainName(chainId);
+    updateSourceChain(chainName);
+  };
+
+  const handleDestinationChainChange = (chainId: number) => {
+    const chainName = getChainName(chainId);
+    updateDestinationChain(chainName);
   };
 
   return (
@@ -68,7 +78,7 @@ export default function CreateNewIntent() {
                 <label className="block text-yellow-500 mb-2 arcade-text">FROM</label>
                 <ChainSelector
                   value={getChainId(formState.sourceChain)}
-                  onChange={(value) => updateSourceChain(value === base.id ? 'BASE' : 'ARBITRUM')}
+                  onChange={handleSourceChainChange}
                   label="SELECT SOURCE CHAIN"
                   disabled={formState.isSubmitting}
                   selectorType="from"
@@ -79,7 +89,7 @@ export default function CreateNewIntent() {
                 <label className="block text-yellow-500 mb-2 arcade-text">TO</label>
                 <ChainSelector
                   value={getChainId(formState.destinationChain)}
-                  onChange={(value) => updateDestinationChain(value === base.id ? 'BASE' : 'ARBITRUM')}
+                  onChange={handleDestinationChainChange}
                   label="SELECT DESTINATION CHAIN"
                   disabled={formState.isSubmitting}
                   selectorType="to"
@@ -157,14 +167,14 @@ export default function CreateNewIntent() {
                 <div className="flex justify-between items-center mb-2">
                   <label className="text-yellow-500 arcade-text">CUSTOM FEE ({symbol})</label>
                   <span className="text-[#00ff00] arcade-text text-xs">
-                    Recommended: 0.01 {symbol}
+                    Recommended: 0.1 {symbol}
                   </span>
                 </div>
                 <FormInput
                   type="number"
                   value={formState.tip}
                   onChange={updateTip}
-                  placeholder="0.01"
+                  placeholder="0.1"
                   disabled={formState.isSubmitting}
                   min="0.01"
                   step="0.01"

@@ -43,4 +43,28 @@ export interface CreateIntentResponse {
 
 export interface ListIntentsResponse {
   intents: Intent[];
-} 
+}
+
+// Chain types
+export type ChainName = 'BASE' | 'ARBITRUM' | 'ETHEREUM' | 'BSC' | 'POLYGON' | 'AVALANCHE' | 'ZETACHAIN';
+
+// Chain mapping
+export const CHAIN_ID_TO_NAME: Record<number, ChainName> = {
+  8453: 'BASE',       // Base
+  42161: 'ARBITRUM',  // Arbitrum
+  1: 'ETHEREUM',      // Ethereum
+  56: 'BSC',          // BNB Chain
+  137: 'POLYGON',     // Polygon
+  43114: 'AVALANCHE', // Avalanche
+  7000: 'ZETACHAIN',  // ZetaChain
+};
+
+export const CHAIN_NAME_TO_ID: Record<ChainName, number> = {
+  'BASE': 8453,
+  'ARBITRUM': 42161,
+  'ETHEREUM': 1,
+  'BSC': 56,
+  'POLYGON': 137,
+  'AVALANCHE': 43114,
+  'ZETACHAIN': 7000
+}; 

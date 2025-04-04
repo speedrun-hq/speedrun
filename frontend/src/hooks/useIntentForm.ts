@@ -4,9 +4,8 @@ import { useTokenBalance } from '@/hooks/useTokenBalance';
 import { apiService } from '@/services/api';
 import { useContract } from './useContract';
 import { TOKENS } from '@/constants/tokens';
-import { getChainId } from '@/utils/chain';
+import { getChainId, getChainName, ChainName } from '@/utils/chain';
 
-type ChainName = 'BASE' | 'ARBITRUM';
 type TokenSymbol = 'USDC' | 'USDT';
 
 interface FormState {
@@ -32,7 +31,7 @@ export function useIntentForm() {
     selectedToken: 'USDC',
     amount: '',
     recipient: '',
-    tip: '0.01',
+    tip: '0.1',
     isSubmitting: false,
     error: null,
     success: false,
@@ -82,7 +81,7 @@ export function useIntentForm() {
         success: true,
         amount: '',
         recipient: '',
-        tip: '0.01',
+        tip: '0.1',
       }));
     } catch (err) {
       setFormState(prev => ({
@@ -95,20 +94,40 @@ export function useIntentForm() {
   }, [formState, isValid, createIntent]);
 
   // Update handlers
-  const updateSourceChain = useCallback((value: ChainName) => {
-    setFormState(prev => ({
-      ...prev,
-      sourceChain: value,
-      destinationChain: value === 'BASE' ? 'ARBITRUM' : 'BASE',
-    }));
+  const updateSourceChain = useCallback((chainName: ChainName) => {
+    setFormState(prev => {
+      // If source and destination would be the same, set destination to a different chain
+      let newDestination = prev.destinationChain;
+      if (chainName === prev.destinationChain) {
+        // Choose a different chain for destination
+        const options: ChainName[] = ['BASE', 'ARBITRUM', 'ETHEREUM', 'BSC', 'POLYGON', 'AVALANCHE'];
+        newDestination = options.find(c => c !== chainName) || 'BASE';
+      }
+      
+      return {
+        ...prev,
+        sourceChain: chainName,
+        destinationChain: newDestination,
+      };
+    });
   }, []);
 
-  const updateDestinationChain = useCallback((value: ChainName) => {
-    setFormState(prev => ({
-      ...prev,
-      destinationChain: value,
-      sourceChain: value === 'BASE' ? 'ARBITRUM' : 'BASE',
-    }));
+  const updateDestinationChain = useCallback((chainName: ChainName) => {
+    setFormState(prev => {
+      // If source and destination would be the same, set source to a different chain
+      let newSource = prev.sourceChain;
+      if (chainName === prev.sourceChain) {
+        // Choose a different chain for source
+        const options: ChainName[] = ['BASE', 'ARBITRUM', 'ETHEREUM', 'BSC', 'POLYGON', 'AVALANCHE'];
+        newSource = options.find(c => c !== chainName) || 'ARBITRUM';
+      }
+      
+      return {
+        ...prev,
+        destinationChain: chainName,
+        sourceChain: newSource,
+      };
+    });
   }, []);
 
   const updateToken = useCallback((value: TokenSymbol) => {
