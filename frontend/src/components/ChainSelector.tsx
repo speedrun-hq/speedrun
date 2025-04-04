@@ -3,19 +3,54 @@
 import { useState, useEffect, useRef } from 'react';
 import { base, arbitrum } from 'wagmi/chains';
 
+// Custom chain IDs for coming soon chains
+const BITCOIN_CHAIN_ID = 9997;
+const SOLANA_CHAIN_ID = 9999;
+const SUI_CHAIN_ID = 9998;
+
+// Type to include both real and custom chain IDs
+type ChainId = typeof base.id | typeof arbitrum.id | typeof BITCOIN_CHAIN_ID | typeof SOLANA_CHAIN_ID | typeof SUI_CHAIN_ID;
+
 interface ChainSelectorProps {
   value: number;
   onChange: (value: number) => void;
   label?: string;
   disabled?: boolean;
+  selectorType?: 'from' | 'to'; // Indicates whether this is a source or destination selector
 }
 
-export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disabled }: ChainSelectorProps) {
+export function ChainSelector({ 
+  value, 
+  onChange, 
+  label = 'SELECT CHAIN', 
+  disabled,
+  selectorType = 'from' // Default to 'from' if not specified
+}: ChainSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const chains = [
+  
+  const chains: {id: ChainId, name: string}[] = [
     { id: base.id, name: 'BASE' },
     { id: arbitrum.id, name: 'ARBITRUM' }
   ];
+  
+  // Coming soon chains with placeholder IDs - different based on selector type
+  let comingSoonChains: {id: ChainId, name: string}[] = [];
+  
+  if (selectorType === 'from') {
+    // Bitcoin is "coming soon" in the FROM selector
+    comingSoonChains = [
+      { id: SOLANA_CHAIN_ID, name: 'SOLANA' },
+      { id: SUI_CHAIN_ID, name: 'SUI' },
+      { id: BITCOIN_CHAIN_ID, name: 'BITCOIN' }
+    ];
+  } else {
+    // Bitcoin doesn't appear at all in the TO selector
+    comingSoonChains = [
+      { id: SOLANA_CHAIN_ID, name: 'SOLANA' },
+      { id: SUI_CHAIN_ID, name: 'SUI' }
+    ];
+  }
+  
   const selectorRef = useRef<HTMLDivElement>(null);
 
   // Debug logs
@@ -23,9 +58,27 @@ export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disable
     console.log('ChainSelector mounted with:', {
       currentValue: value,
       isOpen,
-      availableChains: chains
+      availableChains: chains,
+      comingSoonChains,
+      selectorType
     });
-  }, [value, isOpen]);
+  }, [value, isOpen, selectorType]);
+
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
@@ -83,6 +136,17 @@ export function ChainSelector({ value, onChange, label = 'SELECT CHAIN', disable
               >
                 {chain.name}
               </button>
+            ))}
+            
+            {/* Coming Soon Chains */}
+            {comingSoonChains.map((chain) => (
+              <div
+                key={chain.id}
+                className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex justify-between items-center"
+              >
+                <span>{chain.name}</span>
+                <span className="text-yellow-500 opacity-70 text-[10px]">COMING SOON</span>
+              </div>
             ))}
           </div>
         </div>
