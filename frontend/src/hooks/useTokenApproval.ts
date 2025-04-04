@@ -1,8 +1,8 @@
 import { useAccount, useNetwork, useWalletClient, useContractWrite, useContractRead, usePublicClient } from 'wagmi';
 import { parseUnits, getContract } from 'viem';
 import { TOKENS } from '@/constants/tokens';
-import { base, arbitrum, mainnet, bsc, polygon, avalanche } from 'wagmi/chains';
 import { useState, useCallback } from 'react';
+import { ChainName, CHAIN_NAME_TO_ID } from '@/types';
 
 // ERC20 ABI for approve and allowance
 const ERC20_ABI = [
@@ -28,33 +28,7 @@ const ERC20_ABI = [
   },
 ] as const;
 
-// Define ZetaChain mainnet ID
-const ZETACHAIN_ID = 7000;
-
-// Update ChainName type to include all supported chains
-type ChainName = 'BASE' | 'ARBITRUM' | 'ETHEREUM' | 'BSC' | 'POLYGON' | 'AVALANCHE' | 'ZETACHAIN';
-type TokenSymbol = keyof typeof TOKENS[typeof base.id];
-
-function getChainId(chainName: ChainName): number {
-  switch (chainName) {
-    case 'BASE':
-      return base.id;
-    case 'ARBITRUM':
-      return arbitrum.id;
-    case 'ETHEREUM':
-      return mainnet.id;
-    case 'BSC':
-      return bsc.id;
-    case 'POLYGON':
-      return polygon.id;
-    case 'AVALANCHE':
-      return avalanche.id;
-    case 'ZETACHAIN':
-      return ZETACHAIN_ID;
-    default:
-      throw new Error(`Unsupported chain: ${chainName}`);
-  }
-}
+type TokenSymbol = keyof typeof TOKENS[8453]; // Using BASE chain as reference for token symbols
 
 export function useTokenApproval() {
   const { address } = useAccount();
@@ -80,8 +54,8 @@ export function useTokenApproval() {
         throw new Error('Public client not initialized');
       }
 
-      // Get chain ID and validate network
-      const chainId = getChainId(chainName);
+      // Get chain ID from the chain name using the mapping
+      const chainId = CHAIN_NAME_TO_ID[chainName];
       if (chain?.id !== chainId) {
         throw new Error(`Please switch to ${chainName} network`);
       }

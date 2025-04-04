@@ -1,8 +1,7 @@
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { getContract } from 'wagmi/actions';
 import { Intent as IntentContract } from '@/contracts/Intent';
-import { base, arbitrum } from 'wagmi/chains';
-import { Intent } from '@/types';
+import { Intent, CHAIN_ID_TO_NAME, CHAIN_NAME_TO_ID } from '@/types';
 import { parseEther } from 'viem';
 import { useTokenApproval } from './useTokenApproval';
 import { TOKENS } from '@/constants/tokens';
@@ -93,6 +92,7 @@ export function useContract() {
         throw new Error('Invalid destination chain ID');
       }
 
+      // Get the contract address for the source chain
       const contractAddress = IntentContract.address[sourceChain as keyof typeof IntentContract.address];
       if (!contractAddress) {
         throw new Error(`No contract address for chain ${sourceChain}`);
@@ -112,12 +112,23 @@ export function useContract() {
       // Calculate total amount (amount + tip)
       const totalAmount = (amountNum + tipNum).toString();
 
+      // Get the chain name from the source chain ID
+      const sourceChainName = CHAIN_ID_TO_NAME[sourceChain];
+      if (!sourceChainName) {
+        throw new Error(`Unsupported source chain: ${sourceChain}`);
+      }
+
       // Determine token symbol
-      const tokenSymbol = token === TOKENS[sourceChain].USDC.address ? 'USDC' : 'USDT';
-      const chainName = sourceChain === base.id ? 'BASE' : 'ARBITRUM';
+      const tokenSymbol = Object.values(TOKENS[sourceChain]).find(
+        (t) => t.address.toLowerCase() === token.toLowerCase()
+      )?.symbol;
+      
+      if (!tokenSymbol) {
+        throw new Error(`Token not found for chain ${sourceChain}`);
+      }
 
       console.log('Starting token approval process:', {
-        chainName,
+        chainName: sourceChainName,
         tokenSymbol,
         contractAddress,
         totalAmount,
@@ -125,7 +136,7 @@ export function useContract() {
 
       // Approve tokens for the Intent contract
       approvalHash = await approveToken(
-        chainName,
+        sourceChainName,
         tokenSymbol,
         contractAddress,
         totalAmount
@@ -164,13 +175,16 @@ export function useContract() {
         throw new Error('Contract not properly initialized');
       }
 
-      // Convert amount and tip to wei (assuming 6 decimals for USDC)
-      const amountWei = BigInt(Math.floor(amountNum * 1e6));
-      const tipWei = BigInt(Math.floor(tipNum * 1e6));
+      // Get decimals for the token
+      const tokenDecimals = TOKENS[sourceChain][tokenSymbol].decimals;
+
+      // Convert amount and tip to wei
+      const amountWei = BigInt(Math.floor(amountNum * 10 ** tokenDecimals));
+      const tipWei = BigInt(Math.floor(tipNum * 10 ** tokenDecimals));
       const salt = BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
 
-      // Ensure chain IDs are in the correct format
-      const targetChainId = BigInt(destinationChain === base.id ? 8453 : 42161);
+      // Use the actual destination chain ID directly
+      const targetChainId = BigInt(destinationChain);
 
       console.log('Chain IDs:', {
         sourceChain,
@@ -253,10 +267,16 @@ export function useContract() {
         throw new Error('Component unmounted during event processing');
       }
 
+      // Get chain names for response
+      const destinationChainName = CHAIN_ID_TO_NAME[destinationChain];
+      if (!destinationChainName) {
+        throw new Error(`Unsupported destination chain: ${destinationChain}`);
+      }
+
       return {
         id: intentId,
-        source_chain: sourceChain === base.id ? 'BASE' : 'ARBITRUM',
-        destination_chain: destinationChain === base.id ? 'BASE' : 'ARBITRUM',
+        source_chain: sourceChainName,
+        destination_chain: destinationChainName,
         token,
         amount,
         recipient,
