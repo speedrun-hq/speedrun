@@ -45,19 +45,6 @@ export default function CreateNewIntent() {
     setShowAdvanced(!showAdvanced);
   };
 
-  if (!isConnected) {
-    return (
-      <div className="max-w-2xl mx-auto p-6 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg shadow-lg relative z-0">
-        <h2 className="text-2xl font-bold text-[hsl(var(--yellow))] mb-6 text-center font-mono">
-          NEW TRANSFER
-        </h2>
-        <p className="text-[hsl(var(--yellow))] text-center font-mono">
-          Please connect your wallet to continue
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-2xl mx-auto arcade-container border-yellow-500 relative group">
       <div className="absolute inset-0 bg-yellow-500/10 blur-sm group-hover:bg-yellow-500/20 transition-all duration-300" />
@@ -110,7 +97,7 @@ export default function CreateNewIntent() {
               <div className="flex justify-between items-center mb-2">
                 <label className="text-yellow-500 arcade-text">AMOUNT</label>
                 <span className="text-[#00ff00] arcade-text text-xs">
-                  Available: {isLoading ? 'Loading...' : balance ? `${balance} ${symbol}` : '0.00'}
+                  Available: {isLoading ? 'Loading...' : isConnected && balance ? `${balance} ${symbol}` : '0.00'}
                 </span>
               </div>
               <FormInput
@@ -137,7 +124,7 @@ export default function CreateNewIntent() {
             disabled={!isConnected || !isValid || formState.isSubmitting}
             className="w-full arcade-btn bg-yellow-500 text-black hover:bg-yellow-400 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {!isConnected ? 'CONNECT WALLET TO SUBMIT' : formState.isSubmitting ? 'APPROVING TOKENS...' : 'START'}
+            {!isConnected ? 'CONNECT WALLET TO TRANSFER' : formState.isSubmitting ? 'APPROVING TOKENS...' : 'START'}
           </button>
           
           <div className="mt-3 text-center">
