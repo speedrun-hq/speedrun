@@ -5,6 +5,7 @@ import { ChainSelector } from './ChainSelector';
 import { TokenSelector } from './TokenSelector';
 import { FormInput } from './FormInput';
 import ErrorMessage from '@/components/ErrorMessage';
+import PendingAnimation from '@/components/PendingAnimation';
 import { useIntentForm } from '@/hooks/useIntentForm';
 import { getChainId, getChainName } from '@/utils/chain';
 import { useAccount } from 'wagmi';
@@ -66,12 +67,6 @@ export default function CreateNewIntent() {
         >
           {formState.error && <ErrorMessage error={formState.error} className="mb-4" />}
           
-          {formState.success && (
-            <div className="bg-green-500/10 border border-green-500 text-green-500 p-4 rounded-lg mb-4">
-              <p className="arcade-text text-center">TRANSFER SENT!</p>
-            </div>
-          )}
-
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="relative">
@@ -130,13 +125,27 @@ export default function CreateNewIntent() {
               </div>
             )}
           </div>
+          
+          {formState.success && (
+            <div className="my-6">
+              <div className="w-full flex justify-center">
+                <PendingAnimation />
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"
             disabled={!isConnected || !isValid || formState.isSubmitting}
             className="w-full arcade-btn bg-yellow-500 text-black hover:bg-yellow-400 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {!isConnected ? 'CONNECT WALLET TO TRANSFER' : formState.isSubmitting ? 'APPROVING TOKENS...' : 'START'}
+            {!isConnected 
+              ? 'CONNECT WALLET TO TRANSFER' 
+              : formState.isSubmitting 
+                ? 'APPROVING TOKENS...' 
+                : formState.success 
+                  ? 'START ANOTHER TRANSFER' 
+                  : 'START'}
           </button>
           
           <div className="mt-3 text-center">
