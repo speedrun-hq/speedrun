@@ -60,6 +60,18 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address indexed receiver
     );
 
+    // Event emitted when an intent is settled
+    event IntentSettled(
+        bytes32 indexed intentId,
+        address indexed asset,
+        uint256 amount,
+        address indexed receiver,
+        bool fulfilled,
+        address fulfiller,
+        uint256 actualAmount,
+        uint256 paidTip
+    );
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -225,6 +237,9 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Check if intent is already fulfilled with these parameters
         require(fulfillments[fulfillmentIndex] == address(0), "Intent already fulfilled with these parameters");
 
+        // Check if intent has already been settled
+        require(!settlements[fulfillmentIndex].settled, "Intent already settled");
+
         // Transfer tokens from the sender to the receiver
         IERC20(asset).transferFrom(msg.sender, receiver, amount);
 
@@ -266,6 +281,9 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             receiver
         );
 
+        // Check if intent has already been settled
+        require(!settlements[fulfillmentIndex].settled, "Intent already settled");
+
         // Get the fulfiller if it exists
         address fulfiller = fulfillments[fulfillmentIndex];
         bool fulfilled = fulfiller != address(0);
@@ -276,14 +294,30 @@ contract Intent is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         settlement.fulfilled = fulfilled;
         settlement.fulfiller = fulfiller;
 
+        // Set paid tip
+        uint256 paidTip = 0;
+
         // If there's a fulfiller, transfer the actual amount + tip to them
         // Otherwise, transfer actual amount + tip to the receiver
         if (fulfilled) {
             IERC20(asset).transfer(fulfiller, actualAmount + tip);
             settlement.paidTip = tip;
+            paidTip = tip;
         } else {
             IERC20(asset).transfer(receiver, actualAmount + tip);
         }
+
+        // Emit the IntentSettled event
+        emit IntentSettled(
+            intentId,
+            asset,
+            amount,
+            receiver,
+            fulfilled,
+            fulfiller,
+            actualAmount,
+            paidTip
+        );
 
         return fulfilled;
     }
