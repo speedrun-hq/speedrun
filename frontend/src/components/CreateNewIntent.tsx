@@ -35,9 +35,9 @@ export default function CreateNewIntent() {
     updateRecipient(address);
   }
 
-  // Set default tip to recommended value (0.01) if not set
+  // Set default tip to recommended value (0.1) if not set
   if (!formState.tip) {
-    updateTip('0.01');
+    updateTip('0.1');
   }
   
   const toggleAdvanced = () => {
@@ -167,14 +167,14 @@ export default function CreateNewIntent() {
                 <div className="flex justify-between items-center mb-2">
                   <label className="text-yellow-500 arcade-text">CUSTOM FEE ({symbol})</label>
                   <span className="text-[#00ff00] arcade-text text-xs">
-                    Recommended: 0.01 {symbol}
+                    Recommended: 0.1 {symbol}
                   </span>
                 </div>
                 <FormInput
                   type="number"
                   value={formState.tip}
                   onChange={updateTip}
-                  placeholder="0.01"
+                  placeholder="0.1"
                   disabled={formState.isSubmitting}
                   min="0.01"
                   step="0.01"

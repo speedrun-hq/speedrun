@@ -31,7 +31,7 @@ export function useIntentForm() {
     selectedToken: 'USDC',
     amount: '',
     recipient: '',
-    tip: '0.01',
+    tip: '0.1',
     isSubmitting: false,
     error: null,
     success: false,
@@ -81,7 +81,7 @@ export function useIntentForm() {
         success: true,
         amount: '',
         recipient: '',
-        tip: '0.01',
+        tip: '0.1',
       }));
     } catch (err) {
       setFormState(prev => ({
