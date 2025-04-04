@@ -1,7 +1,7 @@
 import { useAccount, useNetwork, useWalletClient, useContractWrite, useContractRead, usePublicClient } from 'wagmi';
 import { parseUnits, getContract } from 'viem';
 import { TOKENS } from '@/constants/tokens';
-import { base, arbitrum } from 'wagmi/chains';
+import { base, arbitrum, mainnet, bsc, polygon, avalanche } from 'wagmi/chains';
 import { useState, useCallback } from 'react';
 
 // ERC20 ABI for approve and allowance
@@ -28,7 +28,11 @@ const ERC20_ABI = [
   },
 ] as const;
 
-type ChainName = 'BASE' | 'ARBITRUM';
+// Define ZetaChain mainnet ID
+const ZETACHAIN_ID = 7000;
+
+// Update ChainName type to include all supported chains
+type ChainName = 'BASE' | 'ARBITRUM' | 'ETHEREUM' | 'BSC' | 'POLYGON' | 'AVALANCHE' | 'ZETACHAIN';
 type TokenSymbol = keyof typeof TOKENS[typeof base.id];
 
 function getChainId(chainName: ChainName): number {
@@ -37,6 +41,16 @@ function getChainId(chainName: ChainName): number {
       return base.id;
     case 'ARBITRUM':
       return arbitrum.id;
+    case 'ETHEREUM':
+      return mainnet.id;
+    case 'BSC':
+      return bsc.id;
+    case 'POLYGON':
+      return polygon.id;
+    case 'AVALANCHE':
+      return avalanche.id;
+    case 'ZETACHAIN':
+      return ZETACHAIN_ID;
     default:
       throw new Error(`Unsupported chain: ${chainName}`);
   }
