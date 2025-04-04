@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/zeta-chain/zetafast/api/config"
 	"github.com/zeta-chain/zetafast/api/db"
 	"github.com/zeta-chain/zetafast/api/models"
 )
@@ -58,11 +57,6 @@ func NewFulfillmentService(client *ethclient.Client, db db.Database, intentFulfi
 
 // StartListening starts listening for fulfillment events on all chains
 func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress common.Address) error {
-	// First, catch up on any missed events
-	if err := s.catchUpOnMissedEvents(ctx, contractAddress); err != nil {
-		return fmt.Errorf("failed to catch up on missed events: %v", err)
-	}
-
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
@@ -77,90 +71,6 @@ func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress
 	}
 
 	go s.processEventLogs(ctx, sub, logs)
-	return nil
-}
-
-// catchUpOnMissedEvents fetches and processes any events that were missed during downtime
-func (s *FulfillmentService) catchUpOnMissedEvents(ctx context.Context, contractAddress common.Address) error {
-	log.Printf("Catching up on missed events for chain %d, contract %s", s.chainID, contractAddress.Hex())
-
-	// Get the last processed block number from the database
-	lastBlock, err := s.db.GetLastProcessedBlock(ctx, s.chainID)
-	if err != nil {
-		log.Printf("Error getting last processed block: %v", err)
-		return fmt.Errorf("failed to get last processed block: %v", err)
-	}
-
-	// If no last processed block is found, use the default block from config
-	if lastBlock == 0 {
-		// Get the default block from config
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			log.Printf("Error loading config: %v", err)
-			return fmt.Errorf("failed to load config: %v", err)
-		}
-
-		chainConfig, ok := cfg.ChainConfigs[s.chainID]
-		if !ok {
-			log.Printf("No config found for chain %d", s.chainID)
-			return fmt.Errorf("no config found for chain %d", s.chainID)
-		}
-
-		lastBlock = chainConfig.DefaultBlock
-		log.Printf("Using default block %d for chain %d", lastBlock, s.chainID)
-	}
-
-	log.Printf("Last processed block: %d", lastBlock)
-
-	// Get the current block number
-	currentBlock, err := s.client.BlockNumber(ctx)
-	if err != nil {
-		log.Printf("Error getting current block number: %v", err)
-		return fmt.Errorf("failed to get current block number: %v", err)
-	}
-	log.Printf("Current block: %d", currentBlock)
-
-	// If we're up to date, no need to catch up
-	if lastBlock >= currentBlock {
-		log.Printf("No missed events to process")
-		return nil
-	}
-
-	// Fetch logs for the missed blocks
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(lastBlock + 1)),
-		ToBlock:   big.NewInt(int64(currentBlock)),
-		Addresses: []common.Address{contractAddress},
-		Topics: [][]common.Hash{
-			{s.abi.Events[IntentFulfilledEventName].ID},
-		},
-	}
-	log.Printf("Fetching logs with query: FromBlock=%d, ToBlock=%d, Address=%s, EventID=%s",
-		query.FromBlock, query.ToBlock, query.Addresses[0].Hex(), query.Topics[0][0].Hex())
-
-	logs, err := s.client.FilterLogs(ctx, query)
-	if err != nil {
-		log.Printf("Error fetching intent fulfilled logs: %v", err)
-		return fmt.Errorf("failed to fetch intent fulfilled logs: %v", err)
-	}
-	log.Printf("Found %d intent fulfilled logs to process", len(logs))
-
-	// Process each missed log
-	for i, txlog := range logs {
-		log.Printf("Processing missed log %d/%d: Block=%d, TxHash=%s", i+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
-		if err := s.processLog(ctx, txlog); err != nil {
-			log.Printf("Error processing intent fulfilled log: %v", err)
-			return fmt.Errorf("failed to process intent fulfilled log: %v", err)
-		}
-		log.Printf("Successfully processed intent fulfilled log %d/%d", i+1, len(logs))
-	}
-
-	// Update the last processed block number in the database
-	if err := s.db.UpdateLastProcessedBlock(ctx, s.chainID, currentBlock); err != nil {
-		log.Printf("Error updating last processed block: %v", err)
-		return fmt.Errorf("failed to update last processed block: %v", err)
-	}
-
 	return nil
 }
 

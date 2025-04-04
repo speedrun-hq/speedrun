@@ -117,6 +117,23 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 
 	log.Printf("All intent services have completed catch-up")
 
+	log.Printf("Starting fulfillment catch-up")
+
+	// Initialize progress tracking for all chains
+	s.mu.Lock()
+	for chainID := range s.fulfillmentServices {
+		lastBlock, err := s.db.GetLastProcessedBlock(ctx, chainID)
+		if err != nil {
+			s.mu.Unlock()
+			return fmt.Errorf("failed to get last processed block for chain %d: %v", chainID, err)
+		}
+		if lastBlock < cfg.ChainConfigs[chainID].DefaultBlock {
+			lastBlock = cfg.ChainConfigs[chainID].DefaultBlock
+		}
+		s.fulfillmentProgress[chainID] = lastBlock
+	}
+	s.mu.Unlock()
+
 	var fulfillmentWg sync.WaitGroup
 	fulfillmentErrors := make(chan error, len(s.fulfillmentServices))
 
@@ -152,6 +169,15 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		fulfillmentWg.Wait()
 		close(fulfillmentErrors)
 	}()
+
+	// Check for any errors from fulfillment catch-ups
+	for err := range fulfillmentErrors {
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Printf("All fulfillment services have completed catch-up")
 
 	// Update last processed blocks for all chains only after all services have completed
 	for chainID, currentBlock := range currentBlocks {
