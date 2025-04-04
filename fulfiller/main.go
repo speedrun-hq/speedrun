@@ -172,6 +172,12 @@ func filterPendingIntents(intents []Intent) []Intent {
 func (s *FulfillerService) filterViableIntents(intents []Intent) []Intent {
 	viableIntents := []Intent{}
 	for _, intent := range intents {
+		// check if source chain == destination chain
+		if intent.SourceChain == intent.DestinationChain {
+			log.Printf("Source and destination chains are the same: %d", intent.SourceChain)
+			continue
+		}
+
 		fee, success := new(big.Int).SetString(intent.IntentFee, 10)
 		if !success {
 			log.Printf("Error parsing intent fee for %s: invalid format", intent.ID)
@@ -183,16 +189,34 @@ func (s *FulfillerService) filterViableIntents(intents []Intent) []Intent {
 
 		// Check if fee meets minimum requirement for the chain
 		s.mu.Lock()
-		chainConfig, exists := s.config.Chains[intent.DestinationChain]
+		chainConfig, exists := s.config.Chains[intent.SourceChain]
 		s.mu.Unlock()
 
 		if !exists {
-			log.Printf("Chain configuration not found for %d", intent.DestinationChain)
+			log.Printf("Chain configuration not found for %d", intent.SourceChain)
 			continue
 		}
 
 		if chainConfig.MinFee != nil && fee.Cmp(chainConfig.MinFee) < 0 {
-			log.Printf("Fee %s below minimum %s for chain %d", fee.String(), chainConfig.MinFee.String(), intent.DestinationChain)
+			log.Printf("Fee %s below minimum %s for chain %d", fee.String(), chainConfig.MinFee.String(), intent.SourceChain)
+			continue
+		}
+
+		// Check if fulfuller account has enough balance
+		balance, err := chainConfig.Client.BalanceAt(context.Background(), chainConfig.Auth.From, nil)
+		if err != nil {
+			log.Printf("Error getting balance for %s: %v", chainConfig.Auth.From.Hex(), err)
+			continue
+		}
+
+		amount, ok := new(big.Int).SetString(intent.Amount, 10)
+		if !ok {
+			log.Printf("Invalid amount: %s", intent.Amount)
+			continue
+		}
+
+		if balance.Cmp(amount) <= 0 {
+			log.Printf("Insufficient balance for %s: %s", chainConfig.Auth.From.Hex(), balance.String())
 			continue
 		}
 
