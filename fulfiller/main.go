@@ -210,31 +210,6 @@ func (s *FulfillerService) filterViableIntents(intents []Intent) []Intent {
 			continue
 		}
 
-		// Check if fulfuller account has enough balance
-		balance, err := destinationChainConfig.Client.BalanceAt(context.Background(), destinationChainConfig.Auth.From, nil)
-		if err != nil {
-			log.Printf("Error getting balance for %s: %v", destinationChainConfig.Auth.From.Hex(), err)
-			continue
-		}
-
-		amount, ok := new(big.Int).SetString(intent.Amount, 10)
-		if !ok {
-			log.Printf("Invalid amount: %s", intent.Amount)
-			continue
-		}
-
-		// convert for BSC unit difference
-		if intent.SourceChain == 56 {
-			amount = new(big.Int).Div(amount, big.NewInt(1000000000000))
-		} else if intent.DestinationChain == 56 {
-			amount = new(big.Int).Mul(amount, big.NewInt(1000000000000))
-		}
-
-		if balance.Cmp(amount) <= 0 {
-			log.Printf("Insufficient balance for %s: %s", destinationChainConfig.Auth.From.Hex(), balance.String())
-			continue
-		}
-
 		viableIntents = append(viableIntents, intent)
 	}
 	return viableIntents
