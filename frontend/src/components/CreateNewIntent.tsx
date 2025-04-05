@@ -5,8 +5,10 @@ import { ChainSelector } from './ChainSelector';
 import { TokenSelector } from './TokenSelector';
 import { FormInput } from './FormInput';
 import ErrorMessage from '@/components/ErrorMessage';
+import PendingAnimation from '@/components/PendingAnimation';
+import CompletedAnimation from '@/components/CompletedAnimation';
 import { useIntentForm } from '@/hooks/useIntentForm';
-import { getChainId, getChainName } from '@/utils/chain';
+import { getChainId, getChainName, getExplorerUrl } from '@/utils/chain';
 import { useAccount } from 'wagmi';
 
 export default function CreateNewIntent() {
@@ -28,6 +30,8 @@ export default function CreateNewIntent() {
     updateAmount,
     updateRecipient,
     updateTip,
+    fulfillmentTxHash,
+    resetForm
   } = useIntentForm();
 
   // Set default recipient to sender's address when connected and recipient is not set
@@ -66,12 +70,6 @@ export default function CreateNewIntent() {
         >
           {formState.error && <ErrorMessage error={formState.error} className="mb-4" />}
           
-          {formState.success && (
-            <div className="bg-green-500/10 border border-green-500 text-green-500 p-4 rounded-lg mb-4">
-              <p className="arcade-text text-center">TRANSFER SENT!</p>
-            </div>
-          )}
-
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="relative">
@@ -121,7 +119,7 @@ export default function CreateNewIntent() {
                 max={balance}
                 step="0.01"
               />
-              <p className="mt-2 text-[#00ff00] text-sm arcade-text">fee: {formState.tip || '0.01'} {symbol}</p>
+              <p className="mt-2 text-[#00ff00] text-[10px] arcade-text opacity-80">fee: {formState.tip || '0.01'} {symbol}</p>
             </div>
             
             {formState.error && (
@@ -130,20 +128,53 @@ export default function CreateNewIntent() {
               </div>
             )}
           </div>
+          
+          {formState.success && (
+            <div className="my-6">
+              <div className="w-full flex justify-center">
+                {fulfillmentTxHash ? (
+                  <div className="w-full">
+                    <CompletedAnimation />
+                    <div className="flex justify-center">
+                      <a 
+                        href={getExplorerUrl(getChainId(formState.destinationChain), fulfillmentTxHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-500 text-xs mt-2 arcade-text hover:underline"
+                      >
+                        TRANSFER TX: {fulfillmentTxHash.slice(0, 6)}...{fulfillmentTxHash.slice(-4)}
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full">
+                    <PendingAnimation />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"
-            disabled={!isConnected || !isValid || formState.isSubmitting}
+            disabled={!isConnected || (!isValid && !formState.success) || formState.isSubmitting}
             className="w-full arcade-btn bg-yellow-500 text-black hover:bg-yellow-400 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={formState.success ? (e) => { e.preventDefault(); resetForm(); } : undefined}
           >
-            {!isConnected ? 'CONNECT WALLET TO TRANSFER' : formState.isSubmitting ? 'APPROVING TOKENS...' : 'START'}
+            {!isConnected 
+              ? 'CONNECT WALLET TO TRANSFER' 
+              : formState.isSubmitting 
+                ? 'APPROVING TOKENS...' 
+                : formState.success 
+                  ? 'START NEW TRANSFER'
+                  : 'START'}
           </button>
           
           <div className="mt-3 text-center">
             <button
               type="button"
               onClick={toggleAdvanced}
-              className="text-yellow-500 text-xs arcade-text hover:text-yellow-400 opacity-70 hover:opacity-100"
+              className="text-yellow-500 text-[10px] arcade-text hover:text-yellow-400 opacity-70 hover:opacity-100"
             >
               {showAdvanced ? '- HIDE ADVANCED OPTIONS' : '+ SHOW ADVANCED OPTIONS'}
             </button>

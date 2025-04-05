@@ -30,10 +30,10 @@ const groundPattern = "___.___.___.___.___.___.___.___.___.___.";
 const PendingAnimation = () => {
   const [frameIndex, setFrameIndex] = useState(0);
   const [groundPosition, setGroundPosition] = useState(0);
-  const [seconds, setSeconds] = useState(0);
+  // const [seconds, setSeconds] = useState(0);
   const requestRef = useRef<number>();
   const previousTimeRef = useRef<number>();
-  const timerRef = useRef<NodeJS.Timeout>();
+  // const timerRef = useRef<NodeJS.Timeout>();
   
   // Animation frame
   const animate = (time: number) => {
@@ -54,15 +54,15 @@ const PendingAnimation = () => {
   };
   
   // Timer
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setSeconds(prev => prev + 1);
-    }, 1000);
+  // useEffect(() => {
+  //   timerRef.current = setInterval(() => {
+  //     setSeconds(prev => prev + 1);
+  //   }, 1000);
     
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+  //   return () => {
+  //     if (timerRef.current) clearInterval(timerRef.current);
+  //   };
+  // }, []);
   
   // Animation loop
   useEffect(() => {
@@ -75,11 +75,11 @@ const PendingAnimation = () => {
   }, []);
 
   // Format time as mm:ss
-  const formatTime = (totalSeconds: number) => {
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
+  // const formatTime = (totalSeconds: number) => {
+  //   const minutes = Math.floor(totalSeconds / 60);
+  //   const seconds = totalSeconds % 60;
+  //   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  // };
   
   // Create a scrolling ground effect
   const scrollingGround = groundPattern.substring(groundPosition) + groundPattern.substring(0, groundPosition);
@@ -104,9 +104,9 @@ const PendingAnimation = () => {
           </div>
         </div>
         
-        <div className="flex justify-center mt-3">
+        {/* <div className="flex justify-center mt-3">
           <span className="text-yellow-500 text-xs arcade-text">{formatTime(seconds)}</span>
-        </div>
+        </div> */}
       </div>
       
       {/* Custom CSS for blinking text */}

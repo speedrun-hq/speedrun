@@ -1,12 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useAccount, useBalance, useNetwork } from 'wagmi';
 import { useTokenBalance } from '@/hooks/useTokenBalance';
 import { apiService } from '@/services/api';
 import { useContract } from './useContract';
-import { TOKENS } from '@/constants/tokens';
+import { TOKENS, TokenSymbol } from '@/constants/tokens';
 import { getChainId, getChainName, ChainName } from '@/utils/chain';
-
-type TokenSymbol = 'USDC' | 'USDT';
+import { Intent, Fulfillment } from '@/types';
 
 interface FormState {
   sourceChain: ChainName;
@@ -18,6 +17,8 @@ interface FormState {
   isSubmitting: boolean;
   error: Error | null;
   success: boolean;
+  intentId: string | null;
+  fulfillmentTxHash: string | null;
 }
 
 export function useIntentForm() {
@@ -35,7 +36,107 @@ export function useIntentForm() {
     isSubmitting: false,
     error: null,
     success: false,
+    intentId: null,
+    fulfillmentTxHash: null,
   });
+  
+  // Private state for intent status tracking
+  const [intentStatus, setIntentStatus] = useState<'pending' | 'fulfilled'>('pending');
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+
+  // Start polling when we have an intentId and success is true
+  useEffect(() => {
+    if (formState.success && formState.intentId) {
+      // Start polling for intent status
+      startPolling(formState.intentId);
+      
+      // Cleanup function to stop polling when unmounted
+      return () => {
+        stopPolling();
+      };
+    }
+  }, [formState.success, formState.intentId]);
+
+  // Query fulfillment when intent status changes to fulfilled
+  useEffect(() => {
+    const checkFulfillment = async () => {
+      if (intentStatus === 'fulfilled' && formState.intentId) {
+        try {
+          // Get the intent to check its status
+          const intent = await apiService.getIntent(formState.intentId);
+          
+          // Once we know the intent is fulfilled or settled
+          if (intent && (intent.status === 'fulfilled' || intent.status === 'settled')) {
+            try {
+              // Get the fulfillment data using the API service
+              const fulfillment = await apiService.getFulfillment(formState.intentId);
+              
+              if (fulfillment && fulfillment.tx_hash) {
+                setFormState(prev => ({
+                  ...prev,
+                  fulfillmentTxHash: fulfillment.tx_hash
+                }));
+              } else {
+                // Set empty string if no tx_hash is available
+                setFormState(prev => ({
+                  ...prev,
+                  fulfillmentTxHash: ''
+                }));
+              }
+            } catch (fulfillmentError) {
+              console.error('Error accessing fulfillment data:', fulfillmentError);
+              // Set empty string if error fetching fulfillment
+              setFormState(prev => ({
+                ...prev,
+                fulfillmentTxHash: ''
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching intent:', error);
+        }
+      }
+    };
+    
+    checkFulfillment();
+  }, [intentStatus, formState.intentId]);
+
+  // Function to start polling the intent status
+  const startPolling = useCallback((intentId: string) => {
+    // Clear any existing interval
+    stopPolling();
+    
+    // Set initial status to pending
+    setIntentStatus('pending');
+    
+    // Start a new polling interval
+    pollingInterval.current = setInterval(async () => {
+      try {
+        // Fetch the latest intent data
+        const intent = await apiService.getIntent(intentId);
+        
+        // Update the status based on the intent's status
+        if (intent.status === 'fulfilled' || intent.status === 'settled') {
+          setIntentStatus('fulfilled');
+          // Stop polling once we've reached a terminal state
+          stopPolling();
+        } else {
+          setIntentStatus('pending');
+        }
+      } catch (error) {
+        console.error('Error polling intent status:', error);
+        // Don't stop polling on error, just try again next interval
+      }
+    }, 1500); // Poll every 1.5 seconds
+  }, []);
+
+  // Function to stop polling
+  const stopPolling = useCallback(() => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+      pollingInterval.current = null;
+    }
+  }, []);
 
   // Get token balance
   const { balance, symbol, isLoading, isError } = useTokenBalance(
@@ -61,13 +162,22 @@ export function useIntentForm() {
     if (!isValid) return;
 
     try {
-      setFormState(prev => ({ ...prev, isSubmitting: true, error: null, success: false }));
+      setFormState(prev => ({ 
+        ...prev, 
+        isSubmitting: true, 
+        error: null, 
+        success: false,
+        intentId: null,
+        fulfillmentTxHash: null
+      }));
+      
+      setIntentStatus('pending');
 
       const sourceChainId = getChainId(formState.sourceChain);
       const destinationChainId = getChainId(formState.destinationChain);
       const tokenAddress = TOKENS[sourceChainId][formState.selectedToken].address;
 
-      await createIntent(
+      const intent = await createIntent(
         sourceChainId,
         destinationChainId,
         tokenAddress,
@@ -75,23 +185,36 @@ export function useIntentForm() {
         formState.recipient,
         formState.tip
       );
+      
+      // Extract intent ID from result
+      const intentId = intent?.id || null;
 
       setFormState(prev => ({
         ...prev,
         success: true,
+        intentId,
         amount: '',
         recipient: '',
         tip: '0.1',
       }));
+      
+      // If we have an intentId, start polling for status updates
+      if (intentId) {
+        startPolling(intentId);
+      }
     } catch (err) {
       setFormState(prev => ({
         ...prev,
         error: err instanceof Error ? err : new Error('Failed to create intent'),
+        intentId: null,
+        fulfillmentTxHash: null
       }));
+      
+      setIntentStatus('pending');
     } finally {
       setFormState(prev => ({ ...prev, isSubmitting: false }));
     }
-  }, [formState, isValid, createIntent]);
+  }, [formState, isValid, createIntent, startPolling]);
 
   // Update handlers
   const updateSourceChain = useCallback((chainName: ChainName) => {
@@ -149,6 +272,19 @@ export function useIntentForm() {
     }));
   }, []);
 
+  // Reset the form and stop polling
+  const resetForm = useCallback(() => {
+    stopPolling();
+    setIntentStatus('pending');
+    setFormState(prev => ({
+      ...prev,
+      success: false,
+      intentId: null,
+      fulfillmentTxHash: null,
+      error: null
+    }));
+  }, [stopPolling]);
+
   return {
     formState,
     balance,
@@ -157,6 +293,7 @@ export function useIntentForm() {
     symbol,
     isConnected: isConnected && isWalletConnected,
     isValid,
+    fulfillmentTxHash: formState.fulfillmentTxHash || '',
     handleSubmit,
     updateSourceChain,
     updateDestinationChain,
@@ -164,5 +301,6 @@ export function useIntentForm() {
     updateAmount,
     updateRecipient,
     updateTip,
+    resetForm
   };
 } 

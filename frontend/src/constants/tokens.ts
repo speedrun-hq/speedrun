@@ -1,6 +1,6 @@
 import { base, arbitrum, avalanche, bsc, polygon, mainnet } from 'wagmi/chains';
 
-export type TokenSymbol = 'USDC' | 'USDT';
+export type TokenSymbol = 'USDC' | 'USDT' | 'BTC' | 'ZETA';
 
 interface Token {
   address: `0x${string}`;
