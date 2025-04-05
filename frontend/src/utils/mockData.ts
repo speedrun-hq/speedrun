@@ -48,6 +48,7 @@ const MOCK_FULFILLMENTS: Fulfillment[] = [
     status: 'pending',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    tx_hash: '0x1234567890123456789012345678901234567890',
   },
   {
     id: '2',
@@ -57,6 +58,7 @@ const MOCK_FULFILLMENTS: Fulfillment[] = [
     status: 'completed',
     created_at: new Date(Date.now() - 3600000).toISOString(),
     updated_at: new Date(Date.now() - 3600000).toISOString(),
+    tx_hash: '0x0987654321098765432109876543210987654321',
   },
 ];
 
