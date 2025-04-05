@@ -11,7 +11,7 @@ const arcade = Press_Start_2P({
 });
 
 export const metadata: Metadata = {
-  title: 'SpeedRun',
+  title: 'Speedrun',
   description: 'Fast cross-chain token transfers powered by ZetaChain',
   icons: {
     icon: [

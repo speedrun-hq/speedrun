@@ -1,10 +1,10 @@
-# ZetaFast
+# Speedrun
 
 A permissionless intent-based token transfer system built on ZetaChain that enables fast cross-chain transfers through incentivized third-party fulfillers.
 
 ## Overview
 
-ZetaFast is a novel cross-chain transfer system that leverages ZetaChain's infrastructure while providing faster transfer execution through a market-driven fulfillment mechanism. Users can initiate transfers with intent fees, allowing third-party agents (fulfillers) to execute transfers early on the destination chain in exchange for compensation.
+Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infrastructure while providing faster transfer execution through a market-driven fulfillment mechanism. Users can initiate transfers with intent fees, allowing third-party agents (fulfillers) to execute transfers early on the destination chain in exchange for compensation.
 
 ### Key Features
 
