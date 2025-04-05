@@ -189,23 +189,24 @@ func (s *FulfillerService) filterViableIntents(intents []Intent) []Intent {
 
 		// Check if fee meets minimum requirement for the chain
 		s.mu.Lock()
-		chainConfig, exists := s.config.Chains[intent.SourceChain]
+		sourceChainConfig, sourceExists := s.config.Chains[intent.SourceChain]
+		destinationChainConfig, destinationExists := s.config.Chains[intent.DestinationChain]
 		s.mu.Unlock()
 
-		if !exists {
+		if !sourceExists || !destinationExists {
 			log.Printf("Chain configuration not found for %d", intent.SourceChain)
 			continue
 		}
 
-		if chainConfig.MinFee != nil && fee.Cmp(chainConfig.MinFee) < 0 {
-			log.Printf("Fee %s below minimum %s for chain %d", fee.String(), chainConfig.MinFee.String(), intent.SourceChain)
+		if sourceChainConfig.MinFee != nil && fee.Cmp(sourceChainConfig.MinFee) < 0 {
+			log.Printf("Fee %s below minimum %s for chain %d", fee.String(), sourceChainConfig.MinFee.String(), intent.SourceChain)
 			continue
 		}
 
 		// Check if fulfuller account has enough balance
-		balance, err := chainConfig.Client.BalanceAt(context.Background(), chainConfig.Auth.From, nil)
+		balance, err := destinationChainConfig.Client.BalanceAt(context.Background(), destinationChainConfig.Auth.From, nil)
 		if err != nil {
-			log.Printf("Error getting balance for %s: %v", chainConfig.Auth.From.Hex(), err)
+			log.Printf("Error getting balance for %s: %v", destinationChainConfig.Auth.From.Hex(), err)
 			continue
 		}
 
@@ -215,8 +216,15 @@ func (s *FulfillerService) filterViableIntents(intents []Intent) []Intent {
 			continue
 		}
 
+		//convert for BSC unit difference
+		if intent.SourceChain == 56 {
+			amount = new(big.Int).Div(amount, big.NewInt(1000000000000))
+		} else if intent.DestinationChain == 56 {
+			amount = new(big.Int).Mul(amount, big.NewInt(1000000000000))
+		}
+
 		if balance.Cmp(amount) <= 0 {
-			log.Printf("Insufficient balance for %s: %s", chainConfig.Auth.From.Hex(), balance.String())
+			log.Printf("Insufficient balance for %s: %s", destinationChainConfig.Auth.From.Hex(), balance.String())
 			continue
 		}
 
