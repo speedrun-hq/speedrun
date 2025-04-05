@@ -116,7 +116,7 @@ export default function CreateNewIntent() {
                 max={balance}
                 step="0.01"
               />
-              <p className="mt-2 text-[#00ff00] text-sm arcade-text">fee: {formState.tip || '0.01'} {symbol}</p>
+              <p className="mt-2 text-[#00ff00] text-[10px] arcade-text opacity-80">fee: {formState.tip || '0.01'} {symbol}</p>
             </div>
             
             {formState.error && (
@@ -152,7 +152,7 @@ export default function CreateNewIntent() {
             <button
               type="button"
               onClick={toggleAdvanced}
-              className="text-yellow-500 text-xs arcade-text hover:text-yellow-400 opacity-70 hover:opacity-100"
+              className="text-yellow-500 text-[10px] arcade-text hover:text-yellow-400 opacity-70 hover:opacity-100"
             >
               {showAdvanced ? '- HIDE ADVANCED OPTIONS' : '+ SHOW ADVANCED OPTIONS'}
             </button>

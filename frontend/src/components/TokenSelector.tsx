@@ -19,7 +19,7 @@ export function TokenSelector({
   const [isOpen, setIsOpen] = useState(false);
   const tokens: TokenSymbol[] = ['USDC'];
   // Coming soon tokens
-  const comingSoonTokens = ['BTC', 'USDT'];
+  const comingSoonTokens = ['BTC', 'USDT', 'ZETA'];
   const selectorRef = useRef<HTMLDivElement>(null);
 
   const handleClick = () => {
@@ -82,10 +82,12 @@ export function TokenSelector({
             {comingSoonTokens.map((token) => (
               <div
                 key={token}
-                className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex justify-between items-center"
+                className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex items-center justify-between"
               >
                 <span>{token}</span>
-                <span className="text-yellow-500 opacity-70 text-[10px]">COMING SOON</span>
+                <span className="text-gray-500 opacity-70 text-[10px] whitespace-nowrap flex-shrink-0">
+                  COMING SOON
+                </span>
               </div>
             ))}
           </div>

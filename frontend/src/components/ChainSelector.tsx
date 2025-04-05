@@ -153,13 +153,13 @@ export function ChainSelector({
             {comingSoonChains.map((chain) => (
               <div
                 key={chain.id}
-                className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex justify-between items-center"
+                className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex items-center justify-between"
               >
-                <div className="flex items-center">
-                  <span className={`mr-2 inline-block text-xl leading-none text-gray-500`}>•</span>
+                <div className="flex items-center mr-2">
+                  <span className={`mr-2 inline-block text-xl leading-none text-gray-500 flex-shrink-0`}>•</span>
                   <span>{chain.name}</span>
                 </div>
-                <span className="text-gray-500 opacity-70 text-[10px]">
+                <span className="text-gray-500 opacity-70 text-[10px] whitespace-nowrap flex-shrink-0">
                   COMING SOON
                 </span>
               </div>

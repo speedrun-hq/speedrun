@@ -55,7 +55,14 @@ export default function RootLayout({
                   GitHub
                 </a>
                 <div className="text-yellow-500 relative z-20 select-text">©️ 2025 SPEEDRUN</div>
-                <div className="text-green-400 relative z-20 select-text">Powered by ZetaChain</div>
+                <a 
+                  href="https://www.zetachain.com/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-green-400 hover:text-green-300 transition-none z-20 relative select-text"
+                >
+                  Powered by ZetaChain
+                </a>
               </div>
             </div>
           </footer>
