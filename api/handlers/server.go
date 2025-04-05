@@ -126,7 +126,7 @@ func (s *Server) GetIntent(c *gin.Context) {
 // ListIntents handles retrieving all intents
 func (s *Server) ListIntents(c *gin.Context) {
 	// Get pagination parameters
-	limit := c.DefaultQuery("limit", "10")
+	limit := c.DefaultQuery("limit", "100")
 	offset := c.DefaultQuery("offset", "0")
 
 	// Convert to integers
