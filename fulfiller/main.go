@@ -189,17 +189,24 @@ func (s *FulfillerService) filterViableIntents(intents []Intent) []Intent {
 
 		// Check if fee meets minimum requirement for the chain
 		s.mu.Lock()
-		sourceChainConfig, sourceExists := s.config.Chains[intent.SourceChain]
 		destinationChainConfig, destinationExists := s.config.Chains[intent.DestinationChain]
 		s.mu.Unlock()
 
-		if !sourceExists || !destinationExists {
-			log.Printf("Chain configuration not found for %d", intent.SourceChain)
+		if !destinationExists {
+			log.Printf("Chain configuration not found for %d", intent.DestinationChain)
 			continue
 		}
 
-		if sourceChainConfig.MinFee != nil && fee.Cmp(sourceChainConfig.MinFee) < 0 {
-			log.Printf("Fee %s below minimum %s for chain %d", fee.String(), sourceChainConfig.MinFee.String(), intent.SourceChain)
+		// convert fee for BSC unit difference
+		if intent.SourceChain == 56 {
+			fee = new(big.Int).Div(fee, big.NewInt(1000000000000))
+		} else if intent.DestinationChain == 56 {
+			fee = new(big.Int).Mul(fee, big.NewInt(1000000000000))
+		}
+
+		// Check if fee meets minimum requirement for the chain
+		if destinationChainConfig.MinFee != nil && fee.Cmp(destinationChainConfig.MinFee) < 0 {
+			log.Printf("Fee %s below minimum %s for chain %d", fee.String(), destinationChainConfig.MinFee.String(), intent.DestinationChain)
 			continue
 		}
 
@@ -216,7 +223,7 @@ func (s *FulfillerService) filterViableIntents(intents []Intent) []Intent {
 			continue
 		}
 
-		//convert for BSC unit difference
+		// convert for BSC unit difference
 		if intent.SourceChain == 56 {
 			amount = new(big.Int).Div(amount, big.NewInt(1000000000000))
 		} else if intent.DestinationChain == 56 {
@@ -252,7 +259,7 @@ func (s *FulfillerService) fulfillIntent(intent Intent) error {
 		return fmt.Errorf("invalid amount: %s", intent.Amount)
 	}
 
-	//convert for BSC unit difference
+	// convert for BSC unit difference
 	if intent.SourceChain == 56 {
 		amount = new(big.Int).Div(amount, big.NewInt(1000000000000))
 	} else if intent.DestinationChain == 56 {
