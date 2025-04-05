@@ -68,8 +68,6 @@ export default function CreateNewIntent() {
           className="space-y-6 relative"
           role="form"
         >
-          {formState.error && <ErrorMessage error={formState.error} className="mb-4" />}
-          
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="relative">
@@ -120,12 +118,12 @@ export default function CreateNewIntent() {
                 step="0.01"
               />
               <p className="mt-2 text-[#00ff00] text-[10px] arcade-text opacity-80">
-                fee: {formState.tip || '0.01'} {symbol}
+                fee: {formState.tip || '0.01'} {symbol} (based on destination chain)
               </p>
             </div>
             
             {formState.error && (
-              <div className="text-red-500 text-sm arcade-text">
+              <div className="text-red-500 text-sm arcade-text border border-red-500 p-3 rounded bg-red-500/10 mt-4">
                 {formState.error.message}
               </div>
             )}
