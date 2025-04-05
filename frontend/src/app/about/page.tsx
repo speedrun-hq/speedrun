@@ -25,16 +25,16 @@ export default function About() {
           <div className="arcade-container border-primary-500 relative group">
             <div className="absolute inset-0 bg-primary-500/10 blur-sm group-hover:bg-primary-500/20 transition-all duration-300" />
             <div className="relative">
-              <h3 className="arcade-text text-lg mb-4 text-primary-500 text-center">ARCHITECTURE</h3>
+              <h3 className="arcade-text text-lg mb-2 text-primary-500 text-center">ARCHITECTURE</h3>
               <div className="space-y-4">
                 <p className="arcade-text text-xs text-gray-300">
-                  SPEEDRUN is powered by ZetaChain's cross-chain intent settlement protocol, enabling seamless token transfers across multiple blockchains.
+                  SPEEDRUN is an intent settlement protocol focused on delivering blazing fast cross-chain transactions while maintaining strong security.
                 </p>
                 <p className="arcade-text text-xs text-gray-300">
-                  The platform uses an intent-based architecture where users create transfer intents that get fulfilled by "speedrunners" - liquidity providers who compete to execute transfers as quickly as possible.
+                  Built on ZetaChain's interoperability layer, SPEEDRUN leverages this foundation to enable rapid token transfers between different blockchains without compromising on security.
                 </p>
                 <p className="arcade-text text-xs text-gray-300">
-                  By leveraging ZetaChain's interoperability features, SPEEDRUN eliminates the need for bridges or wrapped tokens, making cross-chain transfers simple and efficient.
+                  The platform's "speedrunner" mechanism creates a competitive environment where liquidity providers race to fulfill transfer intents as quickly as possible, dramatically reducing wait times compared to traditional cross-chain solutions.
                 </p>
               </div>
             </div>
@@ -86,6 +86,22 @@ export default function About() {
                 </p>
                 <p className="arcade-text text-xs text-yellow-500">
                   HIGHER FEES ATTRACT MORE SPEEDRUNNERS = FASTER TRANSFERS!
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* VISION Section */}
+          <div className="arcade-container border-green-500 relative group">
+            <div className="absolute inset-0 bg-green-500/10 blur-sm group-hover:bg-green-500/20 transition-all duration-300" />
+            <div className="relative">
+              <h3 className="arcade-text text-lg mb-4 text-green-500 text-center">VISION</h3>
+              <div className="space-y-4">
+                <p className="arcade-text text-xs text-gray-300">
+                  SPEEDRUN will expand beyond EVM chains to support non-EVM ecosystems like Solana, Sui, and more, creating a truly universal cross-chain settlement protocol.
+                </p>
+                <p className="arcade-text text-xs text-gray-300">
+                  Our ultimate goal extends past token transfers to enable arbitrary cross-chain smart contract calls, allowing developers to build blazing fast cross-chain applications.
                 </p>
               </div>
             </div>
