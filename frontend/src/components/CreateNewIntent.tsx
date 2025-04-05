@@ -68,8 +68,6 @@ export default function CreateNewIntent() {
           className="space-y-6 relative"
           role="form"
         >
-          {formState.error && <ErrorMessage error={formState.error} className="mb-4" />}
-          
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="relative">
@@ -119,11 +117,13 @@ export default function CreateNewIntent() {
                 max={balance}
                 step="0.01"
               />
-              <p className="mt-2 text-[#00ff00] text-[10px] arcade-text opacity-80">fee: {formState.tip || '0.01'} {symbol}</p>
+              <p className="mt-2 text-[#00ff00] text-[10px] arcade-text opacity-80">
+                fee: {formState.tip || '0.01'} {symbol}
+              </p>
             </div>
             
             {formState.error && (
-              <div className="text-red-500 text-sm arcade-text">
+              <div className="text-red-500 text-sm arcade-text border border-red-500 p-3 rounded bg-red-500/10 mt-4">
                 {formState.error.message}
               </div>
             )}
@@ -198,7 +198,11 @@ export default function CreateNewIntent() {
                 <div className="flex justify-between items-center mb-2">
                   <label className="text-yellow-500 arcade-text">CUSTOM FEE ({symbol})</label>
                   <span className="text-[#00ff00] arcade-text text-xs">
-                    Recommended: 0.1 {symbol}
+                    {formState.destinationChain === 'ETHEREUM' 
+                      ? `Recommended: 1.0 ${symbol}` 
+                      : formState.destinationChain === 'BSC' 
+                        ? `Recommended: 0.5 ${symbol}` 
+                        : `Recommended: 0.2 ${symbol}`}
                   </span>
                 </div>
                 <FormInput
@@ -213,7 +217,7 @@ export default function CreateNewIntent() {
                 <div className="mt-2 text-[10px] text-gray-400 arcade-text">
                   <p>Setting a lower fee may delay your transfer as speedrunners prioritize higher fees.</p>
                   <p className="mt-1">If the fee is too low, the network fees will be deducted from your transfer amount.</p>
-                  <p className="mt-1">The default value is recommended for immediate processing.</p>
+                  <p className="mt-1">The recommended fee varies by chain: 1.0 for Ethereum, 0.5 for BSC, and 0.2 for all others.</p>
                   <p className="mt-1">
                     <a href="/about" className="text-yellow-500 hover:underline">
                       Learn more about the intent-based architecture →
