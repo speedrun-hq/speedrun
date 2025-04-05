@@ -97,10 +97,11 @@ frontend/yarn-error.log*
 # API specific
 api/zetafast
 
-# Environment variables
-.env
-.env.*
-!.env.example
+# Fulfiller specific
+fulfiller/fulfiller
+fulfiller/.env
+fulfiller/.env.*
+fulfiller/.env.example
 
 # API specific
 api/zetafast

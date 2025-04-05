@@ -29,6 +29,7 @@ type Config struct {
 	ChainConfigs            map[uint64]*ChainConfig
 	IntentFulfilledEventABI string
 	IntentInitiatedEventABI string
+	IntentSettledEventABI   string
 }
 
 // IntentInitiatedEventABI is the ABI for the IntentInitiated event
@@ -97,13 +98,33 @@ const IntentFulfilledEventABI = `[
 	}
 ]`
 
+// IntentSettledEventABI is the ABI for the IntentSettled event
+const IntentSettledEventABI = `[
+	{
+		"anonymous": false,
+		"inputs": [
+			{"indexed": true, "internalType": "bytes32", "name": "intentId", "type": "bytes32"},
+			{"indexed": true, "internalType": "address", "name": "asset", "type": "address"},
+			{"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"},
+			{"indexed": true, "internalType": "address", "name": "receiver", "type": "address"},
+			{"indexed": false, "internalType": "bool", "name": "fulfilled", "type": "bool"},
+			{"indexed": false, "internalType": "address", "name": "fulfiller", "type": "address"},
+			{"indexed": false, "internalType": "uint256", "name": "actualAmount", "type": "uint256"},
+			{"indexed": false, "internalType": "uint256", "name": "paidTip", "type": "uint256"}
+		],
+		"name": "IntentSettled",
+		"type": "event"
+	}
+]`
+
+
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
 	// Load .env file if it exists
 	_ = godotenv.Load()
 
 	// Get supported chains
-	supportedChainsStr := strings.Split(getEnvOrDefault("SUPPORTED_CHAINS", "42161,8453"), ",")
+	supportedChainsStr := strings.Split(getEnvOrDefault("SUPPORTED_CHAINS", "42161,8453,137,1,43114,56"), ",")
 	supportedChains := make([]uint64, len(supportedChainsStr))
 	for i, chain := range supportedChainsStr {
 		chainID, err := strconv.ParseUint(chain, 10, 64)
@@ -126,6 +147,14 @@ func LoadConfig() (*Config, error) {
 			prefix = "BASE"
 		case 7001:
 			prefix = "ZETA"
+		case 137:
+			prefix = "POLYGON"
+		case 1:
+			prefix = "ETHEREUM"
+		case 56:
+			prefix = "BSC"
+		case 43114:
+			prefix = "AVALANCHE"
 		default:
 			return nil, fmt.Errorf("unsupported chain ID: %d", chainID)
 		}
@@ -149,6 +178,7 @@ func LoadConfig() (*Config, error) {
 		ChainConfigs:            chainConfigs,
 		IntentFulfilledEventABI: getEnvOrDefault("INTENT_FULFILLED_EVENT_ABI", IntentFulfilledEventABI),
 		IntentInitiatedEventABI: getEnvOrDefault("INTENT_INITIATED_EVENT_ABI", IntentInitiatedEventABI),
+		IntentSettledEventABI:   getEnvOrDefault("INTENT_SETTLED_EVENT_ABI", IntentSettledEventABI),
 	}, nil
 }
 

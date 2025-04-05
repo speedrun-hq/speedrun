@@ -1,7 +1,7 @@
 export const Intent = {
   address: {
     [1]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_ETHEREUM as `0x${string}`, // Ethereum
-    [56]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_BNB_CHAIN as `0x${string}`, // BNB Chain
+    [56]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_BSC as `0x${string}`, // BNB Chain
     [137]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_POLYGON as `0x${string}`, // Polygon
     [8453]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_BASE as `0x${string}`, // Base
     [42161]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_ARBITRUM as `0x${string}`, // Arbitrum

@@ -1,0 +1,16 @@
+{
+  "name": "SpeedRun",
+  "short_name": "SpeedRun",
+  "description": "Fast cross-chain token transfers powered by ZetaChain",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000"
+} 
