@@ -6,8 +6,9 @@ import { TokenSelector } from './TokenSelector';
 import { FormInput } from './FormInput';
 import ErrorMessage from '@/components/ErrorMessage';
 import PendingAnimation from '@/components/PendingAnimation';
+import CompletedAnimation from '@/components/CompletedAnimation';
 import { useIntentForm } from '@/hooks/useIntentForm';
-import { getChainId, getChainName } from '@/utils/chain';
+import { getChainId, getChainName, getExplorerUrl } from '@/utils/chain';
 import { useAccount } from 'wagmi';
 
 export default function CreateNewIntent() {
@@ -29,6 +30,8 @@ export default function CreateNewIntent() {
     updateAmount,
     updateRecipient,
     updateTip,
+    fulfillmentTxHash,
+    resetForm
   } = useIntentForm();
 
   // Set default recipient to sender's address when connected and recipient is not set
@@ -129,22 +132,41 @@ export default function CreateNewIntent() {
           {formState.success && (
             <div className="my-6">
               <div className="w-full flex justify-center">
-                <PendingAnimation />
+                {fulfillmentTxHash ? (
+                  <div className="w-full">
+                    <CompletedAnimation />
+                    <div className="flex justify-center">
+                      <a 
+                        href={getExplorerUrl(getChainId(formState.destinationChain), fulfillmentTxHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-500 text-xs mt-2 arcade-text hover:underline"
+                      >
+                        TRANSFER TX: {fulfillmentTxHash.slice(0, 6)}...{fulfillmentTxHash.slice(-4)}
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full">
+                    <PendingAnimation />
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           <button
             type="submit"
-            disabled={!isConnected || !isValid || formState.isSubmitting}
+            disabled={!isConnected || (!isValid && !formState.success) || formState.isSubmitting}
             className="w-full arcade-btn bg-yellow-500 text-black hover:bg-yellow-400 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={formState.success ? (e) => { e.preventDefault(); resetForm(); } : undefined}
           >
             {!isConnected 
               ? 'CONNECT WALLET TO TRANSFER' 
               : formState.isSubmitting 
                 ? 'APPROVING TOKENS...' 
                 : formState.success 
-                  ? 'START ANOTHER TRANSFER' 
+                  ? 'START NEW TRANSFER'
                   : 'START'}
           </button>
           

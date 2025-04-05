@@ -19,6 +19,7 @@ export interface Fulfillment {
   status: string;
   created_at: string;
   updated_at: string;
+  tx_hash: string;
 }
 
 export interface CreateIntentRequest {

@@ -68,4 +68,23 @@ export function getChainRpcUrl(chainId: number): string {
     default:
       return '';
   }
+}
+
+export function getExplorerUrl(chainId: number, txHash: string): string {
+  switch (chainId) {
+    case mainnet.id:
+      return `https://etherscan.io/tx/${txHash}`;
+    case bsc.id:
+      return `https://bscscan.com/tx/${txHash}`;
+    case polygon.id:
+      return `https://polygonscan.com/tx/${txHash}`;
+    case base.id:
+      return `https://basescan.org/tx/${txHash}`;
+    case arbitrum.id:
+      return `https://arbiscan.io/tx/${txHash}`;
+    case avalanche.id:
+      return `https://snowtrace.io/tx/${txHash}`;
+    default:
+      return '';
+  }
 } 

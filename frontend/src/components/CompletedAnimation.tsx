@@ -28,10 +28,9 @@ const celebrationFrames = [
 const groundPattern = "___.___.___.___.___.___.___.___.___.___.";
 
 interface CompletedAnimationProps {
-  time?: string;
 }
 
-const CompletedAnimation: React.FC<CompletedAnimationProps> = ({ time = "1:42" }) => {
+const CompletedAnimation: React.FC<CompletedAnimationProps> = ({ }) => {
   const [frameIndex, setFrameIndex] = useState(0);
   const requestRef = useRef<number>();
   const previousTimeRef = useRef<number>();
@@ -64,7 +63,7 @@ const CompletedAnimation: React.FC<CompletedAnimationProps> = ({ time = "1:42" }
   }, []);
   
   return (
-    <div className="flex flex-col items-center my-4">
+    <div className="flex flex-col items-center my-4 w-full">
       <div className="border-2 border-green-500 bg-black p-4 w-full max-w-sm overflow-hidden">
         <div className="flex justify-between mb-2">
           <div className="flex flex-col items-center">
@@ -89,9 +88,9 @@ const CompletedAnimation: React.FC<CompletedAnimationProps> = ({ time = "1:42" }
           </div>
         </div>
         
-        <div className="flex justify-center mt-3">
+        {/* <div className="flex justify-center mt-3">
           <span className="text-green-500 text-xs arcade-text">TIME: {time}</span>
-        </div>
+        </div> */}
       </div>
     </div>
   );
