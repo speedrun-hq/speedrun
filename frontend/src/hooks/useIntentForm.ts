@@ -32,7 +32,7 @@ export function useIntentForm() {
     selectedToken: 'USDC',
     amount: '',
     recipient: '',
-    tip: '0.1',
+    tip: '0.2',
     isSubmitting: false,
     error: null,
     success: false,
@@ -154,6 +154,18 @@ export function useIntentForm() {
     parseFloat(formState.amount) <= (balance ? parseFloat(balance) : 0)
   );
 
+  // Get recommended fee based on destination chain
+  const getRecommendedFee = useCallback((chainName: ChainName): string => {
+    switch (chainName) {
+      case 'ETHEREUM':
+        return '1.0';
+      case 'BSC':
+        return '0.5';
+      default:
+        return '0.2';
+    }
+  }, []);
+
   // Handle form submission
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     if (e) {
@@ -189,14 +201,19 @@ export function useIntentForm() {
       // Extract intent ID from result
       const intentId = intent?.id || null;
 
-      setFormState(prev => ({
-        ...prev,
-        success: true,
-        intentId,
-        amount: '',
-        recipient: '',
-        tip: '0.1',
-      }));
+      setFormState(prev => {
+        // Get the recommended fee for the current destination chain
+        const recommendedFee = getRecommendedFee(prev.destinationChain);
+        
+        return {
+          ...prev,
+          success: true,
+          intentId,
+          amount: '',
+          recipient: '',
+          tip: recommendedFee,
+        };
+      });
       
       // If we have an intentId, start polling for status updates
       if (intentId) {
@@ -214,7 +231,7 @@ export function useIntentForm() {
     } finally {
       setFormState(prev => ({ ...prev, isSubmitting: false }));
     }
-  }, [formState, isValid, createIntent, startPolling]);
+  }, [formState, isValid, createIntent, startPolling, getRecommendedFee]);
 
   // Update handlers
   const updateSourceChain = useCallback((chainName: ChainName) => {
@@ -245,13 +262,17 @@ export function useIntentForm() {
         newSource = options.find(c => c !== chainName) || 'ARBITRUM';
       }
       
+      // Set recommended fee based on destination chain
+      const recommendedFee = getRecommendedFee(chainName);
+      
       return {
         ...prev,
         destinationChain: chainName,
         sourceChain: newSource,
+        tip: recommendedFee,
       };
     });
-  }, []);
+  }, [getRecommendedFee]);
 
   const updateToken = useCallback((value: TokenSymbol) => {
     setFormState(prev => ({ ...prev, selectedToken: value }));
@@ -276,14 +297,22 @@ export function useIntentForm() {
   const resetForm = useCallback(() => {
     stopPolling();
     setIntentStatus('pending');
-    setFormState(prev => ({
-      ...prev,
-      success: false,
-      intentId: null,
-      fulfillmentTxHash: null,
-      error: null
-    }));
-  }, [stopPolling]);
+    setFormState(prev => {
+      // Get the recommended fee for the current destination chain
+      const recommendedFee = getRecommendedFee(prev.destinationChain);
+      
+      return {
+        ...prev,
+        success: false,
+        intentId: null,
+        fulfillmentTxHash: null,
+        error: null,
+        amount: '',
+        // Keep the current destination chain but update the fee accordingly
+        tip: recommendedFee
+      };
+    });
+  }, [stopPolling, getRecommendedFee]);
 
   return {
     formState,
