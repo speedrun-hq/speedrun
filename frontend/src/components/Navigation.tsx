@@ -54,19 +54,19 @@ const Navigation = () => {
           <div className="hidden lg:flex space-x-4 items-center relative z-10">
             <Link
               href="/"
-              className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 relative"
+              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none relative"
             >
               MAKE TRANSFER
             </Link>
             <Link
               href="/leaderboard"
-              className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 relative"
+              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none relative"
             >
               LEADERBOARD
             </Link>
             <Link
               href="/about"
-              className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 relative"
+              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none relative"
             >
               LEARN MORE
             </Link>
@@ -81,7 +81,7 @@ const Navigation = () => {
               <ConnectWallet />
             </div>
             <button 
-              className="hamburger-btn ml-4 p-2 rounded border-2 border-yellow-500 text-yellow-500 hover:bg-yellow-500/20 z-50 relative cursor-pointer"
+              className="hamburger-btn ml-4 p-2 rounded border-2 border-green-400 text-green-400 hover:bg-green-400/20 transition-none z-50 relative cursor-pointer"
               onClick={toggleMenu}
               aria-label="Toggle menu"
               type="button"
@@ -113,21 +113,21 @@ const Navigation = () => {
         <div className="container mx-auto px-4 py-4 space-y-3">
           <Link
             href="/"
-            className="arcade-btn w-full block py-2 text-center border-yellow-500 text-yellow-500 hover:bg-yellow-500/20"
+            className="arcade-btn w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
             onClick={() => setIsMenuOpen(false)}
           >
             MAKE TRANSFER
           </Link>
           <Link
             href="/leaderboard"
-            className="arcade-btn w-full block py-2 text-center border-yellow-500 text-yellow-500 hover:bg-yellow-500/20"
+            className="arcade-btn w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
             onClick={() => setIsMenuOpen(false)}
           >
             LEADERBOARD
           </Link>
           <Link
             href="/about"
-            className="arcade-btn w-full block py-2 text-center border-yellow-500 text-yellow-500 hover:bg-yellow-500/20"
+            className="arcade-btn w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
             onClick={() => setIsMenuOpen(false)}
           >
             LEARN MORE
