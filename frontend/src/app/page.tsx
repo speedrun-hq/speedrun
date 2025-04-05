@@ -14,8 +14,8 @@ export default function Home() {
       <div className="z-10 max-w-5xl w-full relative flex flex-col items-center">
         <div className="text-center mb-24">
           <p className="arcade-text text-xl text-primary-500 relative">
-            <span className="absolute inset-0 blur-sm opacity-50">Cheap and fast cross-chain transfers</span>
-            Cheap and fast cross-chain transfers
+            <span className="absolute inset-0 blur-sm opacity-50">Blazing-Fast Cross-Chain Transfers</span>
+            >Blazing-Fast Cross-Chain Transfers
           </p>
         </div>
 
@@ -24,12 +24,12 @@ export default function Home() {
           <div className="absolute inset-0 bg-[linear-gradient(45deg,_transparent_0%,_rgba(0,255,255,0.02)_50%,_transparent_100%)] animate-pulse" />
           <CreateNewIntentWrapper />
           
-          <div className="text-center mt-10 relative z-0">
+          {/* <div className="text-center mt-10 relative z-0">
             <p className="arcade-text text-sm text-primary-300 relative">
               <span className="absolute inset-0 blur-sm opacity-50">Powered by ZetaChain</span>
               Powered by ZetaChain
             </p>
-          </div>
+          </div> */}
         </div>
       </div>
     </main>
