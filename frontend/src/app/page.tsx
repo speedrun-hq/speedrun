@@ -4,7 +4,7 @@ import { CreateNewIntentWrapper } from '@/components/CreateNewIntentWrapper';
 
 export default function Home() {
   return (
-    <main className="flex min-h-[calc(100vh-150px)] flex-col items-center p-4 md:p-8 pt-12 md:pt-16 relative overflow-hidden">
+    <main className="flex min-h-[calc(100vh-150px)] flex-col items-center p-4 md:p-8 pt-6 md:pt-8 relative overflow-hidden">
       {/* Retro grid background */}
       <div className="fixed inset-0 bg-[linear-gradient(transparent_1px,_transparent_1px),_linear-gradient(90deg,_transparent_1px,_transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,_#000_70%,_transparent_100%)] opacity-20" />
       
@@ -12,10 +12,10 @@ export default function Home() {
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(255,255,0,0.1)_0%,_transparent_50%)]" />
       
       <div className="z-10 max-w-5xl w-full relative flex flex-col items-center">
-        <div className="text-center mb-10 md:mb-16">
+        <div className="text-center mb-6 md:mb-8">
           <p className="arcade-text text-lg md:text-xl text-primary-500 relative">
-            <span className="absolute inset-0 blur-sm opacity-50">Blazing-Fast Cross-Chain Transfers</span>
-            Blazing-Fast Cross-Chain Transfers
+            <span className="absolute inset-0 blur-sm opacity-50">Blazing Fast Cross-Chain Transfers</span>
+            Blazing Fast Cross-Chain Transfers
           </p>
         </div>
 

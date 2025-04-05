@@ -118,7 +118,7 @@ export default function CreateNewIntent() {
                 step="0.01"
               />
               <p className="mt-2 text-[#00ff00] text-[10px] arcade-text opacity-80">
-                fee: {formState.tip || '0.01'} {symbol} (based on destination chain)
+                fee: {formState.tip || '0.01'} {symbol}
               </p>
             </div>
             
