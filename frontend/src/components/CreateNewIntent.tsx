@@ -10,6 +10,7 @@ import CompletedAnimation from '@/components/CompletedAnimation';
 import { useIntentForm } from '@/hooks/useIntentForm';
 import { getChainId, getChainName, getExplorerUrl } from '@/utils/chain';
 import { useAccount } from 'wagmi';
+import Link from 'next/link';
 
 export default function CreateNewIntent() {
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -135,7 +136,7 @@ export default function CreateNewIntent() {
                 {fulfillmentTxHash ? (
                   <div className="w-full">
                     <CompletedAnimation />
-                    <div className="flex justify-center">
+                    <div className="flex flex-col items-center">
                       <a 
                         href={getExplorerUrl(getChainId(formState.destinationChain), fulfillmentTxHash)}
                         target="_blank"
@@ -144,11 +145,34 @@ export default function CreateNewIntent() {
                       >
                         TRANSFER TX: {fulfillmentTxHash.slice(0, 6)}...{fulfillmentTxHash.slice(-4)}
                       </a>
+                      
+                      {formState.intentId && (
+                        <Link 
+                          href={`/intent/${formState.intentId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-yellow-500 text-xs mt-2 arcade-text hover:underline"
+                        >
+                          VIEW INTENT DETAILS
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ) : (
                   <div className="w-full">
                     <PendingAnimation />
+                    {formState.intentId && (
+                      <div className="flex justify-center mt-3">
+                        <Link 
+                          href={`/intent/${formState.intentId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-yellow-500 text-xs arcade-text hover:underline"
+                        >
+                          VIEW INTENT DETAILS →
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
