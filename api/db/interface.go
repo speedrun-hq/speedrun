@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/zeta-chain/zetafast/api/models"
+	"github.com/speedrun-hq/speedrun/api/models"
 )
 
 // Database interface defines the methods that a database implementation must provide

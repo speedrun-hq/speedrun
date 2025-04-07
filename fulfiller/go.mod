@@ -1,4 +1,4 @@
-module github.com/zeta-chain/zetafast/fulfiller
+module github.com/speedrun-hq/speedrun/fulfiller
 
 go 1.21
 

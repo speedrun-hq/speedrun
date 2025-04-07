@@ -11,13 +11,13 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/zeta-chain/zetafast/api/config"
-	"github.com/zeta-chain/zetafast/api/db"
+	"github.com/speedrun-hq/speedrun/api/config"
+	"github.com/speedrun-hq/speedrun/api/db"
 )
 
 // EventCatchupService coordinates the catch-up process between intent and fulfillment services
 type EventCatchupService struct {
-	intentServices     map[uint64]*IntentService
+	intentServices      map[uint64]*IntentService
 	fulfillmentServices map[uint64]*FulfillmentService
 	settlementServices  map[uint64]*SettlementService
 	db                  db.Database
@@ -30,11 +30,11 @@ type EventCatchupService struct {
 // NewEventCatchupService creates a new EventCatchupService instance
 func NewEventCatchupService(intentServices map[uint64]*IntentService, fulfillmentServices map[uint64]*FulfillmentService, settlementServices map[uint64]*SettlementService, db db.Database) *EventCatchupService {
 	return &EventCatchupService{
-		intentServices:     intentServices,
+		intentServices:      intentServices,
 		fulfillmentServices: fulfillmentServices,
 		settlementServices:  settlementServices,
-		db:                 db,
-		intentProgress:     make(map[uint64]uint64),
+		db:                  db,
+		intentProgress:      make(map[uint64]uint64),
 		fulfillmentProgress: make(map[uint64]uint64),
 		settlementProgress:  make(map[uint64]uint64),
 	}

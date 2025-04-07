@@ -117,7 +117,6 @@ const IntentSettledEventABI = `[
 	}
 ]`
 
-
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
 	// Load .env file if it exists
@@ -173,7 +172,7 @@ func LoadConfig() (*Config, error) {
 
 	return &Config{
 		Port:                    getEnvOrDefault("PORT", "8080"),
-		DatabaseURL:             getEnvOrDefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/zetafast?sslmode=disable"),
+		DatabaseURL:             getEnvOrDefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/speedrun?sslmode=disable"),
 		SupportedChains:         supportedChains,
 		ChainConfigs:            chainConfigs,
 		IntentFulfilledEventABI: getEnvOrDefault("INTENT_FULFILLED_EVENT_ABI", IntentFulfilledEventABI),

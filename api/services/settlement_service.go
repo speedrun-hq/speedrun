@@ -12,8 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/zeta-chain/zetafast/api/db"
-	"github.com/zeta-chain/zetafast/api/models"
+	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/models"
 )
 
 // Constants for event processing
@@ -211,7 +211,6 @@ func (s *SettlementService) ListSettlements(ctx context.Context) ([]*models.Sett
 
 // CreateSettlement creates a new settlement
 func (s *SettlementService) CreateSettlement(ctx context.Context, settlement *models.Settlement) error {
-
 	if err := s.db.CreateSettlement(ctx, settlement); err != nil {
 		return fmt.Errorf("failed to create settlement: %v", err)
 	}

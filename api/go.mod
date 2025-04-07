@@ -1,4 +1,4 @@
-module github.com/zeta-chain/zetafast/api
+module github.com/speedrun-hq/speedrun/api
 
 go 1.24.0
 

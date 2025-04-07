@@ -118,7 +118,7 @@ console.log('Configured chains:', chains.map(chain => ({
 })));
 
 const { wallets } = getDefaultWallets({
-  appName: 'ZetaFast',
+  appName: 'Speedrun',
   projectId,
   chains,
 });

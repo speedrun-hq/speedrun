@@ -13,9 +13,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/zeta-chain/zetafast/api/db"
-	"github.com/zeta-chain/zetafast/api/models"
-	"github.com/zeta-chain/zetafast/api/utils"
+	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/models"
+	"github.com/speedrun-hq/speedrun/api/utils"
 )
 
 // Constants for event processing

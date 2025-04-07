@@ -13,8 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/zeta-chain/zetafast/api/db"
-	"github.com/zeta-chain/zetafast/api/models"
+	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/models"
 )
 
 // Constants for event processing
@@ -166,7 +166,6 @@ func (s *FulfillmentService) extractEventData(vLog types.Log) (*models.IntentFul
 
 // GetFulfillment retrieves a fulfillment by ID
 func (s *FulfillmentService) GetFulfillment(ctx context.Context, id string) (*models.Fulfillment, error) {
-
 	// Get fulfillment from database
 	fulfillment, err := s.db.GetFulfillment(ctx, id)
 	if err != nil {

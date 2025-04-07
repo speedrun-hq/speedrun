@@ -9,8 +9,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/zeta-chain/zetafast/api/config"
-	"github.com/zeta-chain/zetafast/api/models"
+	"github.com/speedrun-hq/speedrun/api/config"
+	"github.com/speedrun-hq/speedrun/api/models"
 )
 
 var (

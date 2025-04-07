@@ -8,9 +8,9 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/zeta-chain/zetafast/api/models"
-	"github.com/zeta-chain/zetafast/api/services"
-	"github.com/zeta-chain/zetafast/api/utils"
+	"github.com/speedrun-hq/speedrun/api/models"
+	"github.com/speedrun-hq/speedrun/api/services"
+	"github.com/speedrun-hq/speedrun/api/utils"
 )
 
 // Server handles HTTP requests

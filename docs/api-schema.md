@@ -1,6 +1,6 @@
 # API Schema
 
-This document describes the API endpoints for ZetaFast, a system for intent-based cross-chain USDC transfers between Base and Arbitrum networks.
+This document describes the API endpoints for Speedrun, a system for intent-based cross-chain USDC transfers between Base and Arbitrum networks.
 
 ## Create Intent
 

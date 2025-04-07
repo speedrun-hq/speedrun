@@ -1,10 +1,10 @@
-# ZetaFast API
+# SPEEDRUN API
 
-The ZetaFast API is a service that facilitates intent-based cross chain management and fulfillment. It provides a RESTful interface for creating, retrieving, and managing intent-based cross-chain transfers.
+The SPEEDRUN API is a service that facilitates intent-based cross chain management and fulfillment. It provides a RESTful interface for creating, retrieving, and managing intent-based cross-chain transfers.
 
 ## Overview
 
-ZetaFast API is designed to work with the ZetaChain ecosystem, allowing users to create intents for cross-chain transfers and track their fulfillment status. The API handles the following key functionalities:
+SPEEDRUN API is designed to work with the ZetaChain ecosystem, allowing users to create intents for cross-chain transfers and track their fulfillment status. The API handles the following key functionalities:
 
 - Creating intents for cross-chain transfers
 - Retrieving intent details
@@ -47,8 +47,8 @@ api/
 
 1. Clone the repository:
    ```
-   git clone https://github.com/zeta-chain/zetafast.git
-   cd zetafast/api
+   git clone https://github.com/speedrun-hq/speedrun
+   cd speedrun/api
    ```
 
 2. Install dependencies:
@@ -64,7 +64,7 @@ api/
 
 4. Build the application:
    ```
-   go build -o zetafast
+   go build -o speedrun
    ```
 
 ### Configuration
