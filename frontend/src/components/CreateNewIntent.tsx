@@ -160,7 +160,7 @@ export default function CreateNewIntent() {
                   </div>
                 ) : (
                   <div className="w-full">
-                    <PendingAnimation />
+                    <PendingAnimation approvalHash={formState.approvalHash} />
                     {formState.intentId && (
                       <div className="flex justify-center mt-3">
                         <Link 
@@ -188,7 +188,9 @@ export default function CreateNewIntent() {
             {!isConnected 
               ? 'CONNECT WALLET TO TRANSFER' 
               : formState.isSubmitting 
-                ? 'APPROVING TOKENS...' 
+                ? formState.approvalHash 
+                  ? 'SIGN INTENT TRANSACTION...' 
+                  : 'APPROVING USDC...' 
                 : formState.success 
                   ? 'START NEW TRANSFER'
                   : 'START'}

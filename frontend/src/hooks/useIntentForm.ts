@@ -19,6 +19,8 @@ interface FormState {
   success: boolean;
   intentId: string | null;
   fulfillmentTxHash: string | null;
+  approvalHash: string | null;
+  intentHash: string | null;
 }
 
 export function useIntentForm() {
@@ -38,6 +40,8 @@ export function useIntentForm() {
     success: false,
     intentId: null,
     fulfillmentTxHash: null,
+    approvalHash: null,
+    intentHash: null,
   });
   
   // Private state for intent status tracking
@@ -180,7 +184,9 @@ export function useIntentForm() {
         error: null, 
         success: false,
         intentId: null,
-        fulfillmentTxHash: null
+        fulfillmentTxHash: null,
+        approvalHash: null,
+        intentHash: null
       }));
       
       setIntentStatus('pending');
@@ -189,7 +195,15 @@ export function useIntentForm() {
       const destinationChainId = getChainId(formState.destinationChain);
       const tokenAddress = TOKENS[sourceChainId][formState.selectedToken].address;
 
-      const intent = await createIntent(
+      // First, set the form state to indicate we're approving USDC
+      setFormState(prev => ({
+        ...prev,
+        isSubmitting: true,
+        approvalHash: null
+      }));
+
+      // First step: Get approval
+      const approvalResult = await createIntent(
         sourceChainId,
         destinationChainId,
         tokenAddress,
@@ -198,33 +212,54 @@ export function useIntentForm() {
         formState.tip
       );
       
-      // Extract intent ID from result
-      const intentId = intent?.id || null;
-
-      setFormState(prev => {
-        // Get the recommended fee for the current destination chain
-        const recommendedFee = getRecommendedFee(prev.destinationChain);
-        
-        return {
+      // If we got an approval hash but no intent hash, we're in the approval phase
+      if (approvalResult.approvalHash && !approvalResult.intentHash) {
+        setFormState(prev => ({
           ...prev,
-          success: true,
-          intentId,
-          amount: '',
-          recipient: '',
-          tip: recommendedFee,
-        };
-      });
-      
-      // If we have an intentId, start polling for status updates
-      if (intentId) {
-        startPolling(intentId);
+          approvalHash: approvalResult.approvalHash,
+          isSubmitting: true // Keep submitting true as we're moving to intent creation
+        }));
+
+        // Second step: Create the intent
+        const intentResult = await createIntent(
+          sourceChainId,
+          destinationChainId,
+          tokenAddress,
+          formState.amount,
+          formState.recipient,
+          formState.tip
+        );
+
+        // Update form state with the final success status
+        setFormState(prev => {
+          // Get the recommended fee for the current destination chain
+          const recommendedFee = getRecommendedFee(prev.destinationChain);
+          
+          return {
+            ...prev,
+            success: true,
+            intentId: intentResult.id,
+            approvalHash: approvalResult.approvalHash,
+            intentHash: intentResult.intentHash,
+            amount: '',
+            recipient: '',
+            tip: recommendedFee,
+          };
+        });
+
+        // If we have an intentId, start polling for status updates
+        if (intentResult.id) {
+          startPolling(intentResult.id);
+        }
       }
     } catch (err) {
       setFormState(prev => ({
         ...prev,
         error: err instanceof Error ? err : new Error('Failed to create intent'),
         intentId: null,
-        fulfillmentTxHash: null
+        fulfillmentTxHash: null,
+        approvalHash: null,
+        intentHash: null
       }));
       
       setIntentStatus('pending');
