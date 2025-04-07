@@ -93,7 +93,7 @@ const PendingAnimation: React.FC<PendingAnimationProps> = ({ approvalHash }) => 
       <div className="border-2 border-yellow-500 bg-black p-4 w-full max-w-sm overflow-hidden">
         <div className="flex items-center justify-between mb-2">
           <span className="text-yellow-500 text-xs arcade-text">
-            {approvalHash ? 'SIGNING INTENT TRANSACTION...' : 'APPROVING USDC...'}
+            {approvalHash ? 'RUNNIN TRANSFER...' : 'APPROVING USDC...'}
           </span>
           <span className="text-yellow-500 text-xs arcade-text blink">PLEASE WAIT</span>
         </div>
