@@ -154,6 +154,27 @@ export function useContract() {
           timeout: 30_000
         });
         console.log('Approval transaction confirmed');
+
+        // Return early with just the approval hash to update UI
+        if (!isMounted.current) {
+          throw new Error('Component unmounted after approval');
+        }
+
+        // Return immediately after approval to update UI
+        return {
+          id: '',
+          source_chain: sourceChainName,
+          destination_chain: CHAIN_ID_TO_NAME[destinationChain] || '',
+          token,
+          amount,
+          recipient,
+          intent_fee: tip,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          approvalHash,
+          intentHash: null
+        };
       }
 
       if (!isMounted.current) {
@@ -248,24 +269,24 @@ export function useContract() {
       console.log('Transaction receipt:', receipt);
 
       // Find the IntentInitiated event in the receipt
-      const event = receipt.logs.find((log) => {
-        // The first topic is the event signature
-        const eventSignature = 'IntentInitiated(bytes32,address,uint256,uint256,bytes,uint256,uint256)';
-        const eventSignatureHash = keccak256(toUtf8Bytes(eventSignature));
-        return log.topics[0] === eventSignatureHash;
+      const event = receipt.logs.find(log => {
+        try {
+          // The first topic is the event signature
+          const eventSignature = 'IntentInitiated(bytes32,address,uint256,uint256,bytes,uint256,uint256)';
+          const eventSignatureHash = keccak256(toUtf8Bytes(eventSignature));
+          return log.topics[0] === eventSignatureHash;
+        } catch {
+          return false;
+        }
       });
 
-      if (!event || !event.topics[1] || !event.topics[2]) {
-        throw new Error('Failed to find IntentInitiated event or missing required topics');
+      if (!event) {
+        console.error('Receipt logs:', receipt.logs);
+        throw new Error('IntentInitiated event not found in transaction receipt');
       }
 
-      // Parse the event data
-      const intentId = event.topics[1] as `0x${string}`; // First indexed parameter (intentId)
-      const asset = `0x${event.topics[2].slice(26)}` as `0x${string}`; // Second indexed parameter (asset), convert to address format
-
-      if (!isMounted.current) {
-        throw new Error('Component unmounted during event processing');
-      }
+      // Extract the intent ID from the first indexed parameter
+      const intentId = event.topics[1] as `0x${string}`;
 
       // Get chain names for response
       const destinationChainName = CHAIN_ID_TO_NAME[destinationChain];
@@ -284,6 +305,8 @@ export function useContract() {
         status: 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        approvalHash: approvalHash || null,
+        intentHash: intentHash || null
       };
     } catch (error) {
       console.error('Error creating intent:', error);

@@ -3,17 +3,17 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: zetafast_postgres
+    container_name: speedrun_postgres
     environment:
-      POSTGRES_DB: zetafast
-      POSTGRES_USER: zetafast
-      POSTGRES_PASSWORD: zetafast
+      POSTGRES_DB: speedrun
+      POSTGRES_USER: speedrun
+      POSTGRES_PASSWORD: speedrun
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U zetafast"]
+      test: ["CMD-SHELL", "pg_isready -U speedrun"]
       interval: 5s
       timeout: 5s
       retries: 5

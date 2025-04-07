@@ -9,6 +9,8 @@ export interface Intent {
   status: string;
   created_at: string;
   updated_at: string;
+  approvalHash: string | null;
+  intentHash: string | null;
 }
 
 export interface Fulfillment {

@@ -90,6 +90,8 @@ class ContractService {
         status: 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        approvalHash: null,
+        intentHash: null
       };
     } catch (error) {
       console.error('Error creating intent:', error);

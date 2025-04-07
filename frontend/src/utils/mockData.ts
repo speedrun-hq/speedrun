@@ -5,37 +5,43 @@ const MOCK_INTENTS: Intent[] = [
     id: '1',
     source_chain: 'base',
     destination_chain: 'arbitrum',
-    token: 'USDC',
-    amount: '100.00',
+    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    amount: '100',
     recipient: '0x1234567890123456789012345678901234567890',
-    intent_fee: '0.01',
+    intent_fee: '0.1',
     status: 'pending',
-    created_at: '2024-03-20T10:00:00Z',
-    updated_at: '2024-03-20T10:00:00Z',
+    created_at: '2024-04-05T12:00:00Z',
+    updated_at: '2024-04-05T12:00:00Z',
+    approvalHash: null,
+    intentHash: null
   },
   {
     id: '2',
     source_chain: 'arbitrum',
     destination_chain: 'base',
-    token: 'USDC',
+    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     amount: '250.50',
     recipient: '0x0987654321098765432109876543210987654321',
     intent_fee: '0.02',
     status: 'completed',
     created_at: '2024-03-19T15:30:00Z',
     updated_at: '2024-03-19T15:35:00Z',
+    approvalHash: null,
+    intentHash: null
   },
   {
     id: '3',
     source_chain: 'base',
     destination_chain: 'arbitrum',
-    token: 'USDC',
+    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     amount: '75.25',
     recipient: '0xabcdef1234567890abcdef1234567890abcdef12',
     intent_fee: '0.01',
     status: 'failed',
     created_at: new Date(Date.now() - 10800000).toISOString(), // 3 hours ago
     updated_at: new Date(Date.now() - 10800000).toISOString(), // 3 hours ago
+    approvalHash: null,
+    intentHash: null
   },
 ];
 
