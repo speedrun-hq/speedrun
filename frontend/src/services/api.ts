@@ -1,6 +1,6 @@
 'use client';
 
-import { Intent, Fulfillment, CreateIntentRequest, CreateFulfillmentRequest } from '@/types';
+import { Intent, Fulfillment, CreateIntentRequest, CreateFulfillmentRequest, Runner } from '@/types';
 import { ApiError } from '@/utils/errors';
 
 // Get API base URL from environment variable, fallback to localhost in development
@@ -22,7 +22,19 @@ class ApiService {
         },
       });
 
-      const data = await response.json();
+      let data;
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('Failed to parse JSON response:', text);
+        const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parsing error';
+        throw new ApiError(
+          `Invalid JSON response from server: ${errorMessage}`,
+          response.status,
+          'INVALID_JSON'
+        );
+      }
 
       if (!response.ok) {
         throw new ApiError(
@@ -46,17 +58,20 @@ class ApiService {
 
   // Intent endpoints
   async listIntents(): Promise<Intent[]> {
-    return this.fetchApi('/intents', {
+    console.log('Calling listIntents API endpoint:', `${API_BASE_URL}/intents`);
+    const response = await this.fetchApi<Intent[]>('/intents', {
       method: 'GET',
     });
+    console.log('listIntents raw response:', response);
+    return response;
   }
 
   async getIntent(id: string): Promise<Intent> {
-    return this.fetchApi(`/intents/${id}`);
+    return this.fetchApi<Intent>(`/intents/${id}`);
   }
 
   async createIntent(data: CreateIntentRequest): Promise<Intent> {
-    return this.fetchApi('/intents', {
+    return this.fetchApi<Intent>('/intents', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -64,14 +79,21 @@ class ApiService {
 
   // Fulfillment endpoints
   async createFulfillment(data: CreateFulfillmentRequest): Promise<Fulfillment> {
-    return this.fetchApi('/fulfillments', {
+    return this.fetchApi<Fulfillment>('/fulfillments', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async getFulfillment(id: string): Promise<Fulfillment> {
-    return this.fetchApi(`/fulfillments/${id}`);
+    return this.fetchApi<Fulfillment>(`/fulfillments/${id}`);
+  }
+
+  // Leaderboard endpoints
+  async getLeaderboard(chainId: number): Promise<Runner[]> {
+    return this.fetchApi<Runner[]>(`/leaderboard/${chainId}`, {
+      method: 'GET',
+    });
   }
 }
 
