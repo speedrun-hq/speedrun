@@ -19,7 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/joho/godotenv"
-	"github.com/zeta-chain/zetafast/fulfiller/contracts"
+	"github.com/speedrun-hq/speedrun/fulfiller/contracts"
 )
 
 // ChainConfig holds the configuration for a specific chain

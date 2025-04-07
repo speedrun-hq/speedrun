@@ -4,22 +4,19 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zeta-chain/zetafast/api/db"
-	"github.com/zeta-chain/zetafast/api/models"
-	"github.com/zeta-chain/zetafast/api/services"
-	"github.com/zeta-chain/zetafast/api/utils"
+	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/models"
+	"github.com/speedrun-hq/speedrun/api/services"
+	"github.com/speedrun-hq/speedrun/api/utils"
 )
 
-var (
-	fulfillmentServices map[uint64]*services.FulfillmentService
-)
+var fulfillmentServices map[uint64]*services.FulfillmentService
 
 // InitFulfillmentHandlers initializes the fulfillment handlers
 func InitFulfillmentHandlers(db db.Database, services map[uint64]*services.FulfillmentService) {
 	database = db
 	fulfillmentServices = services
 }
-
 
 // CreateFulfillment handles the creation of a new fulfillment
 func CreateFulfillment(c *gin.Context) {
@@ -42,7 +39,7 @@ func CreateFulfillment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message":     "Fulfillment created successfully",
+		"message": "Fulfillment created successfully",
 	})
 }
 

@@ -8,7 +8,7 @@ GOMOD=$(GOCMD) mod
 GOWORK=$(GOCMD) work
 
 # Binary names
-BINARY_NAME=zetafast
+BINARY_NAME=speedrun
 API_BINARY_PATH=api/$(BINARY_NAME)
 
 # Build flags
@@ -60,7 +60,7 @@ migrate:
 docker-db-start:
 	$(DOCKER_COMPOSE) up -d postgres
 	@echo "Waiting for database to be ready..."
-	@until docker exec zetafast_postgres pg_isready -U zetafast; do sleep 1; done
+	@until docker exec speedrun_postgres pg_isready -U speedrun; do sleep 1; done
 	@echo "Database is ready!"
 
 docker-db-stop:

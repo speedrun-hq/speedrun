@@ -10,10 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gin-gonic/gin"
-	"github.com/zeta-chain/zetafast/api/config"
-	"github.com/zeta-chain/zetafast/api/db"
-	"github.com/zeta-chain/zetafast/api/handlers"
-	"github.com/zeta-chain/zetafast/api/services"
+	"github.com/speedrun-hq/speedrun/api/config"
+	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/handlers"
+	"github.com/speedrun-hq/speedrun/api/services"
 )
 
 // HealthCheck handler

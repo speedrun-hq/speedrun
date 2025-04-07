@@ -94,8 +94,6 @@ frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 
-# API specific
-api/zetafast
 
 # Fulfiller specific
 fulfiller/fulfiller
@@ -104,7 +102,7 @@ fulfiller/.env.*
 fulfiller/.env.example
 
 # API specific
-api/zetafast
+api/speedrun
 
 # Logs
 *.log

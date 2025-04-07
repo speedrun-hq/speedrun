@@ -91,29 +91,28 @@ type IntentResponse struct {
 
 // Fulfillment represents a fulfillment of an intent
 type Fulfillment struct {
-	ID        string            `json:"id"`
-	Asset     string            `json:"asset"`
-	Amount    string            `json:"amount"`
-	Receiver  string            `json:"receiver"`
-	BlockNumber uint64          `json:"block_number"`
-	TxHash    string            `json:"tx_hash"`
-	CreatedAt time.Time         `json:"created_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
+	ID          string    `json:"id"`
+	Asset       string    `json:"asset"`
+	Amount      string    `json:"amount"`
+	Receiver    string    `json:"receiver"`
+	BlockNumber uint64    `json:"block_number"`
+	TxHash      string    `json:"tx_hash"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // Settlement represents a settlement of an intent
 type Settlement struct {
-	ID    string `json:"intent_id"`
-	Asset       string `json:"asset"`
-	Amount      string `json:"amount"`
-	Receiver    string `json:"receiver"`
-	Fulfilled   bool   `json:"fulfilled"`
-	Fulfiller   string `json:"fulfiller"`
-	ActualAmount string `json:"actual_amount"`
-	PaidTip      string `json:"paid_tip"`
-	BlockNumber  uint64 `json:"block_number"`
-	TxHash       string `json:"tx_hash"`
+	ID           string    `json:"intent_id"`
+	Asset        string    `json:"asset"`
+	Amount       string    `json:"amount"`
+	Receiver     string    `json:"receiver"`
+	Fulfilled    bool      `json:"fulfilled"`
+	Fulfiller    string    `json:"fulfiller"`
+	ActualAmount string    `json:"actual_amount"`
+	PaidTip      string    `json:"paid_tip"`
+	BlockNumber  uint64    `json:"block_number"`
+	TxHash       string    `json:"tx_hash"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
-

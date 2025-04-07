@@ -8,7 +8,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/zeta-chain/zetafast/api/models"
+	"github.com/speedrun-hq/speedrun/api/models"
 )
 
 //go:embed schema.sql
