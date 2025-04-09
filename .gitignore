@@ -37,8 +37,6 @@ build/
 dist/
 node_modules/
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 .pnpm-debug.log*
 
 # Local env files
@@ -91,8 +89,6 @@ frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
 frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
 
 
 # Fulfiller specific
@@ -108,8 +104,6 @@ api/speedrun
 *.log
 logs/
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Runtime data
 pids
@@ -128,9 +122,6 @@ pids
 
 # Output of 'npm pack'
 *.tgz
-
-# Yarn Integrity file
-.yarn-integrity
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

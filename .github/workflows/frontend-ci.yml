@@ -30,28 +30,28 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
-        cache: 'yarn'
-        cache-dependency-path: ./frontend/yarn.lock
+        cache: 'npm'
+        cache-dependency-path: ./frontend/package-lock.json
 
     - name: Install dependencies
-      run: yarn install --frozen-lockfile
+      run: npm ci
 
     - name: Type check
-      run: yarn type-check
+      run: npm run type-check
 
     - name: Format check
-      run: yarn format:check
+      run: npm run format:check
 
     - name: Lint
-      run: yarn lint
+      run: npm run lint
 
     - name: Run tests
-      run: yarn test
+      run: npm test
       env:
         CI: true
 
     - name: Build
-      run: yarn build
+      run: npm run build
       env:
         NEXT_PUBLIC_API_URL: http://localhost:8080
         NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: test-project-id 
