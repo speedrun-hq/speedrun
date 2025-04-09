@@ -31,7 +31,7 @@ jobs:
       run: yarn install --frozen-lockfile
 
     - name: Run tests with coverage
-      run: yarn test --coverage
+      run: yarn test:coverage
       env:
         CI: true
 
