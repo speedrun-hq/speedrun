@@ -1,20 +1,26 @@
-import { base, arbitrum, mainnet, bsc, polygon, avalanche } from 'wagmi/chains';
+import { base, arbitrum, mainnet, bsc, polygon, avalanche } from "wagmi/chains";
 
-export type ChainName = 'ETHEREUM' | 'BSC' | 'POLYGON' | 'BASE' | 'ARBITRUM' | 'AVALANCHE';
+export type ChainName =
+  | "ETHEREUM"
+  | "BSC"
+  | "POLYGON"
+  | "BASE"
+  | "ARBITRUM"
+  | "AVALANCHE";
 
 export function getChainId(chainName: ChainName): number {
   switch (chainName) {
-    case 'ETHEREUM':
+    case "ETHEREUM":
       return mainnet.id;
-    case 'BSC':
+    case "BSC":
       return bsc.id;
-    case 'POLYGON':
+    case "POLYGON":
       return polygon.id;
-    case 'BASE':
+    case "BASE":
       return base.id;
-    case 'ARBITRUM':
+    case "ARBITRUM":
       return arbitrum.id;
-    case 'AVALANCHE':
+    case "AVALANCHE":
       return avalanche.id;
     default:
       return base.id; // Default to BASE if unknown
@@ -24,19 +30,19 @@ export function getChainId(chainName: ChainName): number {
 export function getChainName(chainId: number): ChainName {
   switch (chainId) {
     case mainnet.id:
-      return 'ETHEREUM';
+      return "ETHEREUM";
     case bsc.id:
-      return 'BSC';
+      return "BSC";
     case polygon.id:
-      return 'POLYGON';
+      return "POLYGON";
     case base.id:
-      return 'BASE';
+      return "BASE";
     case arbitrum.id:
-      return 'ARBITRUM';
+      return "ARBITRUM";
     case avalanche.id:
-      return 'AVALANCHE';
+      return "AVALANCHE";
     default:
-      return 'BASE'; // Default to BASE if unknown
+      return "BASE"; // Default to BASE if unknown
   }
 }
 
@@ -54,19 +60,32 @@ export function isValidChainId(chainId: number): boolean {
 export function getChainRpcUrl(chainId: number): string {
   switch (chainId) {
     case mainnet.id:
-      return process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL || 'https://eth.llamarpc.com';
+      return (
+        process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL || "https://eth.llamarpc.com"
+      );
     case bsc.id:
-      return process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.bnbchain.org';
+      return (
+        process.env.NEXT_PUBLIC_BSC_RPC_URL ||
+        "https://bsc-dataseed.bnbchain.org"
+      );
     case polygon.id:
-      return process.env.NEXT_PUBLIC_POLYGON_RPC_URL || 'https://polygon-rpc.com';
+      return (
+        process.env.NEXT_PUBLIC_POLYGON_RPC_URL || "https://polygon-rpc.com"
+      );
     case base.id:
-      return process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org';
+      return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
     case arbitrum.id:
-      return process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc';
+      return (
+        process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ||
+        "https://arb1.arbitrum.io/rpc"
+      );
     case avalanche.id:
-      return process.env.NEXT_PUBLIC_AVALANCHE_RPC_URL || 'https://avalanche-c-chain-rpc.publicnode.com';
+      return (
+        process.env.NEXT_PUBLIC_AVALANCHE_RPC_URL ||
+        "https://avalanche-c-chain-rpc.publicnode.com"
+      );
     default:
-      return '';
+      return "";
   }
 }
 
@@ -85,6 +104,6 @@ export function getExplorerUrl(chainId: number, txHash: string): string {
     case avalanche.id:
       return `https://snowtrace.io/tx/${txHash}`;
     default:
-      return '';
+      return "";
   }
-} 
+}

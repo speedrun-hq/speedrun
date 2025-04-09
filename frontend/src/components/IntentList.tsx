@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useEffect, useState } from 'react';
-import { Intent } from '@/types';
-import { apiService } from '@/services/api';
-import ErrorMessage from '@/components/ErrorMessage';
+import React from "react";
+import { useEffect, useState } from "react";
+import { Intent } from "@/types";
+import { apiService } from "@/services/api";
+import ErrorMessage from "@/components/ErrorMessage";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -37,16 +37,16 @@ const IntentList: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'pending':
-        return 'text-primary-500 border-primary-500';
-      case 'completed':
-        return 'text-secondary-500 border-secondary-500';
-      case 'failed':
-        return 'text-accent-500 border-accent-500';
-      case 'cancelled':
-        return 'text-gray-500 border-gray-500';
+      case "pending":
+        return "text-primary-500 border-primary-500";
+      case "completed":
+        return "text-secondary-500 border-secondary-500";
+      case "failed":
+        return "text-accent-500 border-accent-500";
+      case "cancelled":
+        return "text-gray-500 border-gray-500";
       default:
-        return 'text-gray-500 border-gray-500';
+        return "text-gray-500 border-gray-500";
     }
   };
 
@@ -57,7 +57,9 @@ const IntentList: React.FC = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="arcade-text text-primary-500 animate-pulse">LOADING...</div>
+        <div className="arcade-text text-primary-500 animate-pulse">
+          LOADING...
+        </div>
       </div>
     );
   }
@@ -68,46 +70,87 @@ const IntentList: React.FC = () => {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <h2 className="arcade-text text-2xl mb-6 text-center text-primary-500">RUNS</h2>
+      <h2 className="arcade-text text-2xl mb-6 text-center text-primary-500">
+        RUNS
+      </h2>
       {intents.length === 0 ? (
-        <p className="arcade-text text-gray-500 text-center">NO RECORDS FOUND</p>
+        <p className="arcade-text text-gray-500 text-center">
+          NO RECORDS FOUND
+        </p>
       ) : (
         <div className="arcade-container">
           {displayedIntents.map((intent, index) => (
-            <div
-              key={intent.id}
-              className="arcade-card relative"
-            >
-              <span className={`arcade-status ${getStatusColor(intent.status)} border-2 absolute top-4 right-4`}>
+            <div key={intent.id} className="arcade-card relative">
+              <span
+                className={`arcade-status ${getStatusColor(intent.status)} border-2 absolute top-4 right-4`}
+              >
                 {intent.status}
               </span>
               <div className="space-y-3">
                 <div className="flex items-center space-x-2">
-                  <span className="arcade-text text-sm text-yellow-500">RUN</span>
-                  <span className="arcade-text text-sm text-cyan-500">#{index + 1 + offset}</span>
+                  <span className="arcade-text text-sm text-yellow-500">
+                    RUN
+                  </span>
+                  <span className="arcade-text text-sm text-cyan-500">
+                    #{index + 1 + offset}
+                  </span>
                 </div>
                 <div className="space-y-1">
                   <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">INTENT ID</span>
-                    <span className="arcade-text text-xs text-magenta-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.id}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">ROUTE</span>
-                    <span className="arcade-text text-xs text-cyan-500">
-                      CHAIN <span className="text-orange-500">{intent.source_chain}</span> → CHAIN <span className="text-orange-500">{intent.destination_chain}</span>
+                    <span className="arcade-text text-xs text-gray-500">
+                      INTENT ID
+                    </span>
+                    <span
+                      className="arcade-text text-xs text-magenta-500 break-all font-mono"
+                      style={{ textTransform: "none" }}
+                    >
+                      {intent.id}
                     </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">TOKEN</span>
-                    <span className="arcade-text text-xs text-yellow-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.token}</span>
+                    <span className="arcade-text text-xs text-gray-500">
+                      ROUTE
+                    </span>
+                    <span className="arcade-text text-xs text-cyan-500">
+                      CHAIN{" "}
+                      <span className="text-orange-500">
+                        {intent.source_chain}
+                      </span>{" "}
+                      → CHAIN{" "}
+                      <span className="text-orange-500">
+                        {intent.destination_chain}
+                      </span>
+                    </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">AMOUNT</span>
-                    <span className="arcade-text text-xs text-primary-500">{intent.amount}</span>
+                    <span className="arcade-text text-xs text-gray-500">
+                      TOKEN
+                    </span>
+                    <span
+                      className="arcade-text text-xs text-yellow-500 break-all font-mono"
+                      style={{ textTransform: "none" }}
+                    >
+                      {intent.token}
+                    </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">RECIPIENT</span>
-                    <span className="arcade-text text-xs text-magenta-500 break-all font-mono" style={{ textTransform: 'none' }}>{intent.recipient}</span>
+                    <span className="arcade-text text-xs text-gray-500">
+                      AMOUNT
+                    </span>
+                    <span className="arcade-text text-xs text-primary-500">
+                      {intent.amount}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="arcade-text text-xs text-gray-500">
+                      RECIPIENT
+                    </span>
+                    <span
+                      className="arcade-text text-xs text-magenta-500 break-all font-mono"
+                      style={{ textTransform: "none" }}
+                    >
+                      {intent.recipient}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -120,14 +163,14 @@ const IntentList: React.FC = () => {
       {(offset > 0 || hasMore) && (
         <div className="flex justify-center space-x-4 mt-6">
           <button
-            onClick={() => setOffset(o => Math.max(0, o - ITEMS_PER_PAGE))}
+            onClick={() => setOffset((o) => Math.max(0, o - ITEMS_PER_PAGE))}
             disabled={offset === 0}
             className="arcade-btn disabled:opacity-50 disabled:cursor-not-allowed"
           >
             PREV
           </button>
           <button
-            onClick={() => setOffset(o => o + ITEMS_PER_PAGE)}
+            onClick={() => setOffset((o) => o + ITEMS_PER_PAGE)}
             disabled={!hasMore}
             className="arcade-btn disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -139,4 +182,4 @@ const IntentList: React.FC = () => {
   );
 };
 
-export default IntentList; 
+export default IntentList;

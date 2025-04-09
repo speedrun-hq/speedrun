@@ -1,23 +1,26 @@
-'use client';
+"use client";
 
-import { getDefaultWallets, connectorsForWallets } from '@rainbow-me/rainbowkit';
-import { configureChains, createConfig } from 'wagmi';
-import { base, arbitrum, mainnet, bsc, polygon, avalanche } from 'wagmi/chains';
-import { alchemyProvider } from 'wagmi/providers/alchemy';
-import { publicProvider } from 'wagmi/providers/public';
+import {
+  getDefaultWallets,
+  connectorsForWallets,
+} from "@rainbow-me/rainbowkit";
+import { configureChains, createConfig } from "wagmi";
+import { base, arbitrum, mainnet, bsc, polygon, avalanche } from "wagmi/chains";
+import { alchemyProvider } from "wagmi/providers/alchemy";
+import { publicProvider } from "wagmi/providers/public";
 
 if (!process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID) {
-  throw new Error('Missing NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID');
+  throw new Error("Missing NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID");
 }
 
 if (!process.env.NEXT_PUBLIC_ALCHEMY_ID) {
-  throw new Error('Missing NEXT_PUBLIC_ALCHEMY_ID');
+  throw new Error("Missing NEXT_PUBLIC_ALCHEMY_ID");
 }
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 const alchemyId = process.env.NEXT_PUBLIC_ALCHEMY_ID;
 
-console.log('Configuring chains with Alchemy ID:', alchemyId);
+console.log("Configuring chains with Alchemy ID:", alchemyId);
 
 // Configure Ethereum chain with custom RPC URL
 const customMainnet = {
@@ -28,7 +31,7 @@ const customMainnet = {
       http: [`https://eth-mainnet.g.alchemy.com/v2/${alchemyId}`],
     },
     public: {
-      http: ['https://eth.llamarpc.com'],
+      http: ["https://eth.llamarpc.com"],
     },
   },
 };
@@ -39,10 +42,10 @@ const customBsc = {
   rpcUrls: {
     ...bsc.rpcUrls,
     default: {
-      http: ['https://bsc-dataseed.bnbchain.org'],
+      http: ["https://bsc-dataseed.bnbchain.org"],
     },
     public: {
-      http: ['https://bsc-dataseed.bnbchain.org'],
+      http: ["https://bsc-dataseed.bnbchain.org"],
     },
   },
 };
@@ -56,7 +59,7 @@ const customPolygon = {
       http: [`https://polygon-mainnet.g.alchemy.com/v2/${alchemyId}`],
     },
     public: {
-      http: ['https://polygon-rpc.com'],
+      http: ["https://polygon-rpc.com"],
     },
   },
 };
@@ -70,7 +73,7 @@ const customBase = {
       http: [`https://base-mainnet.g.alchemy.com/v2/${alchemyId}`],
     },
     public: {
-      http: ['https://mainnet.base.org'],
+      http: ["https://mainnet.base.org"],
     },
   },
 };
@@ -84,7 +87,7 @@ const customArbitrum = {
       http: [`https://arb-mainnet.g.alchemy.com/v2/${alchemyId}`],
     },
     public: {
-      http: ['https://arb1.arbitrum.io/rpc'],
+      http: ["https://arb1.arbitrum.io/rpc"],
     },
   },
 };
@@ -95,37 +98,45 @@ const customAvalanche = {
   rpcUrls: {
     ...avalanche.rpcUrls,
     default: {
-      http: ['https://avalanche-c-chain-rpc.publicnode.com'],
+      http: ["https://avalanche-c-chain-rpc.publicnode.com"],
     },
     public: {
-      http: ['https://avalanche-c-chain-rpc.publicnode.com'],
+      http: ["https://avalanche-c-chain-rpc.publicnode.com"],
     },
   },
 };
 
 const { chains, publicClient } = configureChains(
-  [customMainnet, customBsc, customPolygon, customBase, customArbitrum, customAvalanche],
+  [
+    customMainnet,
+    customBsc,
+    customPolygon,
+    customBase,
+    customArbitrum,
+    customAvalanche,
+  ],
   [
     alchemyProvider({ apiKey: alchemyId }),
     publicProvider(), // Fallback to public provider
-  ]
+  ],
 );
 
-console.log('Configured chains:', chains.map(chain => ({
-  id: chain.id,
-  name: chain.name,
-  rpcUrls: chain.rpcUrls,
-})));
+console.log(
+  "Configured chains:",
+  chains.map((chain) => ({
+    id: chain.id,
+    name: chain.name,
+    rpcUrls: chain.rpcUrls,
+  })),
+);
 
 const { wallets } = getDefaultWallets({
-  appName: 'Speedrun',
+  appName: "Speedrun",
   projectId,
   chains,
 });
 
-const connectors = connectorsForWallets([
-  ...wallets,
-]);
+const connectors = connectorsForWallets([...wallets]);
 
 const config = createConfig({
   autoConnect: true,
@@ -133,4 +144,4 @@ const config = createConfig({
   publicClient,
 });
 
-export { chains, config }; 
+export { chains, config };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 interface FormInputProps {
   label?: string;
@@ -22,12 +22,12 @@ export function FormInput({
   placeholder,
   disabled = false,
   error,
-  type = 'text',
+  type = "text",
   max,
   min,
   step,
-  className = '',
-  labelClassName = 'block text-[hsl(var(--yellow))] mb-2 font-mono',
+  className = "",
+  labelClassName = "block text-[hsl(var(--yellow))] mb-2 font-mono",
 }: FormInputProps) {
   return (
     <div className="space-y-2 relative z-10">
@@ -42,11 +42,9 @@ export function FormInput({
         min={min}
         step={step}
         className={`w-full px-4 py-2 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg text-[#00ff00] arcade-text text-xs normal-case focus:outline-none focus:border-[hsl(var(--yellow)/0.8)] disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-[hsl(var(--yellow)/0.5)] pointer-events-auto ${className}`}
-        style={{textTransform: 'none'}}
+        style={{ textTransform: "none" }}
       />
-      {error && (
-        <p className="text-red-500 text-xs arcade-text">{error}</p>
-      )}
+      {error && <p className="text-red-500 text-xs arcade-text">{error}</p>}
     </div>
   );
-} 
+}
