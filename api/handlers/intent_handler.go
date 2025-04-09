@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,17 +11,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/models"
-	"github.com/speedrun-hq/speedrun/api/services"
 	"github.com/speedrun-hq/speedrun/api/utils"
 )
 
+// IntentServiceInterface defines the interface for intent service operations
+type IntentServiceInterface interface {
+	GetIntent(ctx context.Context, id string) (*models.Intent, error)
+	ListIntents(ctx context.Context) ([]*models.Intent, error)
+	CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, intentFee string) (*models.Intent, error)
+}
+
 var (
 	database       db.Database
-	intentServices map[uint64]*services.IntentService
+	intentServices map[uint64]IntentServiceInterface
 )
 
 // InitIntentHandlers initializes the intent handlers with required dependencies
-func InitIntentHandlers(db db.Database, services map[uint64]*services.IntentService) {
+func InitIntentHandlers(db db.Database, services map[uint64]IntentServiceInterface) {
 	database = db
 	intentServices = services
 }
