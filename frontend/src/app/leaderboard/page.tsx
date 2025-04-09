@@ -51,20 +51,37 @@ function LeaderboardTable({ chainName, colorClasses, runners }: LeaderboardTable
             </thead>
             <tbody>
               {runners.length > 0 ? (
-                runners.map((runner, index) => (
-                  <tr key={index} className={`border-b ${colorClasses.rowBorder} hover:${colorClasses.hoverBg}`}>
+                Array.from({ length: 5 }, (_, index) => {
+                  const runner = runners[index];
+                  if (runner) {
+                    return (
+                      <tr key={index} className={`border-b ${colorClasses.rowBorder} hover:${colorClasses.hoverBg}`}>
+                        <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} truncate`}>#{index + 1}</td>
+                        <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} truncate`}>{truncateAddress(runner.address)}</td>
+                        <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right`}>{runner.total_transfers}</td>
+                        <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right whitespace-nowrap`}>{runner.total_volume}</td>
+                      </tr>
+                    );
+                  } else {
+                    return (
+                      <tr key={index} className={`border-b ${colorClasses.rowBorder} opacity-30`}>
+                        <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} truncate`}>#{index + 1}</td>
+                        <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} truncate`}>-</td>
+                        <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right`}>-</td>
+                        <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right whitespace-nowrap`}>-</td>
+                      </tr>
+                    );
+                  }
+                })
+              ) : (
+                Array.from({ length: 5 }, (_, index) => (
+                  <tr key={index} className={`border-b ${colorClasses.rowBorder} opacity-30`}>
                     <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} truncate`}>#{index + 1}</td>
-                    <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} truncate`}>{truncateAddress(runner.address)}</td>
-                    <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right`}>{runner.total_transfers}</td>
-                    <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right whitespace-nowrap`}>{runner.total_volume}</td>
+                    <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} truncate`}>-</td>
+                    <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right`}>-</td>
+                    <td className={`py-3 px-4 arcade-text text-xs ${colorClasses.rowText} text-right whitespace-nowrap`}>-</td>
                   </tr>
                 ))
-              ) : (
-                <tr>
-                  <td colSpan={4} className={`py-8 text-center arcade-text text-xs ${colorClasses.rowText}`}>
-                    NO SPEEDRUNS YET
-                  </td>
-                </tr>
               )}
             </tbody>
           </table>
