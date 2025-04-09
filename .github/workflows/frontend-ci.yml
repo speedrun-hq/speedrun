@@ -1,0 +1,57 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+        cache-dependency-path: ./frontend/yarn.lock
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+
+    - name: Type check
+      run: yarn type-check
+
+    - name: Format check
+      run: yarn format:check
+
+    - name: Lint
+      run: yarn lint
+
+    - name: Run tests
+      run: yarn test
+      env:
+        CI: true
+
+    - name: Build
+      run: yarn build
+      env:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+        NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: test-project-id 
