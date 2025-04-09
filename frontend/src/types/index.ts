@@ -70,4 +70,19 @@ export const CHAIN_NAME_TO_ID: Record<ChainName, number> = {
   'POLYGON': 137,
   'AVALANCHE': 43114,
   'ZETACHAIN': 7000
-}; 
+};
+
+export interface Runner {
+  address: string;
+  score: string;
+  total_transfers: number;
+  total_volume: string;
+  average_time: string;
+  fastest_time: string;
+  last_transfer: string;
+}
+
+export interface LeaderboardResponse {
+  chain_id: number;
+  runners: Runner[];
+} 
