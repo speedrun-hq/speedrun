@@ -1,0 +1,43 @@
+name: Frontend Coverage
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+        cache: 'yarn'
+        cache-dependency-path: frontend/yarn.lock
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+
+    - name: Run tests with coverage
+      run: yarn test --coverage
+      env:
+        CI: true
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        directory: frontend/coverage
+        flags: frontend
+        fail_ci_if_error: true 
