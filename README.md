@@ -16,7 +16,7 @@ Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infra
 
 ## Smart Contracts
 
-[Learn more about the smart contracts](./contracts/evm/README.md)
+[Learn more about the smart contracts](https://github.com/speedrun-hq/speedrun-contracts)
 
 ## Architecture
 
