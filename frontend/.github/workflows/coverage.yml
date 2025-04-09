@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: frontend
+        working-directory: ./frontend
 
     steps:
     - uses: actions/checkout@v3
@@ -27,7 +27,7 @@ jobs:
       with:
         node-version: '18.x'
         cache: 'yarn'
-        cache-dependency-path: frontend/yarn.lock
+        cache-dependency-path: ./frontend/yarn.lock
 
     - name: Install dependencies
       run: yarn install --frozen-lockfile
@@ -40,6 +40,6 @@ jobs:
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
       with:
-        directory: frontend/coverage
+        directory: ./frontend/coverage
         flags: frontend
         fail_ci_if_error: true 
