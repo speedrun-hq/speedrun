@@ -5,7 +5,7 @@ const createJestConfig = nextJest({
 });
 
 const customJestConfig = {
-  setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
@@ -14,6 +14,9 @@ const customJestConfig = {
     'node_modules/(?!(wagmi|viem|@wagmi|isows|@rainbow-me/rainbowkit)/)',
   ],
   testMatch: ['**/__tests__/**/*.test.(ts|tsx)'],
+  transform: {
+    '^.+\\.(ts|tsx|js|jsx)$': ['babel-jest', { presets: ['next/babel'] }],
+  },
 };
 
 module.exports = createJestConfig(customJestConfig); 

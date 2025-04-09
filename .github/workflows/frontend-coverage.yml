@@ -42,4 +42,12 @@ jobs:
       with:
         directory: ./frontend/coverage
         flags: frontend
-        fail_ci_if_error: true 
+        fail_ci_if_error: true
+        verbose: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        CODECOV_THRESHOLD: 80
+        CODECOV_THRESHOLD_STATEMENTS: 80
+        CODECOV_THRESHOLD_BRANCHES: 70
+        CODECOV_THRESHOLD_FUNCTIONS: 80
+        CODECOV_THRESHOLD_LINES: 80 
