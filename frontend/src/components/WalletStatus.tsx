@@ -1,5 +1,5 @@
-import { useAccount, useDisconnect } from 'wagmi';
-import { ConnectWallet } from './ConnectWallet';
+import { useAccount, useDisconnect } from "wagmi";
+import { ConnectWallet } from "./ConnectWallet";
 
 export function WalletStatus() {
   const { isConnected, address } = useAccount();
@@ -34,4 +34,4 @@ export function DisconnectButton() {
       DISCONNECT
     </button>
   );
-} 
+}

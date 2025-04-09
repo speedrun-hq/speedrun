@@ -1,10 +1,10 @@
-import { Intent } from '@/types';
-import { getContract } from 'wagmi/actions';
-import { Intent as IntentContract } from '@/contracts/Intent';
-import { base, arbitrum } from 'wagmi/chains';
-import { Abi } from 'viem';
-import { GetContractReturnType, PublicClient, WalletClient } from 'viem';
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { Intent } from "@/types";
+import { getContract } from "wagmi/actions";
+import { Intent as IntentContract } from "@/contracts/Intent";
+import { base, arbitrum } from "wagmi/chains";
+import { Abi } from "viem";
+import { GetContractReturnType, PublicClient, WalletClient } from "viem";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 
 type ContractType = {
   write: {
@@ -12,7 +12,11 @@ type ContractType = {
   };
   interface: {
     getEventTopic: (eventName: string) => `0x${string}`;
-    decodeEventLog: (eventName: string, data: `0x${string}`, topics: `0x${string}`[]) => any;
+    decodeEventLog: (
+      eventName: string,
+      data: `0x${string}`,
+      topics: `0x${string}`[],
+    ) => any;
   };
 };
 
@@ -23,7 +27,7 @@ class ContractService {
     token: string,
     amount: string,
     recipient: string,
-    tip: string
+    tip: string,
   ): Promise<Intent> {
     try {
       const { address } = useAccount();
@@ -31,16 +35,18 @@ class ContractService {
       const { data: walletClient } = useWalletClient();
 
       if (!address || !publicClient || !walletClient) {
-        throw new Error('Wallet not connected');
+        throw new Error("Wallet not connected");
       }
 
       const contract = getContract({
-        address: IntentContract.address[sourceChain as keyof typeof IntentContract.address] as `0x${string}`,
+        address: IntentContract.address[
+          sourceChain as keyof typeof IntentContract.address
+        ] as `0x${string}`,
         abi: IntentContract.abi,
       }) as unknown as ContractType;
 
       if (!contract || !contract.write || !contract.write.initiate) {
-        throw new Error('Contract not properly initialized');
+        throw new Error("Contract not properly initialized");
       }
 
       // Convert amount and tip to wei
@@ -65,39 +71,40 @@ class ContractService {
 
       // Find the IntentInitiated event in the receipt
       const event = receipt.logs.find(
-        (log) => log.topics[0] === contract.interface.getEventTopic('IntentInitiated')
+        (log) =>
+          log.topics[0] === contract.interface.getEventTopic("IntentInitiated"),
       );
 
       if (!event) {
-        throw new Error('Failed to find IntentInitiated event');
+        throw new Error("Failed to find IntentInitiated event");
       }
 
       // Decode the event data
       const decoded = contract.interface.decodeEventLog(
-        'IntentInitiated',
+        "IntentInitiated",
         event.data,
-        event.topics
+        event.topics,
       );
 
       return {
         id: decoded.intentId,
-        source_chain: sourceChain === base.id ? 'BASE' : 'ARBITRUM',
-        destination_chain: destinationChain === base.id ? 'BASE' : 'ARBITRUM',
+        source_chain: sourceChain === base.id ? "BASE" : "ARBITRUM",
+        destination_chain: destinationChain === base.id ? "BASE" : "ARBITRUM",
         token,
         amount,
         recipient,
         intent_fee: tip,
-        status: 'pending',
+        status: "pending",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         approvalHash: null,
-        intentHash: null
+        intentHash: null,
       };
     } catch (error) {
-      console.error('Error creating intent:', error);
+      console.error("Error creating intent:", error);
       throw error;
     }
   }
 }
 
-export const contractService = new ContractService(); 
+export const contractService = new ContractService();

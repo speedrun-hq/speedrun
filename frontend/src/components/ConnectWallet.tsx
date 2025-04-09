@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export function ConnectWallet() {
   return (
@@ -19,11 +19,11 @@ export function ConnectWallet() {
         return (
           <div
             {...(!ready && {
-              'aria-hidden': true,
-              'style': {
+              "aria-hidden": true,
+              style: {
                 opacity: 0,
-                pointerEvents: 'none',
-                userSelect: 'none',
+                pointerEvents: "none",
+                userSelect: "none",
               },
             })}
             className="flex justify-center items-center"
@@ -31,8 +31,8 @@ export function ConnectWallet() {
             {(() => {
               if (!connected) {
                 return (
-                  <button 
-                    onClick={openConnectModal} 
+                  <button
+                    onClick={openConnectModal}
                     type="button"
                     className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all duration-200 arcade-text text-xs"
                   >
@@ -43,8 +43,8 @@ export function ConnectWallet() {
 
               if (chain.unsupported) {
                 return (
-                  <button 
-                    onClick={openChainModal} 
+                  <button
+                    onClick={openChainModal}
                     type="button"
                     className="arcade-btn border-red-500 text-red-500 hover:bg-red-500 hover:text-black transition-all duration-200 arcade-text text-xs"
                   >
@@ -67,7 +67,7 @@ export function ConnectWallet() {
                       >
                         {chain.iconUrl && (
                           <img
-                            alt={chain.name ?? 'Chain icon'}
+                            alt={chain.name ?? "Chain icon"}
                             src={chain.iconUrl}
                             className="w-3 h-3"
                           />
@@ -77,8 +77,8 @@ export function ConnectWallet() {
                     {chain.name}
                   </button>
 
-                  <button 
-                    onClick={openAccountModal} 
+                  <button
+                    onClick={openAccountModal}
                     type="button"
                     className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all duration-200 arcade-text text-xs px-2 py-1"
                   >
@@ -92,4 +92,4 @@ export function ConnectWallet() {
       }}
     </ConnectButton.Custom>
   );
-} 
+}

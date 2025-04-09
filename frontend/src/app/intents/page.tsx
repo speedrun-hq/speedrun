@@ -1,4 +1,4 @@
-import IntentList from '@/components/IntentList';
+import IntentList from "@/components/IntentList";
 
 export default function IntentsPage() {
   return (
@@ -6,4 +6,4 @@ export default function IntentsPage() {
       <IntentList />
     </main>
   );
-} 
+}

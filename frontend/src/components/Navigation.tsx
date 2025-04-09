@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { ConnectWallet } from './ConnectWallet';
-import { useState, useEffect } from 'react';
+import Link from "next/link";
+import { ConnectWallet } from "./ConnectWallet";
+import { useState, useEffect } from "react";
 
 const Navigation = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -13,15 +13,15 @@ const Navigation = () => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 1024);
     };
-    
+
     // Set initial value
     handleResize();
-    
+
     // Add event listener
-    window.addEventListener('resize', handleResize);
-    
+    window.addEventListener("resize", handleResize);
+
     // Clean up
-    return () => window.removeEventListener('resize', handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   // Toggle menu open/closed
@@ -32,21 +32,27 @@ const Navigation = () => {
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isMenuOpen && !(event.target as Element).closest('.mobile-menu') && 
-          !(event.target as Element).closest('.hamburger-btn')) {
+      if (
+        isMenuOpen &&
+        !(event.target as Element).closest(".mobile-menu") &&
+        !(event.target as Element).closest(".hamburger-btn")
+      ) {
         setIsMenuOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isMenuOpen]);
 
   return (
     <nav className="bg-black border-b-4 border-primary-500 relative z-50">
       <div className="container mx-auto px-4">
         <div className="flex justify-between h-16 items-center">
-          <Link href="/" className="arcade-text text-2xl text-primary-500 hover:text-primary-400 relative z-10 font-bold">
+          <Link
+            href="/"
+            className="arcade-text text-2xl text-primary-500 hover:text-primary-400 relative z-10 font-bold"
+          >
             SPEEDRUN
           </Link>
 
@@ -80,23 +86,33 @@ const Navigation = () => {
             <div className="relative z-10">
               <ConnectWallet />
             </div>
-            <button 
+            <button
               className="hamburger-btn ml-4 p-2 rounded border-2 border-green-400 text-green-400 hover:bg-green-400/20 transition-none z-50 relative cursor-pointer"
               onClick={toggleMenu}
               aria-label="Toggle menu"
               type="button"
             >
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className="h-6 w-6 pointer-events-none" 
-                fill="none" 
-                viewBox="0 0 24 24" 
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6 pointer-events-none"
+                fill="none"
+                viewBox="0 0 24 24"
                 stroke="currentColor"
               >
                 {isMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
                 )}
               </svg>
             </button>
@@ -105,9 +121,11 @@ const Navigation = () => {
       </div>
 
       {/* Mobile Menu Panel */}
-      <div 
+      <div
         className={`mobile-menu lg:hidden absolute top-full left-0 right-0 bg-black border-b-4 border-primary-500 shadow-lg transform transition-transform duration-300 z-40 ${
-          isMenuOpen ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+          isMenuOpen
+            ? "translate-y-0 opacity-100"
+            : "-translate-y-full opacity-0 pointer-events-none"
         }`}
       >
         <div className="container mx-auto px-4 py-4 space-y-3">
@@ -138,4 +156,4 @@ const Navigation = () => {
   );
 };
 
-export default Navigation; 
+export default Navigation;

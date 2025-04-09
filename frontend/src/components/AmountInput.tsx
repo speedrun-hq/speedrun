@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 interface AmountInputProps {
   value: string;
@@ -9,27 +9,32 @@ interface AmountInputProps {
   disabled?: boolean;
 }
 
-export function AmountInput({ value, onChange, max, disabled }: AmountInputProps) {
-  const [error, setError] = useState<string>('');
+export function AmountInput({
+  value,
+  onChange,
+  max,
+  disabled,
+}: AmountInputProps) {
+  const [error, setError] = useState<string>("");
 
   useEffect(() => {
     if (!value) {
-      setError('');
+      setError("");
       return;
     }
 
     const numValue = parseFloat(value);
     if (isNaN(numValue) || numValue <= 0) {
-      setError('Please enter a valid amount');
+      setError("Please enter a valid amount");
       return;
     }
 
     if (max && numValue > parseFloat(max)) {
-      setError('Amount exceeds your balance');
+      setError("Amount exceeds your balance");
       return;
     }
 
-    setError('');
+    setError("");
   }, [value, max]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,9 +58,7 @@ export function AmountInput({ value, onChange, max, disabled }: AmountInputProps
         className="w-full px-4 py-2 bg-black border-2 border-yellow-500 rounded-lg text-yellow-500 font-mono focus:outline-none focus:border-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed"
         placeholder="0.00"
       />
-      {error && (
-        <p className="text-red-500 text-sm font-mono">{error}</p>
-      )}
+      {error && <p className="text-red-500 text-sm font-mono">{error}</p>}
     </div>
   );
-} 
+}

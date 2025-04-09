@@ -1,8 +1,8 @@
 // Learn more: https://github.com/testing-library/jest-dom
-import '@testing-library/jest-dom';
+import "@testing-library/jest-dom";
 
 // Mock next/navigation
-jest.mock('next/navigation', () => ({
+jest.mock("next/navigation", () => ({
   useRouter: () => ({
     push: jest.fn(),
     replace: jest.fn(),
@@ -11,7 +11,7 @@ jest.mock('next/navigation', () => ({
     forward: jest.fn(),
     prefetch: jest.fn(),
   }),
-  usePathname: () => '',
+  usePathname: () => "",
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -21,16 +21,14 @@ expect.extend({
     const pass = received !== null;
     if (pass) {
       return {
-        message: () =>
-          `expected ${received} not to be in the document`,
+        message: () => `expected ${received} not to be in the document`,
         pass: true,
       };
     } else {
       return {
-        message: () =>
-          `expected ${received} to be in the document`,
+        message: () => `expected ${received} to be in the document`,
         pass: false,
       };
     }
   },
-}); 
+});
