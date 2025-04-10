@@ -1,19 +1,25 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/models"
-	"github.com/speedrun-hq/speedrun/api/services"
 	"github.com/speedrun-hq/speedrun/api/utils"
 )
 
-var fulfillmentServices map[uint64]*services.FulfillmentService
+// FulfillmentServiceInterface defines the interface for fulfillment service operations
+type FulfillmentServiceInterface interface {
+	CreateFulfillment(ctx context.Context, id string, txHash string) error
+}
+
+var fulfillmentServices map[uint64]FulfillmentServiceInterface
 
 // InitFulfillmentHandlers initializes the fulfillment handlers
-func InitFulfillmentHandlers(db db.Database, services map[uint64]*services.FulfillmentService) {
+func InitFulfillmentHandlers(db db.Database, services map[uint64]FulfillmentServiceInterface) {
 	database = db
 	fulfillmentServices = services
 }
@@ -32,8 +38,26 @@ func CreateFulfillment(c *gin.Context) {
 		return
 	}
 
-	err := fulfillmentServices[req.ChainID].CreateFulfillment(c.Request.Context(), req.ID, req.TxHash)
+	// Check if service exists for the chain
+	service, ok := fulfillmentServices[req.ChainID]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("no fulfillment service for chain %d", req.ChainID)})
+		return
+	}
+
+	// Create fulfillment in service
+	err := service.CreateFulfillment(c.Request.Context(), req.ID, req.TxHash)
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create fulfillment in database
+	fulfillment := &models.Fulfillment{
+		ID:     req.ID,
+		TxHash: req.TxHash,
+	}
+	if err := database.CreateFulfillment(c.Request.Context(), fulfillment); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -59,7 +83,7 @@ func GetFulfillment(c *gin.Context) {
 
 	fulfillment, err := database.GetFulfillment(c.Request.Context(), fulfillmentID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "fulfillment not found"})
 		return
 	}
 
