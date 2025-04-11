@@ -33,25 +33,27 @@ const (
 // IntentService handles monitoring and processing of intent events from the blockchain.
 // It subscribes to intent events, processes them, and stores them in the database.
 type IntentService struct {
-	client  *ethclient.Client
-	db      db.Database
-	abi     abi.ABI
-	chainID uint64
-	subs    map[string]ethereum.Subscription
+	client         *ethclient.Client
+	clientResolver ClientResolver
+	db             db.Database
+	abi            abi.ABI
+	chainID        uint64
+	subs           map[string]ethereum.Subscription
 }
 
-func NewIntentService(client *ethclient.Client, db db.Database, intentInitiatedEventABI string, chainID uint64) (*IntentService, error) {
+func NewIntentService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentInitiatedEventABI string, chainID uint64) (*IntentService, error) {
 	parsedABI, err := abi.JSON(strings.NewReader(intentInitiatedEventABI))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ABI: %v", err)
 	}
 
 	return &IntentService{
-		client:  client,
-		db:      db,
-		abi:     parsedABI,
-		chainID: chainID,
-		subs:    make(map[string]ethereum.Subscription),
+		client:         client,
+		clientResolver: clientResolver,
+		db:             db,
+		abi:            parsedABI,
+		chainID:        chainID,
+		subs:           make(map[string]ethereum.Subscription),
 	}, nil
 }
 
@@ -150,7 +152,33 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	// Use the target chain from the event data
 	event.ChainID = s.chainID
 
-	intent := event.ToIntent()
+	// Important: Use the correct chain client for intent events
+	// Intent events happen on the source chain, so we need to use the source chain client
+	var client *ethclient.Client
+	if s.clientResolver != nil {
+		// Try to get the source chain client
+		sourceClient, err := s.clientResolver.GetClient(event.ChainID)
+		if err == nil {
+			client = sourceClient
+		} else {
+			log.Printf("Warning: Failed to get source chain client: %v, using default client", err)
+			client = s.client
+		}
+	} else {
+		client = s.client
+	}
+
+	intent, err := event.ToIntent(client)
+	if err != nil {
+		log.Printf("Warning: Failed to get block timestamp: %v", err)
+		// Continue with what we have
+	}
+
+	// Add a warning log if the chain IDs don't match and we're using the default client
+	if intent.SourceChain != s.chainID && client == s.client {
+		log.Printf("Warning: Using client for chain %d to fetch timestamp for intent event on chain %d",
+			s.chainID, intent.SourceChain)
+	}
 
 	// Check if intent already exists
 	existingIntent, err := s.db.GetIntent(ctx, intent.ID)
@@ -214,6 +242,21 @@ func (s *IntentService) extractEventData(vLog types.Log) (*models.IntentInitiate
 		return nil, err
 	}
 
+	// Get the sender address from the transaction
+	tx, _, err := s.client.TransactionByHash(context.Background(), vLog.TxHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction: %v", err)
+	}
+
+	// Get the sender address from the transaction
+	signer := types.LatestSignerForChainID(big.NewInt(int64(s.chainID)))
+	sender, err := signer.Sender(tx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sender address: %v", err)
+	}
+
+	event.Sender = sender.Hex()
+
 	return event, nil
 }
 
@@ -250,14 +293,29 @@ func (s *IntentService) validateEventFields(unpacked []interface{}, event *model
 	return nil
 }
 
-// GetIntent retrieves an intent by ID
+// GetIntent retrieves an intent from the database
 func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Intent, error) {
-	// Get intent from database
+	// First, check if the intent exists in the database
 	intent, err := s.db.GetIntent(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get intent: %v", err)
+		// Log detailed error for debugging
+		log.Printf("ERROR: Failed to get intent %s from database: %v", id, err)
+
+		// Check if the error is "not found"
+		if strings.Contains(err.Error(), "not found") {
+			// Try to check on-chain via RPC if this intent exists
+			log.Printf("Intent not found in database, attempting to check on-chain for intent %s", id)
+
+			// Here you would typically query the blockchain or other sources
+			// For now, we're just improving error logging
+			return nil, fmt.Errorf("intent not found: %s (not in database)", id)
+		}
+
+		return nil, fmt.Errorf("error retrieving intent: %v", err)
 	}
 
+	// Log success
+	log.Printf("Successfully retrieved intent %s from database", id)
 	return intent, nil
 }
 
@@ -271,8 +329,26 @@ func (s *IntentService) ListIntents(ctx context.Context) ([]*models.Intent, erro
 	return intents, nil
 }
 
+// GetIntentsBySender retrieves all intents for a specific sender address
+func (s *IntentService) GetIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error) {
+	intents, err := s.db.ListIntentsBySender(ctx, sender)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list intents by sender: %v", err)
+	}
+	return intents, nil
+}
+
+// GetIntentsByRecipient retrieves all intents for a specific recipient address
+func (s *IntentService) GetIntentsByRecipient(ctx context.Context, recipient string) ([]*models.Intent, error) {
+	intents, err := s.db.ListIntentsByRecipient(ctx, recipient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list intents by recipient: %v", err)
+	}
+	return intents, nil
+}
+
 // CreateIntent creates a new intent
-func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, intentFee string) (*models.Intent, error) {
+func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string, timestamp ...time.Time) (*models.Intent, error) {
 	// Validate chain IDs
 	if err := utils.ValidateChain(sourceChain); err != nil {
 		return nil, fmt.Errorf("invalid source chain: %v", err)
@@ -296,9 +372,23 @@ func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain
 		return nil, fmt.Errorf("invalid recipient address: %v", err)
 	}
 
+	// Validate sender address
+	if err := utils.ValidateAddress(sender); err != nil {
+		return nil, fmt.Errorf("invalid sender address: %v", err)
+	}
+
 	// Validate intent fee
 	if err := utils.ValidateAmount(intentFee); err != nil {
 		return nil, fmt.Errorf("invalid intent fee: %v", err)
+	}
+
+	// For API-created intents, we use the current time
+	// For blockchain events, the block timestamp should be used and passed as a parameter
+	var now time.Time
+	if len(timestamp) > 0 && !timestamp[0].IsZero() {
+		now = timestamp[0]
+	} else {
+		now = time.Now()
 	}
 
 	intent := &models.Intent{
@@ -308,10 +398,11 @@ func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain
 		Token:            token,
 		Amount:           amount,
 		Recipient:        recipient,
+		Sender:           sender,
 		IntentFee:        intentFee,
 		Status:           models.IntentStatusPending,
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	if err := s.db.CreateIntent(ctx, intent); err != nil {

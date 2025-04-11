@@ -34,7 +34,7 @@ export function ConnectWallet() {
                   <button
                     onClick={openConnectModal}
                     type="button"
-                    className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all duration-200 arcade-text text-xs"
+                    className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all duration-200 arcade-text text-xs min-w-[165px] justify-center"
                   >
                     CONNECT WALLET
                   </button>
@@ -46,7 +46,7 @@ export function ConnectWallet() {
                   <button
                     onClick={openChainModal}
                     type="button"
-                    className="arcade-btn border-red-500 text-red-500 hover:bg-red-500 hover:text-black transition-all duration-200 arcade-text text-xs"
+                    className="arcade-btn border-red-500 text-red-500 hover:bg-red-500 hover:text-black transition-all duration-200 arcade-text text-xs min-w-[165px] justify-center"
                   >
                     WRONG NETWORK
                   </button>

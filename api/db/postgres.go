@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"log"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -91,7 +92,7 @@ func (p *PostgresDB) InitDB(ctx context.Context) error {
 // GetIntent retrieves an intent by ID
 func (p *PostgresDB) GetIntent(ctx context.Context, id string) (*models.Intent, error) {
 	query := `
-		SELECT id, source_chain, destination_chain, token, amount, recipient, intent_fee, status, created_at, updated_at
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
 		FROM intents
 		WHERE id = $1
 	`
@@ -104,6 +105,7 @@ func (p *PostgresDB) GetIntent(ctx context.Context, id string) (*models.Intent, 
 		&intent.Token,
 		&intent.Amount,
 		&intent.Recipient,
+		&intent.Sender,
 		&intent.IntentFee,
 		&intent.Status,
 		&intent.CreatedAt,
@@ -123,15 +125,19 @@ func (p *PostgresDB) GetIntent(ctx context.Context, id string) (*models.Intent, 
 func (p *PostgresDB) CreateIntent(ctx context.Context, intent *models.Intent) error {
 	query := `
 		INSERT INTO intents (
-			id, source_chain, destination_chain, token, amount, recipient, intent_fee, status, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	// Ensure created_at and updated_at are set
+	// For blockchain events, these should already be set to the block timestamp
+	// This is a fallback for API-created intents or testing
 	if intent.CreatedAt.IsZero() {
+		log.Printf("Warning: Intent %s has no created_at timestamp, falling back to current time", intent.ID)
 		intent.CreatedAt = time.Now()
 	}
 	if intent.UpdatedAt.IsZero() {
+		log.Printf("Warning: Intent %s has no updated_at timestamp, falling back to current time", intent.ID)
 		intent.UpdatedAt = time.Now()
 	}
 
@@ -142,6 +148,7 @@ func (p *PostgresDB) CreateIntent(ctx context.Context, intent *models.Intent) er
 		intent.Token,
 		intent.Amount,
 		intent.Recipient,
+		intent.Sender,
 		intent.IntentFee,
 		intent.Status,
 		intent.CreatedAt,
@@ -214,10 +221,14 @@ func (p *PostgresDB) CreateFulfillment(ctx context.Context, fulfillment *models.
 	`
 
 	// Ensure timestamps are set
+	// For blockchain events, these should already be set to the block timestamp
+	// This is a fallback for API-created fulfillments or testing
 	if fulfillment.CreatedAt.IsZero() {
+		log.Printf("Warning: Fulfillment for intent %s has no created_at timestamp, falling back to current time", fulfillment.ID)
 		fulfillment.CreatedAt = time.Now()
 	}
 	if fulfillment.UpdatedAt.IsZero() {
+		log.Printf("Warning: Fulfillment for intent %s has no updated_at timestamp, falling back to current time", fulfillment.ID)
 		fulfillment.UpdatedAt = time.Now()
 	}
 
@@ -382,10 +393,14 @@ func (p *PostgresDB) CreateSettlement(ctx context.Context, settlement *models.Se
 	`
 
 	// Ensure timestamps are set
+	// For blockchain events, these should already be set to the block timestamp
+	// This is a fallback for API-created settlements or testing
 	if settlement.CreatedAt.IsZero() {
+		log.Printf("Warning: Settlement for intent %s has no created_at timestamp, falling back to current time", settlement.ID)
 		settlement.CreatedAt = time.Now()
 	}
 	if settlement.UpdatedAt.IsZero() {
+		log.Printf("Warning: Settlement for intent %s has no updated_at timestamp, falling back to current time", settlement.ID)
 		settlement.UpdatedAt = time.Now()
 	}
 
@@ -411,7 +426,7 @@ func (p *PostgresDB) CreateSettlement(ctx context.Context, settlement *models.Se
 // ListIntents retrieves all intents
 func (p *PostgresDB) ListIntents(ctx context.Context) ([]*models.Intent, error) {
 	query := `
-		SELECT id, source_chain, destination_chain, token, amount, recipient, intent_fee, status, created_at, updated_at
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
 		FROM intents
 		ORDER BY created_at DESC
 	`
@@ -432,6 +447,7 @@ func (p *PostgresDB) ListIntents(ctx context.Context) ([]*models.Intent, error) 
 			&intent.Token,
 			&intent.Amount,
 			&intent.Recipient,
+			&intent.Sender,
 			&intent.IntentFee,
 			&intent.Status,
 			&intent.CreatedAt,
@@ -487,4 +503,88 @@ func (p *PostgresDB) UpdateLastProcessedBlock(ctx context.Context, chainID uint6
 		return fmt.Errorf("failed to update last processed block: %v", err)
 	}
 	return nil
+}
+
+// ListIntentsBySender retrieves all intents for a specific sender address
+func (p *PostgresDB) ListIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error) {
+	query := `
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
+		FROM intents
+		WHERE sender = $1
+		ORDER BY created_at DESC
+	`
+
+	rows, err := p.db.QueryContext(ctx, query, sender)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query intents for sender %s: %v", sender, err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating intents: %v", err)
+	}
+	return intents, nil
+}
+
+// ListIntentsByRecipient retrieves all intents for a specific recipient address
+func (p *PostgresDB) ListIntentsByRecipient(ctx context.Context, recipient string) ([]*models.Intent, error) {
+	query := `
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
+		FROM intents
+		WHERE recipient = $1
+		ORDER BY created_at DESC
+	`
+
+	rows, err := p.db.QueryContext(ctx, query, recipient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query intents for recipient %s: %v", recipient, err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating intents: %v", err)
+	}
+	return intents, nil
 }

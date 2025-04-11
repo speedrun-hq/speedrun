@@ -42,24 +42,36 @@ func NewEventCatchupService(intentServices map[uint64]*IntentService, fulfillmen
 
 // StartListening starts the coordinated event listening process
 func (s *EventCatchupService) StartListening(ctx context.Context) error {
+	log.Println("Starting event catchup service")
+
 	// Load config
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
+	// Print information about active chains for debugging
+	for chainID, chainConfig := range cfg.ChainConfigs {
+		log.Printf("Configured chain %d with contract address %s",
+			chainID, chainConfig.ContractAddr)
+	}
+
 	// Initialize progress tracking for all chains
 	s.mu.Lock()
 	for chainID := range s.intentServices {
+		log.Printf("Initializing intent progress tracking for chain %d", chainID)
 		lastBlock, err := s.db.GetLastProcessedBlock(ctx, chainID)
 		if err != nil {
 			s.mu.Unlock()
 			return fmt.Errorf("failed to get last processed block for chain %d: %v", chainID, err)
 		}
 		if lastBlock < cfg.ChainConfigs[chainID].DefaultBlock {
+			log.Printf("Last processed block %d is less than default block %d for chain %d, using default",
+				lastBlock, cfg.ChainConfigs[chainID].DefaultBlock, chainID)
 			lastBlock = cfg.ChainConfigs[chainID].DefaultBlock
 		}
 		s.intentProgress[chainID] = lastBlock
+		log.Printf("Setting intent progress for chain %d to block %d", chainID, lastBlock)
 	}
 	s.mu.Unlock()
 
@@ -255,6 +267,9 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	// Start live event intentlisteners for each chain
 	for chainID, intentService := range s.intentServices {
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+		log.Printf("Starting intent event listener for chain %d at contract %s",
+			chainID, contractAddress.Hex())
+
 		intentQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
 			Topics: [][]common.Hash{
@@ -267,9 +282,9 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to subscribe to intent logs for chain %d: %v", chainID, err)
 		}
+		log.Printf("Successfully subscribed to intent events for chain %d", chainID)
 
 		go intentService.processEventLogs(ctx, intentSub, intentLogs)
-
 	}
 
 	// Start live event fulfillment listeners for each chain
@@ -336,64 +351,81 @@ func (s *EventCatchupService) UpdateSettlementProgress(chainID, blockNumber uint
 
 // catchUpOnIntentEvents processes missed intent events for a specific chain
 func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentService *IntentService, contractAddress common.Address, fromBlock, toBlock uint64) error {
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromBlock + 1)),
-		ToBlock:   big.NewInt(int64(toBlock)),
-		Addresses: []common.Address{contractAddress},
-		Topics: [][]common.Hash{
-			{intentService.abi.Events[IntentInitiatedEventName].ID},
-		},
-	}
+	// Use a max range of 5,000 blocks per query to stay well under the 10,000 limit
+	const maxBlockRange = uint64(5000)
 
-	logs, err := intentService.client.FilterLogs(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to fetch intent logs: %v", err)
-	}
-
-	// Process logs in batches to report progress
-	batchSize := 100
-	for i := 0; i < len(logs); i += batchSize {
-		end := i + batchSize
-		if end > len(logs) {
-			end = len(logs)
+	// Process in chunks to avoid RPC provider limitations
+	for chunkStart := fromBlock; chunkStart < toBlock; chunkStart += maxBlockRange {
+		chunkEnd := chunkStart + maxBlockRange
+		if chunkEnd > toBlock {
+			chunkEnd = toBlock
 		}
 
-		batch := logs[i:end]
-		for j, txlog := range batch {
-			log.Printf("Processing intent log %d/%d: Block=%d, TxHash=%s",
-				i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+		log.Printf("Fetching intent logs for blocks %d to %d", chunkStart+1, chunkEnd)
 
-			// Extract intent ID from the log
-			intentID := txlog.Topics[1].Hex()
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(int64(chunkStart + 1)),
+			ToBlock:   big.NewInt(int64(chunkEnd)),
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{intentService.abi.Events[IntentInitiatedEventName].ID},
+			},
+		}
 
-			// Check if intent already exists
-			existingIntent, err := s.db.GetIntent(ctx, intentID)
-			if err != nil && !strings.Contains(err.Error(), "not found") {
-				return fmt.Errorf("failed to check for existing intent: %v", err)
+		logs, err := intentService.client.FilterLogs(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to fetch intent logs for range %d-%d: %v", chunkStart+1, chunkEnd, err)
+		}
+
+		// Process logs in batches to report progress
+		batchSize := 100
+		for i := 0; i < len(logs); i += batchSize {
+			end := i + batchSize
+			if end > len(logs) {
+				end = len(logs)
 			}
 
-			// Skip if intent already exists
-			if existingIntent != nil {
-				log.Printf("Skipping existing intent: %s", intentID)
-				continue
-			}
+			batch := logs[i:end]
+			for j, txlog := range batch {
+				log.Printf("Processing intent log %d/%d: Block=%d, TxHash=%s",
+					i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
 
-			if err := intentService.processLog(ctx, txlog); err != nil {
+				// Extract intent ID from the log
+				intentID := txlog.Topics[1].Hex()
+
+				// Check if intent already exists
+				existingIntent, err := s.db.GetIntent(ctx, intentID)
+				if err != nil && !strings.Contains(err.Error(), "not found") {
+					return fmt.Errorf("failed to check for existing intent: %v", err)
+				}
+
 				// Skip if intent already exists
-				if strings.Contains(err.Error(), "duplicate key") {
-					log.Printf("Skipping duplicate intent: %s", intentID)
+				if existingIntent != nil {
+					log.Printf("Skipping existing intent: %s", intentID)
 					continue
 				}
-				return fmt.Errorf("failed to process intent log: %v", err)
+
+				if err := intentService.processLog(ctx, txlog); err != nil {
+					// Skip if intent already exists
+					if strings.Contains(err.Error(), "duplicate key") {
+						log.Printf("Skipping duplicate intent: %s", intentID)
+						continue
+					}
+					return fmt.Errorf("failed to process intent log: %v", err)
+				}
+			}
+
+			// Update progress after each batch
+			if len(batch) > 0 {
+				lastBlock := batch[len(batch)-1].BlockNumber
+				s.UpdateIntentProgress(intentService.chainID, lastBlock)
+				log.Printf("Updated progress for chain %d to block %d", intentService.chainID, lastBlock)
 			}
 		}
 
-		// Update progress after each batch
-		if len(batch) > 0 {
-			lastBlock := batch[len(batch)-1].BlockNumber
-			s.UpdateIntentProgress(intentService.chainID, lastBlock)
-			log.Printf("Updated progress for chain %d to block %d", intentService.chainID, lastBlock)
-		}
+		// Update progress after processing each chunk
+		s.UpdateIntentProgress(intentService.chainID, chunkEnd)
+		log.Printf("Completed processing intent logs for blocks %d to %d", chunkStart+1, chunkEnd)
 	}
 
 	return nil
@@ -401,59 +433,76 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 
 // catchUpOnFulfillmentEvents processes missed fulfillment events for a specific chain
 func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fulfillmentService *FulfillmentService, contractAddress common.Address, fromBlock, toBlock uint64) error {
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromBlock + 1)),
-		ToBlock:   big.NewInt(int64(toBlock)),
-		Addresses: []common.Address{contractAddress},
-		Topics: [][]common.Hash{
-			{fulfillmentService.abi.Events[IntentFulfilledEventName].ID},
-		},
-	}
+	// Use a max range of 5,000 blocks per query to stay well under the 10,000 limit
+	const maxBlockRange = uint64(5000)
 
-	logs, err := fulfillmentService.client.FilterLogs(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to fetch fulfillment logs: %v", err)
-	}
-
-	// Process logs in batches to report progress
-	batchSize := 100
-	for i := 0; i < len(logs); i += batchSize {
-		end := i + batchSize
-		if end > len(logs) {
-			end = len(logs)
+	// Process in chunks to avoid RPC provider l	imitations
+	for chunkStart := fromBlock; chunkStart < toBlock; chunkStart += maxBlockRange {
+		chunkEnd := chunkStart + maxBlockRange
+		if chunkEnd > toBlock {
+			chunkEnd = toBlock
 		}
 
-		batch := logs[i:end]
-		for j, txlog := range batch {
-			log.Printf("Processing fulfillment log %d/%d: Block=%d, TxHash=%s",
-				i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+		log.Printf("Fetching fulfillment logs for blocks %d to %d", chunkStart+1, chunkEnd)
 
-			// Extract intent ID from the log
-			intentID := txlog.Topics[1].Hex()
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(int64(chunkStart + 1)),
+			ToBlock:   big.NewInt(int64(chunkEnd)),
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{fulfillmentService.abi.Events[IntentFulfilledEventName].ID},
+			},
+		}
 
-			// Check if intent already exists
-			_, err := s.db.GetIntent(ctx, intentID)
-			if err != nil && !strings.Contains(err.Error(), "not found") {
-				log.Printf("failed to check for existing intent: %v", err)
-				continue
+		logs, err := fulfillmentService.client.FilterLogs(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to fetch fulfillment logs for range %d-%d: %v", chunkStart+1, chunkEnd, err)
+		}
+
+		// Process logs in batches to report progress
+		batchSize := 100
+		for i := 0; i < len(logs); i += batchSize {
+			end := i + batchSize
+			if end > len(logs) {
+				end = len(logs)
 			}
 
-			if err := fulfillmentService.processLog(ctx, txlog); err != nil {
-				// Skip if fulfillment already exists
-				if strings.Contains(err.Error(), "duplicate key") {
-					log.Printf("Skipping duplicate fulfillment: %s", intentID)
+			batch := logs[i:end]
+			for j, txlog := range batch {
+				log.Printf("Processing fulfillment log %d/%d: Block=%d, TxHash=%s",
+					i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+
+				// Extract intent ID from the log
+				intentID := txlog.Topics[1].Hex()
+
+				// Check if intent already exists
+				_, err := s.db.GetIntent(ctx, intentID)
+				if err != nil && !strings.Contains(err.Error(), "not found") {
+					log.Printf("failed to check for existing intent: %v", err)
 					continue
 				}
-				return fmt.Errorf("failed to process fulfillment log: %v", err)
+
+				if err := fulfillmentService.processLog(ctx, txlog); err != nil {
+					// Skip if fulfillment already exists
+					if strings.Contains(err.Error(), "duplicate key") {
+						log.Printf("Skipping duplicate fulfillment: %s", intentID)
+						continue
+					}
+					return fmt.Errorf("failed to process fulfillment log: %v", err)
+				}
+			}
+
+			// Update progress after each batch
+			if len(batch) > 0 {
+				lastBlock := batch[len(batch)-1].BlockNumber
+				s.UpdateFulfillmentProgress(fulfillmentService.chainID, lastBlock)
+				log.Printf("Updated progress for chain %d to block %d", fulfillmentService.chainID, lastBlock)
 			}
 		}
 
-		// Update progress after each batch
-		if len(batch) > 0 {
-			lastBlock := batch[len(batch)-1].BlockNumber
-			s.UpdateFulfillmentProgress(fulfillmentService.chainID, lastBlock)
-			log.Printf("Updated progress for chain %d to block %d", fulfillmentService.chainID, lastBlock)
-		}
+		// Update progress after processing each chunk
+		s.UpdateFulfillmentProgress(fulfillmentService.chainID, chunkEnd)
+		log.Printf("Completed processing fulfillment logs for blocks %d to %d", chunkStart+1, chunkEnd)
 	}
 
 	return nil
@@ -461,58 +510,75 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 
 // catchUpOnSettlementEvents processes missed settlement events for a specific chain
 func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, settlementService *SettlementService, contractAddress common.Address, fromBlock, toBlock uint64) error {
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromBlock + 1)),
-		ToBlock:   big.NewInt(int64(toBlock)),
-		Addresses: []common.Address{contractAddress},
-		Topics: [][]common.Hash{
-			{settlementService.abi.Events[IntentSettledEventName].ID},
-		},
-	}
+	// Use a max range of 9,000 blocks per query to stay well under the 10,000 limit
+	const maxBlockRange = uint64(5000)
 
-	logs, err := settlementService.client.FilterLogs(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to fetch settlement logs: %v", err)
-	}
-
-	// Process logs in batches to report progress
-	batchSize := 100
-	for i := 0; i < len(logs); i += batchSize {
-		end := i + batchSize
-		if end > len(logs) {
-			end = len(logs)
+	// Process in chunks to avoid RPC provider limitations
+	for chunkStart := fromBlock; chunkStart < toBlock; chunkStart += maxBlockRange {
+		chunkEnd := chunkStart + maxBlockRange
+		if chunkEnd > toBlock {
+			chunkEnd = toBlock
 		}
 
-		batch := logs[i:end]
-		for j, txlog := range batch {
-			log.Printf("Processing settlement log %d/%d: Block=%d, TxHash=%s",
-				i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+		log.Printf("Fetching settlement logs for blocks %d to %d", chunkStart+1, chunkEnd)
 
-			// Extract intent ID from the log
-			intentID := txlog.Topics[1].Hex()
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(int64(chunkStart + 1)),
+			ToBlock:   big.NewInt(int64(chunkEnd)),
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{settlementService.abi.Events[IntentSettledEventName].ID},
+			},
+		}
 
-			// Check if intent already exists
-			_, err := s.db.GetIntent(ctx, intentID)
-			if err != nil && !strings.Contains(err.Error(), "not found") {
-				return fmt.Errorf("failed to check for existing intent: %v", err)
+		logs, err := settlementService.client.FilterLogs(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to fetch settlement logs for range %d-%d: %v", chunkStart+1, chunkEnd, err)
+		}
+
+		// Process logs in batches to report progress
+		batchSize := 100
+		for i := 0; i < len(logs); i += batchSize {
+			end := i + batchSize
+			if end > len(logs) {
+				end = len(logs)
 			}
 
-			if err := settlementService.processLog(ctx, txlog); err != nil {
-				// Skip if settlement already exists
-				if strings.Contains(err.Error(), "duplicate key") {
-					log.Printf("Skipping duplicate settlement: %s", intentID)
-					continue
+			batch := logs[i:end]
+			for j, txlog := range batch {
+				log.Printf("Processing settlement log %d/%d: Block=%d, TxHash=%s",
+					i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+
+				// Extract intent ID from the log
+				intentID := txlog.Topics[1].Hex()
+
+				// Check if intent already exists
+				_, err := s.db.GetIntent(ctx, intentID)
+				if err != nil && !strings.Contains(err.Error(), "not found") {
+					return fmt.Errorf("failed to check for existing intent: %v", err)
 				}
-				return fmt.Errorf("failed to process settlement log: %v", err)
+
+				if err := settlementService.processLog(ctx, txlog); err != nil {
+					// Skip if settlement already exists
+					if strings.Contains(err.Error(), "duplicate key") {
+						log.Printf("Skipping duplicate settlement: %s", intentID)
+						continue
+					}
+					return fmt.Errorf("failed to process settlement log: %v", err)
+				}
+			}
+
+			// Update progress after each batch
+			if len(batch) > 0 {
+				lastBlock := batch[len(batch)-1].BlockNumber
+				s.UpdateSettlementProgress(settlementService.chainID, lastBlock)
+				log.Printf("Updated progress for chain %d to block %d", settlementService.chainID, lastBlock)
 			}
 		}
 
-		// Update progress after each batch
-		if len(batch) > 0 {
-			lastBlock := batch[len(batch)-1].BlockNumber
-			s.UpdateSettlementProgress(settlementService.chainID, lastBlock)
-			log.Printf("Updated progress for chain %d to block %d", settlementService.chainID, lastBlock)
-		}
+		// Update progress after processing each chunk
+		s.UpdateSettlementProgress(settlementService.chainID, chunkEnd)
+		log.Printf("Completed processing settlement logs for blocks %d to %d", chunkStart+1, chunkEnd)
 	}
 
 	return nil

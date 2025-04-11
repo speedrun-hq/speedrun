@@ -37,12 +37,36 @@ func (m *MockIntentService) ListIntents(ctx context.Context) ([]*models.Intent, 
 	return args.Get(0).([]*models.Intent), args.Error(1)
 }
 
-func (m *MockIntentService) CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, intentFee string) (*models.Intent, error) {
-	args := m.Called(ctx, id, sourceChain, destinationChain, token, amount, recipient, intentFee)
+func (m *MockIntentService) CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string) (*models.Intent, error) {
+	args := m.Called(ctx, id, sourceChain, destinationChain, token, amount, recipient, sender, intentFee)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.Intent), args.Error(1)
+}
+
+func (m *MockIntentService) GetIntentsByUser(ctx context.Context, userAddress string) ([]*models.Intent, error) {
+	args := m.Called(ctx, userAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Intent), args.Error(1)
+}
+
+func (m *MockIntentService) GetIntentsByRecipient(ctx context.Context, recipientAddress string) ([]*models.Intent, error) {
+	args := m.Called(ctx, recipientAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Intent), args.Error(1)
+}
+
+func (m *MockIntentService) GetIntentsBySender(ctx context.Context, senderAddress string) ([]*models.Intent, error) {
+	args := m.Called(ctx, senderAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Intent), args.Error(1)
 }
 
 func setupTestRouter() (*gin.Engine, db.Database, map[uint64]IntentServiceInterface) {
@@ -60,6 +84,7 @@ func setupTestRouter() (*gin.Engine, db.Database, map[uint64]IntentServiceInterf
 	router.POST("/intents", CreateIntent)
 	router.GET("/intents/:id", GetIntent)
 	router.GET("/intents", ListIntents)
+	router.GET("/intents/sender/:sender", GetIntentsBySender)
 
 	return router, mockDB, mockServices
 }
@@ -70,6 +95,7 @@ func TestCreateIntent(t *testing.T) {
 
 	validID := "0x1234567890123456789012345678901234567890123456789012345678901234"
 	validRecipient := "0x1234567890123456789012345678901234567890"
+	validSender := "0x0987654321098765432109876543210987654321"
 
 	tests := []struct {
 		name           string
@@ -86,6 +112,7 @@ func TestCreateIntent(t *testing.T) {
 				Token:            "ETH",
 				Amount:           "1.0",
 				Recipient:        validRecipient,
+				Sender:           validSender,
 				IntentFee:        "0.1",
 			},
 			expectedStatus: http.StatusCreated,
@@ -97,6 +124,7 @@ func TestCreateIntent(t *testing.T) {
 						i.Token == "ETH" &&
 						i.Amount == "1.0" &&
 						i.Recipient == validRecipient &&
+						i.Sender == validSender &&
 						i.IntentFee == "0.1"
 				})).Return(nil)
 			},
@@ -247,6 +275,98 @@ func TestListIntents(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				mockServices[1].(*MockIntentService).AssertExpectations(t)
 			}
+		})
+	}
+}
+
+func TestGetIntentsBySender(t *testing.T) {
+	router, mockDB, _ := setupTestRouter()
+	mockDBTyped := mockDB.(*MockDatabase)
+
+	mockIntents := []*models.Intent{
+		{
+			ID:               "test-id-1",
+			SourceChain:      1,
+			DestinationChain: 2,
+			Token:            "ETH",
+			Amount:           "1.0",
+			Recipient:        "0x123",
+			Sender:           "0x456",
+			IntentFee:        "0.1",
+			Status:           models.IntentStatusPending,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		},
+		{
+			ID:               "test-id-2",
+			SourceChain:      1,
+			DestinationChain: 2,
+			Token:            "ETH",
+			Amount:           "2.0",
+			Recipient:        "0x789",
+			Sender:           "0x456",
+			IntentFee:        "0.2",
+			Status:           models.IntentStatusPending,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		},
+	}
+
+	validAddress := "0x1234567890123456789012345678901234567890"
+
+	tests := []struct {
+		name           string
+		senderAddress  string
+		expectedStatus int
+		setupMock      func()
+	}{
+		{
+			name:           "Valid Sender Address",
+			senderAddress:  validAddress,
+			expectedStatus: http.StatusOK,
+			setupMock: func() {
+				mockDBTyped.On("ListIntentsBySender", mock.Anything, validAddress).Return(mockIntents, nil)
+			},
+		},
+		{
+			name:           "Invalid Sender Address",
+			senderAddress:  "invalid-address",
+			expectedStatus: http.StatusBadRequest,
+			setupMock: func() {
+				// No mock calls expected - validation will fail before database is called
+			},
+		},
+		{
+			name:           "Database Error",
+			senderAddress:  validAddress,
+			expectedStatus: http.StatusInternalServerError,
+			setupMock: func() {
+				mockDBTyped.On("ListIntentsBySender", mock.Anything, validAddress).Return(nil, assert.AnError)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset mock expectations for each test case
+			mockDBTyped.ExpectedCalls = nil
+			mockDBTyped.Calls = nil
+
+			tt.setupMock()
+
+			req := httptest.NewRequest("GET", "/intents/sender/"+tt.senderAddress, nil)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			if tt.expectedStatus == http.StatusOK {
+				var response []*models.IntentResponse
+				err := json.NewDecoder(w.Body).Decode(&response)
+				assert.NoError(t, err)
+				assert.Equal(t, len(mockIntents), len(response))
+			}
+			mockDBTyped.AssertExpectations(t)
 		})
 	}
 }

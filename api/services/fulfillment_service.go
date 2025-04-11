@@ -31,15 +31,16 @@ const (
 
 // FulfillmentService handles monitoring and processing of fulfillment events
 type FulfillmentService struct {
-	client  *ethclient.Client
-	db      db.Database
-	abi     abi.ABI
-	chainID uint64
-	subs    map[string]ethereum.Subscription
+	client         *ethclient.Client
+	clientResolver ClientResolver
+	db             db.Database
+	abi            abi.ABI
+	chainID        uint64
+	subs           map[string]ethereum.Subscription
 }
 
 // NewFulfillmentService creates a new FulfillmentService instance
-func NewFulfillmentService(client *ethclient.Client, db db.Database, intentFulfilledEventABI string, chainID uint64) (*FulfillmentService, error) {
+func NewFulfillmentService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentFulfilledEventABI string, chainID uint64) (*FulfillmentService, error) {
 	// Parse the contract ABI
 	parsedABI, err := abi.JSON(strings.NewReader(intentFulfilledEventABI))
 	if err != nil {
@@ -47,11 +48,12 @@ func NewFulfillmentService(client *ethclient.Client, db db.Database, intentFulfi
 	}
 
 	return &FulfillmentService{
-		client:  client,
-		db:      db,
-		abi:     parsedABI,
-		chainID: chainID,
-		subs:    make(map[string]ethereum.Subscription),
+		client:         client,
+		clientResolver: clientResolver,
+		db:             db,
+		abi:            parsedABI,
+		chainID:        chainID,
+		subs:           make(map[string]ethereum.Subscription),
 	}, nil
 }
 
@@ -137,10 +139,77 @@ func (s *FulfillmentService) processLog(ctx context.Context, vLog types.Log) err
 		return err
 	}
 
-	fulfillment := event.ToFulfillment()
+	// Get related intent to associate with fulfillment
+	intent, err := s.db.GetIntent(ctx, event.IntentID)
+	if err != nil {
+		return fmt.Errorf("failed to get intent: %v", err)
+	}
 
-	// Process the event
-	return s.CreateFulfillment(ctx, event.IntentID, fulfillment.TxHash)
+	// Important: Use the destination chain client for fulfillment events
+	// Fulfillment events happen on the destination chain
+	var client *ethclient.Client
+	if s.clientResolver != nil && intent.DestinationChain != 0 {
+		// Try to get the destination chain client
+		destClient, err := s.clientResolver.GetClient(intent.DestinationChain)
+		if err == nil {
+			client = destClient
+		} else {
+			log.Printf("Warning: Failed to get destination chain client: %v, using default client", err)
+			client = s.client
+		}
+	} else {
+		client = s.client
+	}
+
+	fulfillment, err := event.ToFulfillment(client)
+	if err != nil {
+		log.Printf("Warning: Failed to get block timestamp: %v", err)
+		// Continue with what we have
+	}
+
+	// Add a warning log if the chain IDs don't match and we're using the default client
+	if intent.DestinationChain != s.chainID && client == s.client {
+		log.Printf("Warning: Using client for chain %d to fetch timestamp for fulfillment event on chain %d",
+			s.chainID, intent.DestinationChain)
+	}
+
+	// Ensure we have all the necessary data
+	if fulfillment.Asset == "" {
+		fulfillment.Asset = intent.Token
+	}
+	if fulfillment.Amount == "" {
+		fulfillment.Amount = intent.Amount
+	}
+	if fulfillment.Receiver == "" {
+		fulfillment.Receiver = intent.Recipient
+	}
+
+	// Convert padded blockchain addresses to standard Ethereum addresses
+	if len(fulfillment.Asset) > 42 && strings.HasPrefix(fulfillment.Asset, "0x") {
+		// Extract last 40 chars and add 0x prefix
+		fulfillment.Asset = "0x" + fulfillment.Asset[len(fulfillment.Asset)-40:]
+	}
+
+	if len(fulfillment.Receiver) > 42 && strings.HasPrefix(fulfillment.Receiver, "0x") {
+		// Extract last 40 chars and add 0x prefix
+		fulfillment.Receiver = "0x" + fulfillment.Receiver[len(fulfillment.Receiver)-40:]
+	}
+
+	// Save fulfillment directly to database, preserving the block timestamp
+	if err := s.db.CreateFulfillment(ctx, fulfillment); err != nil {
+		if strings.Contains(err.Error(), "duplicate key") {
+			log.Printf("Skipping duplicate fulfillment: %s", event.IntentID)
+			return nil
+		}
+		return fmt.Errorf("failed to create fulfillment: %v", err)
+	}
+
+	// Update intent status
+	if err := s.db.UpdateIntentStatus(ctx, event.IntentID, models.IntentStatusFulfilled); err != nil {
+		return fmt.Errorf("failed to update intent status: %v", err)
+	}
+
+	return nil
 }
 
 func (s *FulfillmentService) validateLog(vLog types.Log) error {
@@ -152,11 +221,23 @@ func (s *FulfillmentService) validateLog(vLog types.Log) error {
 
 func (s *FulfillmentService) extractEventData(vLog types.Log) (*models.IntentFulfilledEvent, error) {
 	amount := new(big.Int).SetBytes(vLog.Data)
+
+	// Format addresses properly by extracting the standard Ethereum address from padded topics
+	assetAddr := vLog.Topics[2].Hex()
+	if len(assetAddr) > 42 && strings.HasPrefix(assetAddr, "0x") {
+		assetAddr = "0x" + assetAddr[len(assetAddr)-40:]
+	}
+
+	receiverAddr := vLog.Topics[3].Hex()
+	if len(receiverAddr) > 42 && strings.HasPrefix(receiverAddr, "0x") {
+		receiverAddr = "0x" + receiverAddr[len(receiverAddr)-40:]
+	}
+
 	event := &models.IntentFulfilledEvent{
 		IntentID:    vLog.Topics[1].Hex(),
-		Asset:       vLog.Topics[2].Hex(),
+		Asset:       assetAddr,
 		Amount:      amount,
-		Receiver:    vLog.Topics[3].Hex(),
+		Receiver:    receiverAddr,
 		BlockNumber: vLog.BlockNumber,
 		TxHash:      vLog.TxHash.Hex(),
 	}
@@ -197,16 +278,89 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 		return fmt.Errorf("intent not found: %s", intentID)
 	}
 
-	// Create fulfillment
-	now := time.Now()
+	// For API-created fulfillments, try to get the block timestamp from the transaction
+	// This provides more accurate timestamps even for API-created fulfillments
+	var timestamp time.Time
+
+	// Use the destination chain client if possible, as fulfillments happen on the destination chain
+	var client *ethclient.Client
+	if s.clientResolver != nil && intent.DestinationChain != 0 {
+		destClient, err := s.clientResolver.GetClient(intent.DestinationChain)
+		if err == nil {
+			client = destClient
+		} else {
+			log.Printf("Warning: Failed to get destination chain client for manual fulfillment: %v, using default client", err)
+			client = s.client
+		}
+	} else {
+		client = s.client
+	}
+
+	// If the destination chain doesn't match our service chain and we're using the default client,
+	// log a warning about potentially incorrect timestamps
+	if intent.DestinationChain != s.chainID && client == s.client && txHash != "" {
+		log.Printf("Warning: Manual fulfillment using client for chain %d to fetch timestamp for transaction on chain %d",
+			s.chainID, intent.DestinationChain)
+	}
+
+	if txHash != "" && strings.HasPrefix(txHash, "0x") {
+		txHashObj := common.HexToHash(txHash)
+		_, isPending, err := client.TransactionByHash(ctx, txHashObj)
+		if err == nil && !isPending {
+			// If we can get the transaction, try to get its receipt to find the block number
+			receipt, err := client.TransactionReceipt(ctx, txHashObj)
+			if err == nil {
+				// If we have the receipt, get the block to find the timestamp
+				block, err := client.BlockByNumber(ctx, big.NewInt(int64(receipt.BlockNumber.Uint64())))
+				if err == nil {
+					timestamp = time.Unix(int64(block.Time()), 0)
+					log.Printf("Using blockchain timestamp for manual fulfillment of intent %s: %s (block #%d, tx: %s)",
+						intentID, timestamp.Format(time.RFC3339), receipt.BlockNumber.Uint64(), txHash)
+				} else {
+					log.Printf("Warning: Failed to get block for timestamp in manual fulfillment of intent %s (tx: %s): %v, using current time",
+						intentID, txHash, err)
+					timestamp = time.Now()
+				}
+			} else {
+				log.Printf("Warning: Failed to get transaction receipt in manual fulfillment of intent %s (tx: %s): %v, using current time",
+					intentID, txHash, err)
+				timestamp = time.Now()
+			}
+		} else {
+			if err != nil {
+				log.Printf("Warning: Failed to get transaction in manual fulfillment of intent %s (tx: %s): %v, using current time",
+					intentID, txHash, err)
+			} else if isPending {
+				log.Printf("Warning: Transaction is still pending in manual fulfillment of intent %s (tx: %s), using current time",
+					intentID, txHash)
+			}
+			timestamp = time.Now()
+		}
+	} else {
+		// No valid txHash, use current time
+		log.Printf("Warning: No valid transaction hash provided for manual fulfillment of intent %s, using current time", intentID)
+		timestamp = time.Now()
+	}
+
 	fulfillment := &models.Fulfillment{
 		ID:        intentID,
 		Asset:     intent.Token,
 		Amount:    intent.Amount,
 		Receiver:  intent.Recipient,
 		TxHash:    txHash,
-		CreatedAt: now,
-		UpdatedAt: now,
+		CreatedAt: timestamp,
+		UpdatedAt: timestamp,
+	}
+
+	// Convert padded blockchain addresses to standard Ethereum addresses
+	if len(fulfillment.Asset) > 42 && strings.HasPrefix(fulfillment.Asset, "0x") {
+		// Extract last 40 chars and add 0x prefix
+		fulfillment.Asset = "0x" + fulfillment.Asset[len(fulfillment.Asset)-40:]
+	}
+
+	if len(fulfillment.Receiver) > 42 && strings.HasPrefix(fulfillment.Receiver, "0x") {
+		// Extract last 40 chars and add 0x prefix
+		fulfillment.Receiver = "0x" + fulfillment.Receiver[len(fulfillment.Receiver)-40:]
 	}
 
 	// Save fulfillment

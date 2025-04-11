@@ -20,6 +20,8 @@ type Database interface {
 	CreateIntent(ctx context.Context, intent *models.Intent) error
 	GetIntent(ctx context.Context, id string) (*models.Intent, error)
 	ListIntents(ctx context.Context) ([]*models.Intent, error)
+	ListIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error)
+	ListIntentsByRecipient(ctx context.Context, recipient string) ([]*models.Intent, error)
 	UpdateIntentStatus(ctx context.Context, id string, status models.IntentStatus) error
 
 	// Fulfillment operations

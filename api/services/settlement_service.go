@@ -29,25 +29,27 @@ const (
 )
 
 type SettlementService struct {
-	client  *ethclient.Client
-	db      db.Database
-	abi     abi.ABI
-	chainID uint64
-	subs    map[string]ethereum.Subscription
+	client         *ethclient.Client
+	clientResolver ClientResolver
+	db             db.Database
+	abi            abi.ABI
+	chainID        uint64
+	subs           map[string]ethereum.Subscription
 }
 
-func NewSettlementService(client *ethclient.Client, db db.Database, intentSettledEventABI string, chainID uint64) (*SettlementService, error) {
+func NewSettlementService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentSettledEventABI string, chainID uint64) (*SettlementService, error) {
 	parsedABI, err := abi.JSON(strings.NewReader(intentSettledEventABI))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ABI: %v", err)
 	}
 
 	return &SettlementService{
-		client:  client,
-		db:      db,
-		abi:     parsedABI,
-		chainID: chainID,
-		subs:    make(map[string]ethereum.Subscription),
+		client:         client,
+		clientResolver: clientResolver,
+		db:             db,
+		abi:            parsedABI,
+		chainID:        chainID,
+		subs:           make(map[string]ethereum.Subscription),
 	}, nil
 }
 
@@ -128,7 +130,39 @@ func (s *SettlementService) processLog(ctx context.Context, vLog types.Log) erro
 		return err
 	}
 
-	settlement := event.ToSettlement()
+	// Get related intent to associate with settlement
+	intent, err := s.db.GetIntent(ctx, event.IntentID)
+	if err != nil {
+		return fmt.Errorf("failed to get intent: %v", err)
+	}
+
+	// Important: Use the destination chain client for settlement events
+	// Settlement events happen on the destination chain
+	var client *ethclient.Client
+	if s.clientResolver != nil && intent.DestinationChain != 0 {
+		// Try to get the destination chain client
+		destClient, err := s.clientResolver.GetClient(intent.DestinationChain)
+		if err == nil {
+			client = destClient
+		} else {
+			log.Printf("Warning: Failed to get destination chain client: %v, using default client", err)
+			client = s.client
+		}
+	} else {
+		client = s.client
+	}
+
+	settlement, err := event.ToSettlement(client)
+	if err != nil {
+		log.Printf("Warning: Failed to get block timestamp: %v", err)
+		// Continue with what we have
+	}
+
+	// Add a warning log if the chain IDs don't match and we're using the default client
+	if intent.DestinationChain != s.chainID && client == s.client {
+		log.Printf("Warning: Using client for chain %d to fetch timestamp for settlement event on chain %d",
+			s.chainID, intent.DestinationChain)
+	}
 
 	// Process the event
 	return s.CreateSettlement(ctx, settlement)

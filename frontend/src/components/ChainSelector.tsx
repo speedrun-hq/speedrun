@@ -1,43 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { base, arbitrum, mainnet, bsc, polygon, avalanche } from "wagmi/chains";
-
-// Custom chain IDs for coming soon chains
-const BITCOIN_CHAIN_ID = 9997;
-const SOLANA_CHAIN_ID = 9999;
-const SUI_CHAIN_ID = 9998;
-const ZETACHAIN_CHAIN_ID = 7000; // ZetaChain actual mainnet ID
-const TON_CHAIN_ID = 9996; // TON custom ID
-
-// Type to include both real and custom chain IDs
-type ChainId =
-  | typeof mainnet.id
-  | typeof bsc.id
-  | typeof polygon.id
-  | typeof base.id
-  | typeof arbitrum.id
-  | typeof avalanche.id
-  | typeof BITCOIN_CHAIN_ID
-  | typeof SOLANA_CHAIN_ID
-  | typeof SUI_CHAIN_ID
-  | typeof ZETACHAIN_CHAIN_ID
-  | typeof TON_CHAIN_ID;
-
-// Define color palette for dots
-const chainColorMap: Record<number, string> = {
-  [mainnet.id]: "text-gray-400",
-  [bsc.id]: "text-yellow-400",
-  [polygon.id]: "text-purple-500",
-  [base.id]: "text-blue-400",
-  [arbitrum.id]: "text-blue-600",
-  [avalanche.id]: "text-red-600",
-  [BITCOIN_CHAIN_ID]: "text-orange-500",
-  [SOLANA_CHAIN_ID]: "text-purple-400",
-  [SUI_CHAIN_ID]: "text-teal-400",
-  [ZETACHAIN_CHAIN_ID]: "text-green-500",
-  [TON_CHAIN_ID]: "text-blue-500",
-};
+import { 
+  ChainId, 
+  chainColorMap, 
+  SUPPORTED_CHAINS,
+  COMING_SOON_SOURCE_CHAINS,
+  COMING_SOON_DESTINATION_CHAINS 
+} from "@/config/chains";
 
 // Default border color for all selectors
 const BORDER_COLOR = "border-yellow-500";
@@ -61,37 +31,10 @@ export function ChainSelector({
 }: ChainSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  // All supported chains
-  const chains: { id: ChainId; name: string }[] = [
-    { id: mainnet.id, name: "ETHEREUM" },
-    { id: bsc.id, name: "BSC" },
-    { id: polygon.id, name: "POLYGON" },
-    { id: base.id, name: "BASE" },
-    { id: arbitrum.id, name: "ARBITRUM" },
-    { id: avalanche.id, name: "AVALANCHE" },
-  ];
-
-  // Coming soon chains with placeholder IDs - different based on selector type
-  let comingSoonChains: { id: ChainId; name: string }[] = [];
-
-  if (selectorType === "from") {
-    // Add ZetaChain to the FROM selector
-    comingSoonChains = [
-      { id: ZETACHAIN_CHAIN_ID, name: "ZETACHAIN" },
-      { id: SOLANA_CHAIN_ID, name: "SOLANA" },
-      { id: SUI_CHAIN_ID, name: "SUI" },
-      { id: BITCOIN_CHAIN_ID, name: "BITCOIN" },
-      { id: TON_CHAIN_ID, name: "TON" },
-    ];
-  } else {
-    // Add ZetaChain to the TO selector
-    comingSoonChains = [
-      { id: ZETACHAIN_CHAIN_ID, name: "ZETACHAIN" },
-      { id: SOLANA_CHAIN_ID, name: "SOLANA" },
-      { id: SUI_CHAIN_ID, name: "SUI" },
-      { id: TON_CHAIN_ID, name: "TON" },
-    ];
-  }
+  // Get the appropriate coming soon chains based on the selector type
+  const comingSoonChains = selectorType === "from" 
+    ? COMING_SOON_SOURCE_CHAINS 
+    : COMING_SOON_DESTINATION_CHAINS;
 
   const selectorRef = useRef<HTMLDivElement>(null);
 
@@ -120,7 +63,7 @@ export function ChainSelector({
     };
   }, [isOpen]);
 
-  const selectedChain = chains.find((chain) => chain.id === value);
+  const selectedChain = SUPPORTED_CHAINS.find((chain) => chain.id === value);
 
   return (
     <div className="relative w-full" ref={selectorRef}>
@@ -148,7 +91,7 @@ export function ChainSelector({
           <div
             className={`bg-black border-2 ${BORDER_COLOR} rounded-lg overflow-hidden shadow-lg ${SHADOW_COLOR} max-h-96 overflow-y-auto`}
           >
-            {chains.map((chain) => (
+            {SUPPORTED_CHAINS.map((chain) => (
               <button
                 key={chain.id}
                 type="button"

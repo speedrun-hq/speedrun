@@ -30,6 +30,7 @@ type Intent struct {
 	Token            string       `json:"token"`
 	Amount           string       `json:"amount"`
 	Recipient        string       `json:"recipient"`
+	Sender           string       `json:"sender"`
 	IntentFee        string       `json:"intent_fee"`
 	Status           IntentStatus `json:"status"`
 	CreatedAt        time.Time    `json:"created_at"`

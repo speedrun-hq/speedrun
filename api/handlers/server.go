@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -55,6 +57,8 @@ func (s *Server) Start(addr string) error {
 			intents.POST("", s.CreateIntent)
 			intents.GET("/:id", s.GetIntent)
 			intents.GET("", s.ListIntents)
+			intents.GET("/sender/:sender", s.GetIntentsBySender)
+			intents.GET("/recipient/:recipient", s.GetIntentsByRecipient)
 		}
 
 		// Fulfillment routes
@@ -78,6 +82,7 @@ func (s *Server) CreateIntent(c *gin.Context) {
 		Token            string `json:"token" binding:"required"`
 		Amount           string `json:"amount" binding:"required"`
 		Recipient        string `json:"recipient" binding:"required"`
+		Sender           string `json:"sender" binding:"required"`
 		IntentFee        string `json:"intent_fee" binding:"required"`
 	}
 
@@ -86,7 +91,7 @@ func (s *Server) CreateIntent(c *gin.Context) {
 		return
 	}
 
-	intent, err := s.intentService.CreateIntent(c.Request.Context(), req.ID, req.SourceChain, req.DestinationChain, req.Token, req.Amount, req.Recipient, req.IntentFee)
+	intent, err := s.intentService.CreateIntent(c.Request.Context(), req.ID, req.SourceChain, req.DestinationChain, req.Token, req.Amount, req.Recipient, req.Sender, req.IntentFee)
 	if err != nil {
 		// Check if it's a validation error
 		if strings.Contains(err.Error(), "invalid") {
@@ -108,18 +113,32 @@ func (s *Server) GetIntent(c *gin.Context) {
 		return
 	}
 
+	// Log the request for debugging
+	log.Printf("GetIntent request received for ID: %s", id)
+
 	// Validate ID format
 	if !utils.ValidateBytes32(id) {
+		log.Printf("Invalid intent ID format: %s", id)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid intent ID format"})
 		return
 	}
 
 	intent, err := s.intentService.GetIntent(c.Request.Context(), id)
 	if err != nil {
+		// Log the error for debugging
+		log.Printf("Error getting intent %s: %v", id, err)
+
+		// Check if it's a "not found" error
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("intent not found: %s", id)})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	log.Printf("Successfully retrieved intent %s", id)
 	c.JSON(http.StatusOK, intent)
 }
 
@@ -233,4 +252,38 @@ func (s *Server) ListFulfillments(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, fulfillments)
+}
+
+// GetIntentsBySender handles retrieving all intents for a specific sender
+func (s *Server) GetIntentsBySender(c *gin.Context) {
+	sender := c.Param("sender")
+	if sender == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sender address is required"})
+		return
+	}
+
+	intents, err := s.intentService.GetIntentsBySender(c.Request.Context(), sender)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, intents)
+}
+
+// GetIntentsByRecipient handles retrieving all intents for a specific recipient
+func (s *Server) GetIntentsByRecipient(c *gin.Context) {
+	recipient := c.Param("recipient")
+	if recipient == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recipient address is required"})
+		return
+	}
+
+	intents, err := s.intentService.GetIntentsByRecipient(c.Request.Context(), recipient)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, intents)
 }

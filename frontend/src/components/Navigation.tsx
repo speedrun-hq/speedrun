@@ -47,36 +47,42 @@ const Navigation = () => {
 
   return (
     <nav className="bg-black border-b-4 border-primary-500 relative z-50">
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-2">
         <div className="flex justify-between h-16 items-center">
           <Link
             href="/"
-            className="arcade-text text-2xl text-primary-500 hover:text-primary-400 relative z-10 font-bold"
+            className="arcade-text text-2xl text-primary-500 hover:text-primary-400 relative z-10 font-bold pl-2"
           >
             SPEEDRUN
           </Link>
 
           {/* Desktop Menu */}
-          <div className="hidden lg:flex space-x-4 items-center relative z-10">
+          <div className="hidden lg:flex items-center space-x-2 relative z-10">
             <Link
               href="/"
-              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none relative"
+              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[165px] text-center justify-center"
             >
               MAKE TRANSFER
             </Link>
             <Link
+              href="/my-intents"
+              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[165px] text-center justify-center"
+            >
+              MY TRANSFERS
+            </Link>
+            <Link
               href="/leaderboard"
-              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none relative"
+              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[165px] text-center justify-center"
             >
               LEADERBOARD
             </Link>
             <Link
               href="/about"
-              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none relative"
+              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[165px] text-center justify-center"
             >
               LEARN MORE
             </Link>
-            <div className="relative">
+            <div className="flex justify-center">
               <ConnectWallet />
             </div>
           </div>
@@ -135,6 +141,13 @@ const Navigation = () => {
             onClick={() => setIsMenuOpen(false)}
           >
             MAKE TRANSFER
+          </Link>
+          <Link
+            href="/my-intents"
+            className="arcade-btn w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
+            onClick={() => setIsMenuOpen(false)}
+          >
+            MY TRANSFERS
           </Link>
           <Link
             href="/leaderboard"

@@ -50,23 +50,27 @@ func createServices(clients map[uint64]*ethclient.Client, db db.Database, cfg *c
 	intentServices := make(map[uint64]*services.IntentService)
 	fulfillmentServices := make(map[uint64]*services.FulfillmentService)
 	settlementServices := make(map[uint64]*services.SettlementService)
+
+	// Create a client resolver for cross-chain operations
+	clientResolver := services.NewSimpleClientResolver(clients)
+
 	for chainID, client := range clients {
 		// Create intent service
-		intentService, err := services.NewIntentService(client, db, cfg.IntentInitiatedEventABI, chainID)
+		intentService, err := services.NewIntentService(client, clientResolver, db, cfg.IntentInitiatedEventABI, chainID)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to create intent service for chain %d: %v", chainID, err)
 		}
 		intentServices[chainID] = intentService
 
 		// Create fulfillment service
-		fulfillmentService, err := services.NewFulfillmentService(client, db, cfg.IntentFulfilledEventABI, chainID)
+		fulfillmentService, err := services.NewFulfillmentService(client, clientResolver, db, cfg.IntentFulfilledEventABI, chainID)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to create fulfillment service for chain %d: %v", chainID, err)
 		}
 		fulfillmentServices[chainID] = fulfillmentService
 
 		// Create settlement service
-		settlementService, err := services.NewSettlementService(client, db, cfg.IntentSettledEventABI, chainID)
+		settlementService, err := services.NewSettlementService(client, clientResolver, db, cfg.IntentSettledEventABI, chainID)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to create settlement service for chain %d: %v", chainID, err)
 		}
