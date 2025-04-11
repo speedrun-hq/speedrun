@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Intent } from "@/types";
 import { apiService } from "@/services/api";
 import ErrorMessage from "@/components/ErrorMessage";
+import IntentTile from "@/components/IntentTile";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -40,9 +41,9 @@ const IntentList: React.FC = () => {
       case "pending":
         return "text-primary-500 border-primary-500";
       case "completed":
-        return "text-secondary-500 border-secondary-500";
+        return "text-yellow-500 border-yellow-500";
       case "failed":
-        return "text-accent-500 border-accent-500";
+        return "text-gray-500 border-gray-500";
       case "cancelled":
         return "text-gray-500 border-gray-500";
       default:
@@ -80,81 +81,13 @@ const IntentList: React.FC = () => {
       ) : (
         <div className="arcade-container">
           {displayedIntents.map((intent, index) => (
-            <div key={intent.id} className="arcade-card relative">
-              <span
-                className={`arcade-status ${getStatusColor(intent.status)} border-2 absolute top-4 right-4`}
-              >
-                {intent.status}
-              </span>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <span className="arcade-text text-sm text-yellow-500">
-                    RUN
-                  </span>
-                  <span className="arcade-text text-sm text-cyan-500">
-                    #{index + 1 + offset}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">
-                      INTENT ID
-                    </span>
-                    <span
-                      className="arcade-text text-xs text-magenta-500 break-all font-mono"
-                      style={{ textTransform: "none" }}
-                    >
-                      {intent.id}
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">
-                      ROUTE
-                    </span>
-                    <span className="arcade-text text-xs text-cyan-500">
-                      CHAIN{" "}
-                      <span className="text-orange-500">
-                        {intent.source_chain}
-                      </span>{" "}
-                      → CHAIN{" "}
-                      <span className="text-orange-500">
-                        {intent.destination_chain}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">
-                      TOKEN
-                    </span>
-                    <span
-                      className="arcade-text text-xs text-yellow-500 break-all font-mono"
-                      style={{ textTransform: "none" }}
-                    >
-                      {intent.token}
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">
-                      AMOUNT
-                    </span>
-                    <span className="arcade-text text-xs text-primary-500">
-                      {intent.amount}
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="arcade-text text-xs text-gray-500">
-                      RECIPIENT
-                    </span>
-                    <span
-                      className="arcade-text text-xs text-magenta-500 break-all font-mono"
-                      style={{ textTransform: "none" }}
-                    >
-                      {intent.recipient}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <IntentTile 
+              key={intent.id}
+              intent={intent}
+              index={index}
+              offset={offset}
+              label="RUN"
+            />
           ))}
         </div>
       )}
@@ -165,14 +98,14 @@ const IntentList: React.FC = () => {
           <button
             onClick={() => setOffset((o) => Math.max(0, o - ITEMS_PER_PAGE))}
             disabled={offset === 0}
-            className="arcade-btn disabled:opacity-50 disabled:cursor-not-allowed"
+            className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             PREV
           </button>
           <button
             onClick={() => setOffset((o) => o + ITEMS_PER_PAGE)}
             disabled={!hasMore}
-            className="arcade-btn disabled:opacity-50 disabled:cursor-not-allowed"
+            className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             NEXT
           </button>
