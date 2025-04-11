@@ -32,10 +32,11 @@ func NewPostgresDB(databaseURL string) (*PostgresDB, error) {
 		return nil, fmt.Errorf("failed to ping database: %v", err)
 	}
 
-	// Set connection pool settings
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	// Set optimized connection pool settings
+	db.SetMaxOpenConns(50)                  // Increased from 25 to handle more concurrent requests
+	db.SetMaxIdleConns(10)                  // Increased from 5 to maintain more idle connections
+	db.SetConnMaxLifetime(15 * time.Minute) // Increased from 5 minutes for longer connection reuse
+	db.SetConnMaxIdleTime(5 * time.Minute)  // Set idle timeout to clean up unused connections
 
 	postgresDB := &PostgresDB{db: db}
 
@@ -587,4 +588,277 @@ func (p *PostgresDB) ListIntentsByRecipient(ctx context.Context, recipient strin
 		return nil, fmt.Errorf("error iterating intents: %v", err)
 	}
 	return intents, nil
+}
+
+// ListIntentsPaginated retrieves intents with pagination
+func (p *PostgresDB) ListIntentsPaginated(ctx context.Context, page, pageSize int) ([]*models.Intent, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Get total count first
+	countQuery := `SELECT COUNT(*) FROM intents`
+	var totalCount int
+	err := p.db.QueryRowContext(ctx, countQuery).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count intents: %v", err)
+	}
+
+	// Get paginated results
+	query := `
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
+		FROM intents
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := p.db.QueryContext(ctx, query, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating intents: %v", err)
+	}
+
+	return intents, totalCount, nil
+}
+
+// ListIntentsBySenderPaginated retrieves intents by sender with pagination
+func (p *PostgresDB) ListIntentsBySenderPaginated(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Get total count first
+	countQuery := `SELECT COUNT(*) FROM intents WHERE sender = $1`
+	var totalCount int
+	err := p.db.QueryRowContext(ctx, countQuery, sender).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count intents: %v", err)
+	}
+
+	// Get paginated results
+	query := `
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
+		FROM intents
+		WHERE sender = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := p.db.QueryContext(ctx, query, sender, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating intents: %v", err)
+	}
+
+	return intents, totalCount, nil
+}
+
+// ListIntentsByRecipientPaginated retrieves intents by recipient with pagination
+func (p *PostgresDB) ListIntentsByRecipientPaginated(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Get total count first
+	countQuery := `SELECT COUNT(*) FROM intents WHERE recipient = $1`
+	var totalCount int
+	err := p.db.QueryRowContext(ctx, countQuery, recipient).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count intents: %v", err)
+	}
+
+	// Get paginated results
+	query := `
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
+		FROM intents
+		WHERE recipient = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := p.db.QueryContext(ctx, query, recipient, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating intents: %v", err)
+	}
+
+	return intents, totalCount, nil
+}
+
+// ListFulfillmentsPaginated retrieves fulfillments with pagination
+func (p *PostgresDB) ListFulfillmentsPaginated(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Get total count first
+	countQuery := `SELECT COUNT(*) FROM fulfillments`
+	var totalCount int
+	err := p.db.QueryRowContext(ctx, countQuery).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count fulfillments: %v", err)
+	}
+
+	// Get paginated results
+	query := `
+		SELECT id, asset, amount, receiver, tx_hash, created_at, updated_at
+		FROM fulfillments
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := p.db.QueryContext(ctx, query, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query fulfillments: %v", err)
+	}
+	defer rows.Close()
+
+	var fulfillments []*models.Fulfillment
+	for rows.Next() {
+		var f models.Fulfillment
+		err := rows.Scan(
+			&f.ID,
+			&f.Asset,
+			&f.Amount,
+			&f.Receiver,
+			&f.TxHash,
+			&f.CreatedAt,
+			&f.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan fulfillment: %v", err)
+		}
+		fulfillments = append(fulfillments, &f)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating fulfillments: %v", err)
+	}
+
+	return fulfillments, totalCount, nil
+}
+
+// ListSettlementsPaginated retrieves settlements with pagination
+func (p *PostgresDB) ListSettlementsPaginated(ctx context.Context, page, pageSize int) ([]*models.Settlement, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Get total count first
+	countQuery := `SELECT COUNT(*) FROM settlements`
+	var totalCount int
+	err := p.db.QueryRowContext(ctx, countQuery).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count settlements: %v", err)
+	}
+
+	// Get paginated results
+	query := `
+		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, created_at, updated_at
+		FROM settlements
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := p.db.QueryContext(ctx, query, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query settlements: %v", err)
+	}
+	defer rows.Close()
+
+	var settlements []*models.Settlement
+	for rows.Next() {
+		var s models.Settlement
+		err := rows.Scan(
+			&s.ID,
+			&s.Asset,
+			&s.Amount,
+			&s.Receiver,
+			&s.Fulfilled,
+			&s.Fulfiller,
+			&s.ActualAmount,
+			&s.PaidTip,
+			&s.TxHash,
+			&s.CreatedAt,
+			&s.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan settlement: %v", err)
+		}
+		settlements = append(settlements, &s)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating settlements: %v", err)
+	}
+
+	return settlements, totalCount, nil
 }

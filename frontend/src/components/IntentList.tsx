@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useEffect, useState } from "react";
-import { Intent } from "@/types";
+import { Intent, PaginationParams } from "@/types";
 import { apiService } from "@/services/api";
 import ErrorMessage from "@/components/ErrorMessage";
 import IntentTile from "@/components/IntentTile";
@@ -13,17 +13,25 @@ const IntentList: React.FC = () => {
   const [intents, setIntents] = useState<Intent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     const fetchIntents = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await apiService.listIntents();
-        setIntents(data);
-        setHasMore(data.length > offset + ITEMS_PER_PAGE);
+        
+        const pagination: PaginationParams = {
+          page: currentPage,
+          page_size: ITEMS_PER_PAGE
+        };
+        
+        const response = await apiService.listIntents(pagination);
+        setIntents(response.data);
+        setTotalPages(response.total_pages);
+        setTotalCount(response.total_count);
       } catch (err) {
         setError(err);
       } finally {
@@ -32,9 +40,15 @@ const IntentList: React.FC = () => {
     };
 
     fetchIntents();
-  }, [offset]);
+  }, [currentPage]);
 
-  const displayedIntents = intents.slice(offset, offset + ITEMS_PER_PAGE);
+  const handlePrevPage = () => {
+    setCurrentPage(prev => Math.max(1, prev - 1));
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage(prev => prev < totalPages ? prev + 1 : prev);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -80,12 +94,12 @@ const IntentList: React.FC = () => {
         </p>
       ) : (
         <div className="arcade-container">
-          {displayedIntents.map((intent, index) => (
+          {intents.map((intent, index) => (
             <IntentTile
               key={intent.id}
               intent={intent}
               index={index}
-              offset={offset}
+              offset={(currentPage - 1) * ITEMS_PER_PAGE}
               label="RUN"
             />
           ))}
@@ -93,18 +107,21 @@ const IntentList: React.FC = () => {
       )}
 
       {/* Pagination */}
-      {(offset > 0 || hasMore) && (
+      {totalPages > 1 && (
         <div className="flex justify-center space-x-4 mt-6">
           <button
-            onClick={() => setOffset((o) => Math.max(0, o - ITEMS_PER_PAGE))}
-            disabled={offset === 0}
+            onClick={handlePrevPage}
+            disabled={currentPage === 1}
             className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             PREV
           </button>
+          <span className="arcade-text text-green-400">
+            {currentPage} / {totalPages}
+          </span>
           <button
-            onClick={() => setOffset((o) => o + ITEMS_PER_PAGE)}
-            disabled={!hasMore}
+            onClick={handleNextPage}
+            disabled={currentPage >= totalPages}
             className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             NEXT

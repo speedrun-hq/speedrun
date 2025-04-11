@@ -282,9 +282,14 @@ func ValidateIntentRequest(req *models.CreateIntentRequest) error {
 	return nil
 }
 
-// IsValidBytes32 checks if a string is a valid bytes32 hash
+// IsValidBytes32 checks if a string is a valid bytes32 hex string
 func IsValidBytes32(hash string) bool {
-	return bytes32Regex.MatchString(strings.ToLower(hash))
+	return bytes32Regex.MatchString(hash)
+}
+
+// IsValidAddress checks if a string is a valid Ethereum address
+func IsValidAddress(address string) bool {
+	return addressRegex.MatchString(address)
 }
 
 // GenerateIntentID generates an intent ID using the same logic as the contract

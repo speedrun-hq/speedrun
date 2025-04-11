@@ -131,8 +131,9 @@ func main() {
 	}
 	intentService := intentServices[firstChainID]
 	fulfillmentService := fulfillmentServices[firstChainID]
+
 	// Create and start the server
-	server := handlers.NewServer(fulfillmentService, intentService)
+	server := handlers.NewServer(fulfillmentService, intentService, database)
 	if err := server.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
