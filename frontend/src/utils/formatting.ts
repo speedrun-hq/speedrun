@@ -7,7 +7,11 @@ import { TOKENS } from "@/constants/tokens";
  * @param endLength Number of characters to show at the end
  * @returns Truncated text with ellipsis
  */
-export const truncateText = (text: string, startLength = 8, endLength = 6): string => {
+export const truncateText = (
+  text: string,
+  startLength = 8,
+  endLength = 6,
+): string => {
   if (!text) return ""; // Handle undefined or empty strings
   if (text.length <= startLength + endLength + 3) return text;
   return `${text.substring(0, startLength)}...${text.substring(text.length - endLength)}`;
@@ -66,7 +70,10 @@ export const formatTokenAmount = (
  * @param sourceChain Chain ID as string
  * @returns Token symbol or truncated address if symbol not found
  */
-export const getTokenSymbol = (tokenAddress: string, sourceChain: string): string => {
+export const getTokenSymbol = (
+  tokenAddress: string,
+  sourceChain: string,
+): string => {
   try {
     if (!tokenAddress || !sourceChain) return ""; // Handle undefined inputs
 
@@ -87,4 +94,4 @@ export const getTokenSymbol = (tokenAddress: string, sourceChain: string): strin
     console.error("Error getting token symbol:", error);
     return tokenAddress ? truncateText(tokenAddress) : ""; // Fallback to address
   }
-}; 
+};

@@ -124,7 +124,7 @@ function UserIntentList() {
       ) : (
         <div className="arcade-container">
           {displayedIntents.map((intent, index) => (
-            <IntentTile 
+            <IntentTile
               key={intent.id}
               intent={intent}
               index={index}

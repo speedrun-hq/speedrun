@@ -2,7 +2,11 @@ import React from "react";
 import { Intent } from "@/types";
 import Link from "next/link";
 import { getChainName } from "@/config/chains";
-import { formatTokenAmount, getTokenSymbol, truncateText } from "@/utils/formatting";
+import {
+  formatTokenAmount,
+  getTokenSymbol,
+  truncateText,
+} from "@/utils/formatting";
 
 interface IntentTileProps {
   intent: Intent;
@@ -67,23 +71,19 @@ const IntentTile: React.FC<IntentTileProps> = ({
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="arcade-text text-xs text-yellow-500">
-                ROUTE
-              </span>
+              <span className="arcade-text text-xs text-yellow-500">ROUTE</span>
               <span className="arcade-text text-xs text-gray-300">
                 <span className="text-gray-300">
                   {getChainName(parseInt(intent.source_chain))}
                 </span>{" "}
-                → {" "}
+                →{" "}
                 <span className="text-gray-300">
                   {getChainName(parseInt(intent.destination_chain))}
                 </span>
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="arcade-text text-xs text-yellow-500">
-                TOKEN
-              </span>
+              <span className="arcade-text text-xs text-yellow-500">TOKEN</span>
               <span
                 className="arcade-text text-[10px] text-gray-300 break-all"
                 style={{ textTransform: "none" }}
@@ -96,7 +96,11 @@ const IntentTile: React.FC<IntentTileProps> = ({
                 AMOUNT
               </span>
               <span className="arcade-text text-xs text-gray-300">
-                {formatTokenAmount(intent.amount, intent.token, intent.source_chain)}
+                {formatTokenAmount(
+                  intent.amount,
+                  intent.token,
+                  intent.source_chain,
+                )}
               </span>
             </div>
             {showSender ? (
@@ -141,4 +145,4 @@ const IntentTile: React.FC<IntentTileProps> = ({
   );
 };
 
-export default IntentTile; 
+export default IntentTile;
