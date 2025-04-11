@@ -1,6 +1,8 @@
 import React from "react";
 import { Intent } from "@/types";
 import Link from "next/link";
+import { getChainName } from "@/config/chains";
+import { formatTokenAmount, getTokenSymbol, truncateText } from "@/utils/formatting";
 
 interface IntentTileProps {
   intent: Intent;
@@ -61,7 +63,7 @@ const IntentTile: React.FC<IntentTileProps> = ({
                 className="arcade-text text-[10px] text-gray-300 break-all"
                 style={{ textTransform: "none" }}
               >
-                {intent.id}
+                {truncateText(intent.id, 12, 8)}
               </span>
             </div>
             <div className="flex flex-col">
@@ -69,13 +71,12 @@ const IntentTile: React.FC<IntentTileProps> = ({
                 ROUTE
               </span>
               <span className="arcade-text text-xs text-gray-300">
-                CHAIN{" "}
                 <span className="text-gray-300">
-                  {intent.source_chain}
+                  {getChainName(parseInt(intent.source_chain))}
                 </span>{" "}
-                → CHAIN{" "}
+                → {" "}
                 <span className="text-gray-300">
-                  {intent.destination_chain}
+                  {getChainName(parseInt(intent.destination_chain))}
                 </span>
               </span>
             </div>
@@ -87,7 +88,7 @@ const IntentTile: React.FC<IntentTileProps> = ({
                 className="arcade-text text-[10px] text-gray-300 break-all"
                 style={{ textTransform: "none" }}
               >
-                {intent.token}
+                {getTokenSymbol(intent.token, intent.source_chain)}
               </span>
             </div>
             <div className="flex flex-col">
@@ -95,7 +96,7 @@ const IntentTile: React.FC<IntentTileProps> = ({
                 AMOUNT
               </span>
               <span className="arcade-text text-xs text-gray-300">
-                {intent.amount}
+                {formatTokenAmount(intent.amount, intent.token, intent.source_chain)}
               </span>
             </div>
             {showSender ? (
@@ -107,7 +108,7 @@ const IntentTile: React.FC<IntentTileProps> = ({
                   className="arcade-text text-[10px] text-gray-300 break-all"
                   style={{ textTransform: "none" }}
                 >
-                  {intent.sender}
+                  {truncateText(intent.sender, 10, 8)}
                 </span>
               </div>
             ) : (
@@ -119,7 +120,7 @@ const IntentTile: React.FC<IntentTileProps> = ({
                   className="arcade-text text-[10px] text-gray-300 break-all"
                   style={{ textTransform: "none" }}
                 >
-                  {intent.recipient}
+                  {truncateText(intent.recipient, 10, 8)}
                 </span>
               </div>
             )}
