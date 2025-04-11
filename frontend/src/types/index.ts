@@ -110,4 +110,5 @@ export interface PaginatedResponse<T> {
 }
 
 export interface PaginatedIntentsResponse extends PaginatedResponse<Intent> {}
-export interface PaginatedFulfillmentsResponse extends PaginatedResponse<Fulfillment> {}
+export interface PaginatedFulfillmentsResponse
+  extends PaginatedResponse<Fulfillment> {}

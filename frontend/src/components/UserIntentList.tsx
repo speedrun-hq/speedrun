@@ -34,18 +34,24 @@ function UserIntentList() {
 
         const pagination: PaginationParams = {
           page: currentPage,
-          page_size: ITEMS_PER_PAGE
+          page_size: ITEMS_PER_PAGE,
         };
 
         if (viewMode === "sent") {
           // Fetch sent intents
-          const sentResponse = await apiService.listIntentsBySender(address, pagination);
+          const sentResponse = await apiService.listIntentsBySender(
+            address,
+            pagination,
+          );
           setSentIntents(sentResponse.data || []);
           setSentTotalPages(sentResponse.total_pages);
           setSentTotalCount(sentResponse.total_count);
         } else {
           // Fetch received intents
-          const receivedResponse = await apiService.listIntentsByRecipient(address, pagination);
+          const receivedResponse = await apiService.listIntentsByRecipient(
+            address,
+            pagination,
+          );
           setReceivedIntents(receivedResponse.data || []);
           setReceivedTotalPages(receivedResponse.total_pages);
           setReceivedTotalCount(receivedResponse.total_count);
@@ -73,11 +79,11 @@ function UserIntentList() {
   const totalCount = viewMode === "sent" ? sentTotalCount : receivedTotalCount;
 
   const handlePrevPage = () => {
-    setCurrentPage(prev => Math.max(1, prev - 1));
+    setCurrentPage((prev) => Math.max(1, prev - 1));
   };
 
   const handleNextPage = () => {
-    setCurrentPage(prev => prev < totalPages ? prev + 1 : prev);
+    setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev));
   };
 
   if (!isConnected || !address) {

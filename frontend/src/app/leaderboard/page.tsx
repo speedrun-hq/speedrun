@@ -188,7 +188,10 @@ export default function Leaderboard() {
 
         // Fetch all intents with pagination
         console.log("About to fetch intents from API...");
-        const response = await apiService.listIntents({ page: 1, page_size: 100 });
+        const response = await apiService.listIntents({
+          page: 1,
+          page_size: 100,
+        });
         console.log("Raw API Response:", JSON.stringify(response, null, 2));
 
         // Check if response is empty or undefined

@@ -22,12 +22,12 @@ const IntentList: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        
+
         const pagination: PaginationParams = {
           page: currentPage,
-          page_size: ITEMS_PER_PAGE
+          page_size: ITEMS_PER_PAGE,
         };
-        
+
         const response = await apiService.listIntents(pagination);
         setIntents(response.data);
         setTotalPages(response.total_pages);
@@ -43,11 +43,11 @@ const IntentList: React.FC = () => {
   }, [currentPage]);
 
   const handlePrevPage = () => {
-    setCurrentPage(prev => Math.max(1, prev - 1));
+    setCurrentPage((prev) => Math.max(1, prev - 1));
   };
 
   const handleNextPage = () => {
-    setCurrentPage(prev => prev < totalPages ? prev + 1 : prev);
+    setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev));
   };
 
   const getStatusColor = (status: string) => {
