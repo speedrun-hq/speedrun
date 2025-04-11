@@ -179,4 +179,27 @@
     color: black;
     box-shadow: 0 0 30px hsl(var(--yellow) / 0.7);
   }
+
+  .arcade-btn-sm {
+    @apply inline-flex items-center justify-center px-3 py-1 border text-xs font-medium rounded-none;
+    font-family: "Press Start 2P", cursive;
+    background: rgba(0, 0, 0, 0.6);
+    color: hsl(var(--primary));
+    transition: all 0.3s ease-in-out;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+    border-color: hsl(var(--primary) / 0.3);
+    animation: borderGlow 3s infinite;
+    height: 32px;
+  }
+
+  .arcade-btn-sm:hover {
+    background: hsl(var(--primary));
+    color: black;
+    transform: translateY(-1px) scale(1.01);
+    box-shadow: 0 0 15px hsl(var(--primary) / 0.5);
+    animation: none;
+  }
 }

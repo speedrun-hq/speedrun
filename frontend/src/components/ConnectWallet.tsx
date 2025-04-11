@@ -34,7 +34,7 @@ export function ConnectWallet() {
                   <button
                     onClick={openConnectModal}
                     type="button"
-                    className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all duration-200 arcade-text text-xs min-w-[165px] justify-center"
+                    className="arcade-btn-sm border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all duration-200 arcade-text text-xs min-w-[120px] justify-center"
                   >
                     CONNECT WALLET
                   </button>
@@ -46,7 +46,7 @@ export function ConnectWallet() {
                   <button
                     onClick={openChainModal}
                     type="button"
-                    className="arcade-btn border-red-500 text-red-500 hover:bg-red-500 hover:text-black transition-all duration-200 arcade-text text-xs min-w-[165px] justify-center"
+                    className="arcade-btn-sm border-red-500 text-red-500 hover:bg-red-500 hover:text-black transition-all duration-200 arcade-text text-xs min-w-[120px] justify-center"
                   >
                     WRONG NETWORK
                   </button>
@@ -58,7 +58,7 @@ export function ConnectWallet() {
                   <button
                     onClick={openChainModal}
                     type="button"
-                    className="flex items-center arcade-btn border-primary-500 text-primary-500 hover:bg-primary-500 hover:text-black transition-all duration-200 arcade-text text-xs px-2 py-1"
+                    className="flex items-center arcade-btn-sm border-primary-500 text-primary-500 hover:bg-primary-500 hover:text-black transition-all duration-200 arcade-text text-xs px-2 py-1"
                   >
                     {chain.hasIcon && (
                       <div
@@ -80,7 +80,7 @@ export function ConnectWallet() {
                   <button
                     onClick={openAccountModal}
                     type="button"
-                    className="arcade-btn border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all duration-200 arcade-text text-xs px-2 py-1"
+                    className="arcade-btn-sm border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all duration-200 arcade-text text-xs px-2 py-1"
                   >
                     {account.displayName}
                   </button>
