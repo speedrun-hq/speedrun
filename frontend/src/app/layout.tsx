@@ -3,6 +3,7 @@ import { Press_Start_2P } from "next/font/google";
 import "./globals.css";
 import Navigation from "@/components/Navigation";
 import { Web3Provider } from "@/components/Web3Provider";
+import WarningBanner from "@/components/WarningBanner";
 
 const arcade = Press_Start_2P({
   weight: "400",
@@ -35,6 +36,7 @@ export default function RootLayout({
       >
         <Web3Provider>
           <Navigation />
+          <WarningBanner />
           <main className="container mx-auto px-4 py-8 flex-grow">
             {children}
           </main>
