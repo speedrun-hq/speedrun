@@ -3,7 +3,7 @@ import { base, arbitrum, mainnet, bsc, polygon, avalanche } from "wagmi/chains";
 
 // Custom chain IDs for upcoming chains
 export const BITCOIN_CHAIN_ID = 8332;
-export const SOLANA_CHAIN_ID = 901;
+export const SOLANA_CHAIN_ID = 900;
 export const ZETACHAIN_CHAIN_ID = 7000;
 
 // Type to include both real and custom chain IDs
@@ -28,19 +28,6 @@ export type ChainName =
   | "BITCOIN"
   | "SOLANA"
   | "ZETACHAIN";
-
-// Define color palette for chains
-export const chainColorMap: Record<number, string> = {
-  [mainnet.id]: "text-gray-400",
-  [bsc.id]: "text-yellow-400",
-  [polygon.id]: "text-purple-500",
-  [base.id]: "text-blue-400",
-  [arbitrum.id]: "text-blue-600",
-  [avalanche.id]: "text-red-600",
-  [BITCOIN_CHAIN_ID]: "text-orange-500",
-  [SOLANA_CHAIN_ID]: "text-purple-400",
-  [ZETACHAIN_CHAIN_ID]: "text-green-500",
-};
 
 // Create custom chain configurations
 export const getCustomChains = (alchemyId: string): Chain[] => {

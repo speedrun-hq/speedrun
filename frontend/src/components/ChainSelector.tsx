@@ -2,17 +2,32 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  ChainId,
-  chainColorMap,
   SUPPORTED_CHAINS,
   COMING_SOON_SOURCE_CHAINS,
   COMING_SOON_DESTINATION_CHAINS,
+  BITCOIN_CHAIN_ID,
+  ZETACHAIN_CHAIN_ID,
+  SOLANA_CHAIN_ID,
 } from "@/config/chains";
+import { base, arbitrum, mainnet, bsc, polygon, avalanche } from "wagmi/chains";
 
 // Default border color for all selectors
 const BORDER_COLOR = "border-yellow-500";
 const SHADOW_COLOR = "shadow-yellow-500/50";
 const TEXT_COLOR = "text-yellow-500";
+
+// Note: needs to be defined in this file for the Tailwind style to correctly render
+const chainColorMap: Record<number, string> = {
+  [mainnet.id]: "text-gray-400",
+  [bsc.id]: "text-yellow-400",
+  [polygon.id]: "text-purple-500",
+  [base.id]: "text-blue-400",
+  [arbitrum.id]: "text-blue-600",
+  [avalanche.id]: "text-red-600",
+  [BITCOIN_CHAIN_ID]: "text-orange-500",
+  [SOLANA_CHAIN_ID]: "text-purple-400",
+  [ZETACHAIN_CHAIN_ID]: "text-green-500",
+};
 
 interface ChainSelectorProps {
   value: number;
