@@ -5,6 +5,7 @@ export interface Intent {
   token: string;
   amount: string;
   recipient: string;
+  sender: string;
   intent_fee: string;
   status: string;
   created_at: string;

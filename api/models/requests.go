@@ -8,6 +8,7 @@ type CreateIntentRequest struct {
 	Token            string `json:"token" binding:"required"`
 	Amount           string `json:"amount" binding:"required"`
 	Recipient        string `json:"recipient" binding:"required"`
+	Sender           string `json:"sender" binding:"required"`
 	IntentFee        string `json:"intent_fee" binding:"required"`
 }
 

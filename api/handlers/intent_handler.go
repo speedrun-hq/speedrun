@@ -18,7 +18,9 @@ import (
 type IntentServiceInterface interface {
 	GetIntent(ctx context.Context, id string) (*models.Intent, error)
 	ListIntents(ctx context.Context) ([]*models.Intent, error)
-	CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, intentFee string) (*models.Intent, error)
+	CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string) (*models.Intent, error)
+	GetIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error)
+	GetIntentsByRecipient(ctx context.Context, recipient string) ([]*models.Intent, error)
 }
 
 var (
@@ -61,6 +63,10 @@ func CreateIntent(c *gin.Context) {
 		return
 	}
 
+	// When creating intents through the API, we use the current time
+	// For blockchain events, the block timestamp will be used instead
+	now := time.Now()
+
 	// Create intent
 	intent := &models.Intent{
 		ID:               req.ID,
@@ -69,10 +75,11 @@ func CreateIntent(c *gin.Context) {
 		Token:            req.Token,
 		Amount:           req.Amount,
 		Recipient:        req.Recipient,
+		Sender:           req.Sender,
 		IntentFee:        req.IntentFee,
 		Status:           models.IntentStatusPending,
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	// Store intent in database
@@ -138,6 +145,60 @@ func ListIntents(c *gin.Context) {
 			}
 		}
 		// Fall back to database version if service not found or error
+		responses[i] = intent.ToResponse()
+	}
+
+	c.JSON(http.StatusOK, responses)
+}
+
+// GetIntentsBySender handles retrieving all intents for a specific sender
+func GetIntentsBySender(c *gin.Context) {
+	sender := c.Param("sender")
+	if sender == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sender address is required"})
+		return
+	}
+
+	// Validate sender address format
+	if err := utils.ValidateAddress(sender); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid sender address: %v", err)})
+		return
+	}
+
+	// Get intents by sender from the database
+	intents, err := database.ListIntentsBySender(c.Request.Context(), sender)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert intents to responses
+	responses := make([]*models.IntentResponse, len(intents))
+	for i, intent := range intents {
+		responses[i] = intent.ToResponse()
+	}
+
+	c.JSON(http.StatusOK, responses)
+}
+
+// GetIntentsByRecipient handles retrieving all intents for a specific recipient
+func GetIntentsByRecipient(c *gin.Context) {
+	recipient := c.Param("recipient")
+	if recipient == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recipient address is required"})
+		return
+	}
+
+	// Get intents by recipient from the database
+	intents, err := database.ListIntentsByRecipient(c.Request.Context(), recipient)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert intents to responses
+	responses := make([]*models.IntentResponse, len(intents))
+	for i, intent := range intents {
 		responses[i] = intent.ToResponse()
 	}
 

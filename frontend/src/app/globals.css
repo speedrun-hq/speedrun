@@ -108,7 +108,7 @@
   }
 
   .arcade-btn {
-    @apply inline-flex items-center px-6 py-3 border text-sm font-medium rounded-none;
+    @apply inline-flex items-center justify-center px-4 py-2 border text-sm font-medium rounded-none;
     font-family: "Press Start 2P", cursive;
     background: rgba(0, 0, 0, 0.6);
     color: hsl(var(--primary));
@@ -119,6 +119,7 @@
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
     border-color: hsl(var(--primary) / 0.3);
     animation: borderGlow 3s infinite;
+    height: 42px;
   }
 
   .arcade-btn:hover {

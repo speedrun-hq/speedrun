@@ -261,6 +261,12 @@ func ValidateIntentRequest(req *models.CreateIntentRequest) error {
 		return errors.New("invalid recipient address format")
 	}
 
+	// Validate sender address
+	if !addressPattern.MatchString(req.Sender) {
+		fmt.Printf("Invalid sender address: %s, error: invalid format\n", req.Sender)
+		return errors.New("invalid sender address format")
+	}
+
 	// Validate intent fee
 	if err := ValidateAmount(req.IntentFee); err != nil {
 		fmt.Printf("Invalid intent fee: %s, error: %v\n", req.IntentFee, err)

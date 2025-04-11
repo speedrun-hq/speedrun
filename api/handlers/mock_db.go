@@ -125,3 +125,19 @@ func (m *MockDatabase) GetFulfillment(ctx context.Context, id string) (*models.F
 	}
 	return args.Get(0).(*models.Fulfillment), args.Error(1)
 }
+
+func (m *MockDatabase) ListIntentsByRecipient(ctx context.Context, recipientAddress string) ([]*models.Intent, error) {
+	args := m.Called(ctx, recipientAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Intent), args.Error(1)
+}
+
+func (m *MockDatabase) ListIntentsBySender(ctx context.Context, senderAddress string) ([]*models.Intent, error) {
+	args := m.Called(ctx, senderAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Intent), args.Error(1)
+}
