@@ -80,19 +80,31 @@ class ApiService {
   }
 
   async listIntentsBySender(senderAddress: string): Promise<Intent[]> {
-    console.log("Calling listIntentsBySender API endpoint:", `${API_BASE_URL}/intents/sender/${senderAddress}`);
-    const response = await this.fetchApi<Intent[]>(`/intents/sender/${senderAddress}`, {
-      method: "GET",
-    });
+    console.log(
+      "Calling listIntentsBySender API endpoint:",
+      `${API_BASE_URL}/intents/sender/${senderAddress}`,
+    );
+    const response = await this.fetchApi<Intent[]>(
+      `/intents/sender/${senderAddress}`,
+      {
+        method: "GET",
+      },
+    );
     console.log("listIntentsBySender raw response:", response);
     return response;
   }
 
   async listIntentsByRecipient(recipientAddress: string): Promise<Intent[]> {
-    console.log("Calling listIntentsByRecipient API endpoint:", `${API_BASE_URL}/intents/recipient/${recipientAddress}`);
-    const response = await this.fetchApi<Intent[]>(`/intents/recipient/${recipientAddress}`, {
-      method: "GET",
-    });
+    console.log(
+      "Calling listIntentsByRecipient API endpoint:",
+      `${API_BASE_URL}/intents/recipient/${recipientAddress}`,
+    );
+    const response = await this.fetchApi<Intent[]>(
+      `/intents/recipient/${recipientAddress}`,
+      {
+        method: "GET",
+      },
+    );
     console.log("listIntentsByRecipient raw response:", response);
     return response;
   }

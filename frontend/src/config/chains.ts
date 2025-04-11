@@ -16,7 +16,7 @@ export type ChainId =
   | typeof avalanche.id
   | typeof BITCOIN_CHAIN_ID
   | typeof SOLANA_CHAIN_ID
-  | typeof ZETACHAIN_CHAIN_ID
+  | typeof ZETACHAIN_CHAIN_ID;
 
 export type ChainName =
   | "ETHEREUM"
@@ -27,7 +27,7 @@ export type ChainName =
   | "AVALANCHE"
   | "BITCOIN"
   | "SOLANA"
-  | "ZETACHAIN"
+  | "ZETACHAIN";
 
 // Define color palette for chains
 export const chainColorMap: Record<number, string> = {
@@ -168,8 +168,10 @@ export function getChainId(chainName: ChainName): number {
   if (chain) return chain.id;
 
   // Check coming soon chains
-  const comingSoonChain = [...COMING_SOON_SOURCE_CHAINS, ...COMING_SOON_DESTINATION_CHAINS]
-    .find((c) => c.name === chainName);
+  const comingSoonChain = [
+    ...COMING_SOON_SOURCE_CHAINS,
+    ...COMING_SOON_DESTINATION_CHAINS,
+  ].find((c) => c.name === chainName);
   if (comingSoonChain) return comingSoonChain.id;
 
   return base.id; // Default to BASE if unknown
@@ -180,8 +182,10 @@ export function getChainName(chainId: number): ChainName {
   if (chain) return chain.name;
 
   // Check coming soon chains
-  const comingSoonChain = [...COMING_SOON_SOURCE_CHAINS, ...COMING_SOON_DESTINATION_CHAINS]
-    .find((c) => c.id === chainId);
+  const comingSoonChain = [
+    ...COMING_SOON_SOURCE_CHAINS,
+    ...COMING_SOON_DESTINATION_CHAINS,
+  ].find((c) => c.id === chainId);
   if (comingSoonChain) return comingSoonChain.name;
 
   return "BASE"; // Default to BASE if unknown
@@ -194,17 +198,30 @@ export function isValidChainId(chainId: number): boolean {
 export function getChainRpcUrl(chainId: number): string {
   switch (chainId) {
     case mainnet.id:
-      return process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL || "https://eth.llamarpc.com";
+      return (
+        process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL || "https://eth.llamarpc.com"
+      );
     case bsc.id:
-      return process.env.NEXT_PUBLIC_BSC_RPC_URL || "https://bsc-dataseed.bnbchain.org";
+      return (
+        process.env.NEXT_PUBLIC_BSC_RPC_URL ||
+        "https://bsc-dataseed.bnbchain.org"
+      );
     case polygon.id:
-      return process.env.NEXT_PUBLIC_POLYGON_RPC_URL || "https://polygon-rpc.com";
+      return (
+        process.env.NEXT_PUBLIC_POLYGON_RPC_URL || "https://polygon-rpc.com"
+      );
     case base.id:
       return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
     case arbitrum.id:
-      return process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL || "https://arb1.arbitrum.io/rpc";
+      return (
+        process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ||
+        "https://arb1.arbitrum.io/rpc"
+      );
     case avalanche.id:
-      return process.env.NEXT_PUBLIC_AVALANCHE_RPC_URL || "https://avalanche-c-chain-rpc.publicnode.com";
+      return (
+        process.env.NEXT_PUBLIC_AVALANCHE_RPC_URL ||
+        "https://avalanche-c-chain-rpc.publicnode.com"
+      );
     default:
       return "";
   }
@@ -227,4 +244,4 @@ export function getExplorerUrl(chainId: number, txHash: string): string {
     default:
       return "";
   }
-} 
+}

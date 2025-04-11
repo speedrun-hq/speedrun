@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { 
-  ChainId, 
-  chainColorMap, 
+import {
+  ChainId,
+  chainColorMap,
   SUPPORTED_CHAINS,
   COMING_SOON_SOURCE_CHAINS,
-  COMING_SOON_DESTINATION_CHAINS 
+  COMING_SOON_DESTINATION_CHAINS,
 } from "@/config/chains";
 
 // Default border color for all selectors
@@ -32,9 +32,10 @@ export function ChainSelector({
   const [isOpen, setIsOpen] = useState(false);
 
   // Get the appropriate coming soon chains based on the selector type
-  const comingSoonChains = selectorType === "from" 
-    ? COMING_SOON_SOURCE_CHAINS 
-    : COMING_SOON_DESTINATION_CHAINS;
+  const comingSoonChains =
+    selectorType === "from"
+      ? COMING_SOON_SOURCE_CHAINS
+      : COMING_SOON_DESTINATION_CHAINS;
 
   const selectorRef = useRef<HTMLDivElement>(null);
 

@@ -25,13 +25,10 @@ console.log("Configuring chains with Alchemy ID:", alchemyId);
 // Get custom chain configurations from our centralized config
 const customChains = getCustomChains(alchemyId);
 
-const { chains, publicClient } = configureChains(
-  customChains,
-  [
-    alchemyProvider({ apiKey: alchemyId }),
-    publicProvider(), // Fallback to public provider
-  ],
-);
+const { chains, publicClient } = configureChains(customChains, [
+  alchemyProvider({ apiKey: alchemyId }),
+  publicProvider(), // Fallback to public provider
+]);
 
 console.log(
   "Configured chains:",

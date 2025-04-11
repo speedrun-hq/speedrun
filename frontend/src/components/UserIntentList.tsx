@@ -23,19 +23,19 @@ function UserIntentList() {
   useEffect(() => {
     const fetchUserIntents = async () => {
       if (!address || !isConnected) return;
-      
+
       try {
         setLoading(true);
         setError(null);
-        
+
         // Fetch sent intents
         const sentData = await apiService.listIntentsBySender(address);
         setSentIntents(sentData || []);
-        
+
         // Fetch received intents
         const receivedData = await apiService.listIntentsByRecipient(address);
         setReceivedIntents(receivedData || []);
-        
+
         // Update pagination based on current view
         const currentData = viewMode === "sent" ? sentData : receivedData;
         setHasMore((currentData?.length || 0) > offset + ITEMS_PER_PAGE);
@@ -70,7 +70,10 @@ function UserIntentList() {
   }, [offset, viewMode, sentIntents, receivedIntents]);
 
   const currentIntents = viewMode === "sent" ? sentIntents : receivedIntents;
-  const displayedIntents = currentIntents.slice(offset, offset + ITEMS_PER_PAGE);
+  const displayedIntents = currentIntents.slice(
+    offset,
+    offset + ITEMS_PER_PAGE,
+  );
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -129,7 +132,7 @@ function UserIntentList() {
           RECEIVED
         </button>
       </div>
-      
+
       {displayedIntents.length === 0 ? (
         <p className="arcade-text text-gray-500 text-center">
           NO {viewMode.toUpperCase()} INTENTS FOUND
@@ -248,11 +251,13 @@ function UserIntentList() {
           >
             PREV
           </button>
-          
+
           <div className="arcade-text text-primary-500 px-2">
-            {offset + 1}-{Math.min(offset + displayedIntents.length, currentIntents.length)} OF {currentIntents.length}
+            {offset + 1}-
+            {Math.min(offset + displayedIntents.length, currentIntents.length)}{" "}
+            OF {currentIntents.length}
           </div>
-          
+
           <button
             onClick={() => setOffset((o) => o + ITEMS_PER_PAGE)}
             disabled={offset + ITEMS_PER_PAGE >= currentIntents.length}
@@ -266,4 +271,4 @@ function UserIntentList() {
   );
 }
 
-export default UserIntentList; 
+export default UserIntentList;
