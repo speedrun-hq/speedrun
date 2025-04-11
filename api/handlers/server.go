@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/speedrun-hq/speedrun/api/services"
 	"github.com/speedrun-hq/speedrun/api/utils"
@@ -19,13 +20,15 @@ import (
 type Server struct {
 	fulfillmentService *services.FulfillmentService
 	intentService      *services.IntentService
+	db                 db.Database
 }
 
 // NewServer creates a new HTTP server
-func NewServer(fulfillmentService *services.FulfillmentService, intentService *services.IntentService) *Server {
+func NewServer(fulfillmentService *services.FulfillmentService, intentService *services.IntentService, database db.Database) *Server {
 	return &Server{
 		fulfillmentService: fulfillmentService,
 		intentService:      intentService,
+		db:                 database,
 	}
 }
 
@@ -145,26 +148,26 @@ func (s *Server) GetIntent(c *gin.Context) {
 // ListIntents handles retrieving all intents
 func (s *Server) ListIntents(c *gin.Context) {
 	// Get pagination parameters
-	limit := c.DefaultQuery("limit", "100")
-	offset := c.DefaultQuery("offset", "0")
+	page := c.DefaultQuery("page", "1")
+	pageSize := c.DefaultQuery("page_size", "20")
 
 	// Convert to integers
-	limitInt, err := strconv.Atoi(limit)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit parameter"})
+	pageInt, err := strconv.Atoi(page)
+	if err != nil || pageInt < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page parameter"})
 		return
 	}
-	offsetInt, err := strconv.Atoi(offset)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid offset parameter"})
+	pageSizeInt, err := strconv.Atoi(pageSize)
+	if err != nil || pageSizeInt < 1 || pageSizeInt > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page_size parameter (must be between 1 and 100)"})
 		return
 	}
 
 	// Get status filter
 	status := c.Query("status")
 
-	// Get intents
-	intents, err := s.intentService.ListIntents(c.Request.Context())
+	// Get intents with pagination
+	intents, totalCount, err := s.db.ListIntentsPaginated(c.Request.Context(), pageInt, pageSizeInt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -181,25 +184,16 @@ func (s *Server) ListIntents(c *gin.Context) {
 		intents = filtered
 	}
 
-	// Apply pagination
-	start := offsetInt
-	end := offsetInt + limitInt
-	if start >= len(intents) {
-		c.JSON(http.StatusOK, []*models.Intent{})
-		return
-	}
-	if end > len(intents) {
-		end = len(intents)
-	}
-	intents = intents[start:end]
-
 	// Convert to response format
 	var response []*models.IntentResponse
 	for _, intent := range intents {
 		response = append(response, intent.ToResponse())
 	}
 
-	c.JSON(http.StatusOK, response)
+	// Create paginated response
+	paginatedResponse := models.NewPaginatedResponse(response, pageInt, pageSizeInt, totalCount)
+
+	c.JSON(http.StatusOK, paginatedResponse)
 }
 
 // CreateFulfillmentRequest represents the request body for creating a fulfillment
@@ -245,16 +239,36 @@ func (s *Server) GetFulfillment(c *gin.Context) {
 
 // ListFulfillments handles retrieving all fulfillments
 func (s *Server) ListFulfillments(c *gin.Context) {
-	fulfillments, err := s.fulfillmentService.ListFulfillments(c.Request.Context())
+	// Get pagination parameters
+	page := c.DefaultQuery("page", "1")
+	pageSize := c.DefaultQuery("page_size", "20")
+
+	// Convert to integers
+	pageInt, err := strconv.Atoi(page)
+	if err != nil || pageInt < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page parameter"})
+		return
+	}
+	pageSizeInt, err := strconv.Atoi(pageSize)
+	if err != nil || pageSizeInt < 1 || pageSizeInt > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page_size parameter (must be between 1 and 100)"})
+		return
+	}
+
+	// Get fulfillments with pagination
+	fulfillments, totalCount, err := s.db.ListFulfillmentsPaginated(c.Request.Context(), pageInt, pageSizeInt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, fulfillments)
+	// Create paginated response
+	paginatedResponse := models.NewPaginatedResponse(fulfillments, pageInt, pageSizeInt, totalCount)
+
+	c.JSON(http.StatusOK, paginatedResponse)
 }
 
-// GetIntentsBySender handles retrieving all intents for a specific sender
+// GetIntentsBySender handles retrieving intents by sender
 func (s *Server) GetIntentsBySender(c *gin.Context) {
 	sender := c.Param("sender")
 	if sender == "" {
@@ -262,16 +276,48 @@ func (s *Server) GetIntentsBySender(c *gin.Context) {
 		return
 	}
 
-	intents, err := s.intentService.GetIntentsBySender(c.Request.Context(), sender)
+	// Get pagination parameters
+	page := c.DefaultQuery("page", "1")
+	pageSize := c.DefaultQuery("page_size", "20")
+
+	// Convert to integers
+	pageInt, err := strconv.Atoi(page)
+	if err != nil || pageInt < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page parameter"})
+		return
+	}
+	pageSizeInt, err := strconv.Atoi(pageSize)
+	if err != nil || pageSizeInt < 1 || pageSizeInt > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page_size parameter (must be between 1 and 100)"})
+		return
+	}
+
+	// Validate address format
+	if !utils.IsValidAddress(sender) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sender address format"})
+		return
+	}
+
+	// Get intents with pagination
+	intents, totalCount, err := s.db.ListIntentsBySenderPaginated(c.Request.Context(), sender, pageInt, pageSizeInt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, intents)
+	// Convert to response format
+	var response []*models.IntentResponse
+	for _, intent := range intents {
+		response = append(response, intent.ToResponse())
+	}
+
+	// Create paginated response
+	paginatedResponse := models.NewPaginatedResponse(response, pageInt, pageSizeInt, totalCount)
+
+	c.JSON(http.StatusOK, paginatedResponse)
 }
 
-// GetIntentsByRecipient handles retrieving all intents for a specific recipient
+// GetIntentsByRecipient handles retrieving intents by recipient
 func (s *Server) GetIntentsByRecipient(c *gin.Context) {
 	recipient := c.Param("recipient")
 	if recipient == "" {
@@ -279,11 +325,43 @@ func (s *Server) GetIntentsByRecipient(c *gin.Context) {
 		return
 	}
 
-	intents, err := s.intentService.GetIntentsByRecipient(c.Request.Context(), recipient)
+	// Get pagination parameters
+	page := c.DefaultQuery("page", "1")
+	pageSize := c.DefaultQuery("page_size", "20")
+
+	// Convert to integers
+	pageInt, err := strconv.Atoi(page)
+	if err != nil || pageInt < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page parameter"})
+		return
+	}
+	pageSizeInt, err := strconv.Atoi(pageSize)
+	if err != nil || pageSizeInt < 1 || pageSizeInt > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page_size parameter (must be between 1 and 100)"})
+		return
+	}
+
+	// Validate address format
+	if !utils.IsValidAddress(recipient) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid recipient address format"})
+		return
+	}
+
+	// Get intents with pagination
+	intents, totalCount, err := s.db.ListIntentsByRecipientPaginated(c.Request.Context(), recipient, pageInt, pageSizeInt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, intents)
+	// Convert to response format
+	var response []*models.IntentResponse
+	for _, intent := range intents {
+		response = append(response, intent.ToResponse())
+	}
+
+	// Create paginated response
+	paginatedResponse := models.NewPaginatedResponse(response, pageInt, pageSizeInt, totalCount)
+
+	c.JSON(http.StatusOK, paginatedResponse)
 }

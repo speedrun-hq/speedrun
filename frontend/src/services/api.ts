@@ -6,12 +6,18 @@ import {
   CreateIntentRequest,
   CreateFulfillmentRequest,
   Runner,
+  PaginationParams,
+  PaginatedResponse,
+  PaginatedIntentsResponse,
+  PaginatedFulfillmentsResponse,
 } from "@/types";
 import { ApiError } from "@/utils/errors";
 
 // Get API base URL from environment variable, fallback to localhost in development
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+
+const DEFAULT_PAGE_SIZE = 20;
 
 class ApiService {
   private async fetchApi<T>(
@@ -70,41 +76,64 @@ class ApiService {
   }
 
   // Intent endpoints
-  async listIntents(): Promise<Intent[]> {
-    console.log("Calling listIntents API endpoint:", `${API_BASE_URL}/intents`);
-    const response = await this.fetchApi<Intent[]>("/intents", {
-      method: "GET",
-    });
+  async listIntents(
+    pagination?: PaginationParams,
+  ): Promise<PaginatedIntentsResponse> {
+    const queryString = this.getPaginationQueryString(pagination);
+    console.log(
+      "Calling listIntents API endpoint:",
+      `${API_BASE_URL}/intents${queryString}`,
+    );
+
+    const response = await this.fetchApi<PaginatedIntentsResponse>(
+      `/intents${queryString}`,
+      {
+        method: "GET",
+      },
+    );
+
     console.log("listIntents raw response:", response);
     return response;
   }
 
-  async listIntentsBySender(senderAddress: string): Promise<Intent[]> {
+  async listIntentsBySender(
+    senderAddress: string,
+    pagination?: PaginationParams,
+  ): Promise<PaginatedIntentsResponse> {
+    const queryString = this.getPaginationQueryString(pagination);
     console.log(
       "Calling listIntentsBySender API endpoint:",
-      `${API_BASE_URL}/intents/sender/${senderAddress}`,
+      `${API_BASE_URL}/intents/sender/${senderAddress}${queryString}`,
     );
-    const response = await this.fetchApi<Intent[]>(
-      `/intents/sender/${senderAddress}`,
+
+    const response = await this.fetchApi<PaginatedIntentsResponse>(
+      `/intents/sender/${senderAddress}${queryString}`,
       {
         method: "GET",
       },
     );
+
     console.log("listIntentsBySender raw response:", response);
     return response;
   }
 
-  async listIntentsByRecipient(recipientAddress: string): Promise<Intent[]> {
+  async listIntentsByRecipient(
+    recipientAddress: string,
+    pagination?: PaginationParams,
+  ): Promise<PaginatedIntentsResponse> {
+    const queryString = this.getPaginationQueryString(pagination);
     console.log(
       "Calling listIntentsByRecipient API endpoint:",
-      `${API_BASE_URL}/intents/recipient/${recipientAddress}`,
+      `${API_BASE_URL}/intents/recipient/${recipientAddress}${queryString}`,
     );
-    const response = await this.fetchApi<Intent[]>(
-      `/intents/recipient/${recipientAddress}`,
+
+    const response = await this.fetchApi<PaginatedIntentsResponse>(
+      `/intents/recipient/${recipientAddress}${queryString}`,
       {
         method: "GET",
       },
     );
+
     console.log("listIntentsByRecipient raw response:", response);
     return response;
   }
@@ -134,11 +163,34 @@ class ApiService {
     return this.fetchApi<Fulfillment>(`/fulfillments/${id}`);
   }
 
+  async listFulfillments(
+    pagination?: PaginationParams,
+  ): Promise<PaginatedFulfillmentsResponse> {
+    const queryString = this.getPaginationQueryString(pagination);
+    return this.fetchApi<PaginatedFulfillmentsResponse>(
+      `/fulfillments${queryString}`,
+      {
+        method: "GET",
+      },
+    );
+  }
+
   // Leaderboard endpoints
   async getLeaderboard(chainId: number): Promise<Runner[]> {
     return this.fetchApi<Runner[]>(`/leaderboard/${chainId}`, {
       method: "GET",
     });
+  }
+
+  // Helper to build query string from pagination params
+  private getPaginationQueryString(pagination?: PaginationParams): string {
+    if (!pagination) return "";
+    const { page, page_size } = pagination;
+    const params = new URLSearchParams();
+    if (page) params.append("page", page.toString());
+    if (page_size) params.append("page_size", page_size.toString());
+    const queryString = params.toString();
+    return queryString ? `?${queryString}` : "";
   }
 }
 

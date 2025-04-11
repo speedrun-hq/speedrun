@@ -186,19 +186,22 @@ export default function Leaderboard() {
         setLoading(true);
         setErrors({});
 
-        // Fetch all intents
+        // Fetch all intents with pagination
         console.log("About to fetch intents from API...");
-        const response = await apiService.listIntents();
+        const response = await apiService.listIntents({
+          page: 1,
+          page_size: 100,
+        });
         console.log("Raw API Response:", JSON.stringify(response, null, 2));
 
         // Check if response is empty or undefined
-        if (!response) {
+        if (!response || !response.data) {
           console.warn("API response is empty or undefined");
           setLeaderboardData({});
           return;
         }
 
-        const intents: Intent[] = Array.isArray(response) ? response : [];
+        const intents: Intent[] = response.data || [];
 
         // Log the first intent to see its structure
         if (intents.length > 0) {

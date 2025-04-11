@@ -94,3 +94,21 @@ export interface LeaderboardResponse {
   chain_id: number;
   runners: Runner[];
 }
+
+// Pagination types
+export interface PaginationParams {
+  page: number;
+  page_size: number;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  page: number;
+  page_size: number;
+  total_count: number;
+  total_pages: number;
+}
+
+export interface PaginatedIntentsResponse extends PaginatedResponse<Intent> {}
+export interface PaginatedFulfillmentsResponse
+  extends PaginatedResponse<Fulfillment> {}
