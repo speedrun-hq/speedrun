@@ -60,25 +60,25 @@ const Navigation = () => {
           <div className="hidden lg:flex items-center space-x-2 relative z-10">
             <Link
               href="/"
-              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[165px] text-center justify-center"
+              className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[120px] text-center justify-center"
             >
               MAKE TRANSFER
             </Link>
             <Link
               href="/my-intents"
-              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[165px] text-center justify-center"
+              className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[120px] text-center justify-center"
             >
               MY TRANSFERS
             </Link>
             <Link
               href="/leaderboard"
-              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[165px] text-center justify-center"
+              className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[120px] text-center justify-center"
             >
               LEADERBOARD
             </Link>
             <Link
               href="/about"
-              className="arcade-btn border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[165px] text-center justify-center"
+              className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 transition-none min-w-[120px] text-center justify-center"
             >
               LEARN MORE
             </Link>
@@ -100,7 +100,7 @@ const Navigation = () => {
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 pointer-events-none"
+                className="h-5 w-5 pointer-events-none"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -137,28 +137,28 @@ const Navigation = () => {
         <div className="container mx-auto px-4 py-4 space-y-3">
           <Link
             href="/"
-            className="arcade-btn w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
+            className="arcade-btn-sm w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
             onClick={() => setIsMenuOpen(false)}
           >
             MAKE TRANSFER
           </Link>
           <Link
             href="/my-intents"
-            className="arcade-btn w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
+            className="arcade-btn-sm w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
             onClick={() => setIsMenuOpen(false)}
           >
             MY TRANSFERS
           </Link>
           <Link
             href="/leaderboard"
-            className="arcade-btn w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
+            className="arcade-btn-sm w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
             onClick={() => setIsMenuOpen(false)}
           >
             LEADERBOARD
           </Link>
           <Link
             href="/about"
-            className="arcade-btn w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
+            className="arcade-btn-sm w-full block py-2 text-center border-green-400 text-green-400 hover:bg-green-400/20 transition-none"
             onClick={() => setIsMenuOpen(false)}
           >
             LEARN MORE
