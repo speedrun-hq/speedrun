@@ -591,14 +591,19 @@ func (p *PostgresDB) ListIntentsByRecipient(ctx context.Context, recipient strin
 }
 
 // ListIntentsPaginated retrieves intents with pagination
-func (p *PostgresDB) ListIntentsPaginated(ctx context.Context, page, pageSize int) ([]*models.Intent, int, error) {
+func (p *PostgresDB) ListIntentsPaginated(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
 	// Get total count first
 	countQuery := `SELECT COUNT(*) FROM intents`
+	countArgs := []interface{}{}
+	if status != "" {
+		countQuery += ` WHERE status = $1`
+		countArgs = append(countArgs, status)
+	}
 	var totalCount int
-	err := p.db.QueryRowContext(ctx, countQuery).Scan(&totalCount)
+	err := p.db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count intents: %v", err)
 	}
@@ -607,11 +612,22 @@ func (p *PostgresDB) ListIntentsPaginated(ctx context.Context, page, pageSize in
 	query := `
 		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, intent_fee, status, created_at, updated_at
 		FROM intents
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
 	`
+	args := []interface{}{}
+	if status != "" {
+		query += ` WHERE status = $1`
+		args = append(args, status)
+	}
+	query += ` ORDER BY created_at DESC`
+	if status != "" {
+		query += ` LIMIT $2 OFFSET $3`
+		args = append(args, pageSize, offset)
+	} else {
+		query += ` LIMIT $1 OFFSET $2`
+		args = append(args, pageSize, offset)
+	}
 
-	rows, err := p.db.QueryContext(ctx, query, pageSize, offset)
+	rows, err := p.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
 	}
