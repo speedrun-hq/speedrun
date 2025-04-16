@@ -166,22 +166,11 @@ func (s *Server) ListIntents(c *gin.Context) {
 	// Get status filter
 	status := c.Query("status")
 
-	// Get intents with pagination
-	intents, totalCount, err := s.db.ListIntentsPaginated(c.Request.Context(), pageInt, pageSizeInt)
+	// Get intents with pagination and status filter
+	intents, totalCount, err := s.db.ListIntentsPaginated(c.Request.Context(), pageInt, pageSizeInt, status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-
-	// Filter by status if provided
-	if status != "" {
-		var filtered []*models.Intent
-		for _, intent := range intents {
-			if string(intent.Status) == status {
-				filtered = append(filtered, intent)
-			}
-		}
-		intents = filtered
 	}
 
 	// Convert to response format

@@ -143,8 +143,8 @@ func (m *MockDatabase) ListIntentsBySender(ctx context.Context, senderAddress st
 }
 
 // Add pagination methods
-func (m *MockDatabase) ListIntentsPaginated(ctx context.Context, page, pageSize int) ([]*models.Intent, int, error) {
-	args := m.Called(ctx, page, pageSize)
+func (m *MockDatabase) ListIntentsPaginated(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+	args := m.Called(ctx, page, pageSize, status)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
 	}

@@ -20,7 +20,7 @@ type Database interface {
 	CreateIntent(ctx context.Context, intent *models.Intent) error
 	GetIntent(ctx context.Context, id string) (*models.Intent, error)
 	ListIntents(ctx context.Context) ([]*models.Intent, error)
-	ListIntentsPaginated(ctx context.Context, page, pageSize int) ([]*models.Intent, int, error)
+	ListIntentsPaginated(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error)
 	ListIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error)
 	ListIntentsBySenderPaginated(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error)
 	ListIntentsByRecipient(ctx context.Context, recipient string) ([]*models.Intent, error)
