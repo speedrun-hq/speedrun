@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/stretchr/testify/mock"
@@ -181,4 +182,58 @@ func (m *MockDatabase) ListIntentsByRecipientPaginated(ctx context.Context, reci
 		return nil, args.Int(1), args.Error(2)
 	}
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
+}
+
+// Implement optimized methods
+func (m *MockDatabase) ListIntentsPaginatedOptimized(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+	args := m.Called(ctx, page, pageSize, status)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
+}
+
+func (m *MockDatabase) ListIntentsBySenderPaginatedOptimized(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
+	args := m.Called(ctx, sender, page, pageSize)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
+}
+
+func (m *MockDatabase) ListIntentsByRecipientPaginatedOptimized(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
+	args := m.Called(ctx, recipient, page, pageSize)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
+}
+
+func (m *MockDatabase) ListFulfillmentsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+	args := m.Called(ctx, page, pageSize)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Fulfillment), args.Int(1), args.Error(2)
+}
+
+func (m *MockDatabase) ListSettlementsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Settlement, int, error) {
+	args := m.Called(ctx, page, pageSize)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Settlement), args.Int(1), args.Error(2)
+}
+
+func (m *MockDatabase) ListIntentsKeysetPaginated(ctx context.Context, lastTimestamp time.Time, lastID string, pageSize int, status string) ([]*models.Intent, bool, error) {
+	args := m.Called(ctx, lastTimestamp, lastID, pageSize, status)
+	if args.Get(0) == nil {
+		return nil, args.Bool(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Intent), args.Bool(1), args.Error(2)
+}
+
+func (m *MockDatabase) PrepareStatements(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
 }

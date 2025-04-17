@@ -166,8 +166,8 @@ func (s *Server) ListIntents(c *gin.Context) {
 	// Get status filter
 	status := c.Query("status")
 
-	// Get intents with pagination and status filter
-	intents, totalCount, err := s.db.ListIntentsPaginated(c.Request.Context(), pageInt, pageSizeInt, status)
+	// Get intents with pagination and status filter using optimized method
+	intents, totalCount, err := s.db.ListIntentsPaginatedOptimized(c.Request.Context(), pageInt, pageSizeInt, status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -244,8 +244,8 @@ func (s *Server) ListFulfillments(c *gin.Context) {
 		return
 	}
 
-	// Get fulfillments with pagination
-	fulfillments, totalCount, err := s.db.ListFulfillmentsPaginated(c.Request.Context(), pageInt, pageSizeInt)
+	// Get fulfillments with pagination using optimized method
+	fulfillments, totalCount, err := s.db.ListFulfillmentsPaginatedOptimized(c.Request.Context(), pageInt, pageSizeInt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -287,8 +287,8 @@ func (s *Server) GetIntentsBySender(c *gin.Context) {
 		return
 	}
 
-	// Get intents with pagination
-	intents, totalCount, err := s.db.ListIntentsBySenderPaginated(c.Request.Context(), sender, pageInt, pageSizeInt)
+	// Get intents with pagination using optimized method
+	intents, totalCount, err := s.db.ListIntentsBySenderPaginatedOptimized(c.Request.Context(), sender, pageInt, pageSizeInt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -336,8 +336,8 @@ func (s *Server) GetIntentsByRecipient(c *gin.Context) {
 		return
 	}
 
-	// Get intents with pagination
-	intents, totalCount, err := s.db.ListIntentsByRecipientPaginated(c.Request.Context(), recipient, pageInt, pageSizeInt)
+	// Get intents with pagination using optimized method
+	intents, totalCount, err := s.db.ListIntentsByRecipientPaginatedOptimized(c.Request.Context(), recipient, pageInt, pageSizeInt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
