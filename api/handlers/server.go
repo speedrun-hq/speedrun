@@ -1,12 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -34,7 +38,52 @@ func NewServer(fulfillmentService *services.FulfillmentService, intentService *s
 
 // Start starts the HTTP server
 func (s *Server) Start(addr string) error {
+	// Create a new router with default middleware
 	router := gin.Default()
+
+	// Configure timeouts for the server
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second, // Time to read the request headers/body
+		WriteTimeout: 15 * time.Second, // Time to write the response
+		IdleTimeout:  60 * time.Second, // Time to keep connections alive
+	}
+
+	// Add custom middleware to set request timeouts
+	router.Use(func(c *gin.Context) {
+		// Create a timeout context for each request
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+		defer cancel()
+
+		// Update the request with the timeout context
+		c.Request = c.Request.WithContext(ctx)
+
+		// Create a channel to signal when the request is complete
+		done := make(chan struct{})
+
+		go func() {
+			// Continue processing the request chain
+			c.Next()
+			close(done)
+		}()
+
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.DeadlineExceeded {
+				// Log timeout and send an error response
+				log.Printf("Request timeout: %s %s", c.Request.Method, c.Request.URL.Path)
+				c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
+					"error": "Request timeout",
+				})
+			}
+		case <-done:
+			// Request completed before timeout
+		}
+	})
+
+	// Add recovery middleware to catch panics in request handling goroutines
+	router.Use(gin.Recovery())
 
 	// Configure CORS
 	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
@@ -43,6 +92,24 @@ func (s *Server) Start(addr string) error {
 	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
 	router.Use(cors.New(config))
+
+	// Add request logging with execution time
+	router.Use(func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+
+		// Process request
+		c.Next()
+
+		// Log information after request is processed
+		latency := time.Since(start)
+		log.Printf("%s %s [%d] %v", c.Request.Method, path, c.Writer.Status(), latency)
+
+		// Log slow requests
+		if latency > 500*time.Millisecond {
+			log.Printf("SLOW REQUEST: %s %s took %v", c.Request.Method, path, latency)
+		}
+	})
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
@@ -73,7 +140,30 @@ func (s *Server) Start(addr string) error {
 		}
 	}
 
-	return router.Run(addr)
+	// Start server in a separate goroutine
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	// Set up a channel to listen for OS signals
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
+
+	// Create a timeout context for graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Attempt graceful shutdown
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server exited properly")
+	return nil
 }
 
 // CreateIntent handles the creation of a new intent

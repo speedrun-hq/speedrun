@@ -50,7 +50,7 @@ type IntentSettledEvent struct {
 }
 
 // fetchBlockTimestamp is a helper function to get a block timestamp with fallback methods
-func fetchBlockTimestamp(client *ethclient.Client, blockNumber uint64, entityID string, entityType string) (time.Time, error) {
+func fetchBlockTimestamp(ctx context.Context, client *ethclient.Client, blockNumber uint64, entityID string, entityType string) (time.Time, error) {
 	if client == nil {
 		return time.Time{}, fmt.Errorf("no client provided")
 	}
@@ -60,7 +60,7 @@ func fetchBlockTimestamp(client *ethclient.Client, blockNumber uint64, entityID 
 	}
 
 	// First try: Standard block fetching
-	block, err := client.BlockByNumber(context.Background(), big.NewInt(int64(blockNumber)))
+	block, err := client.BlockByNumber(ctx, big.NewInt(int64(blockNumber)))
 	if err == nil {
 		return time.Unix(int64(block.Time()), 0), nil
 	}
@@ -70,7 +70,7 @@ func fetchBlockTimestamp(client *ethclient.Client, blockNumber uint64, entityID 
 		entityType, entityID, blockNumber, err)
 
 	// Fallback: Use HeaderByNumber which should be more tolerant of different transaction types
-	header, err := client.HeaderByNumber(context.Background(), big.NewInt(int64(blockNumber)))
+	header, err := client.HeaderByNumber(ctx, big.NewInt(int64(blockNumber)))
 	if err == nil && header != nil {
 		return time.Unix(int64(header.Time), 0), nil
 	}
@@ -81,7 +81,7 @@ func fetchBlockTimestamp(client *ethclient.Client, blockNumber uint64, entityID 
 }
 
 // ToIntent converts an IntentInitiatedEvent to an Intent
-func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client) (*Intent, error) {
+func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context.Context) (*Intent, error) {
 	// Convert big.Int to string for amount and tip
 	amount := e.Amount.String()
 	tip := e.Tip.String()
@@ -102,7 +102,13 @@ func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client) (*Intent, erro
 			log.Printf("Warning: Intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
 			timestamp = time.Now()
 		} else {
-			ts, err := fetchBlockTimestamp(client, e.BlockNumber, e.IntentID, "intent")
+			// Use provided context if available, otherwise use background context
+			requestCtx := context.Background()
+			if len(ctx) > 0 && ctx[0] != nil {
+				requestCtx = ctx[0]
+			}
+
+			ts, err := fetchBlockTimestamp(requestCtx, client, e.BlockNumber, e.IntentID, "intent")
 			if err != nil {
 				log.Printf("Warning: Could not fetch timestamp for intent %s (block #%d): %v, using current time instead",
 					e.IntentID, e.BlockNumber, err)
@@ -153,7 +159,8 @@ func FromIntent(intent *Intent) *IntentInitiatedEvent {
 	}
 }
 
-func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client) (*Fulfillment, error) {
+// ToFulfillment converts an IntentFulfilledEvent to a Fulfillment
+func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client, ctx ...context.Context) (*Fulfillment, error) {
 	amount := e.Amount.String()
 
 	// Get block timestamp
@@ -163,7 +170,13 @@ func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client) (*Fulfill
 			log.Printf("Warning: Fulfillment for intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
 			timestamp = time.Now()
 		} else {
-			ts, err := fetchBlockTimestamp(client, e.BlockNumber, e.IntentID, "fulfillment")
+			// Use provided context if available, otherwise use background context
+			requestCtx := context.Background()
+			if len(ctx) > 0 && ctx[0] != nil {
+				requestCtx = ctx[0]
+			}
+
+			ts, err := fetchBlockTimestamp(requestCtx, client, e.BlockNumber, e.IntentID, "fulfillment")
 			if err != nil {
 				log.Printf("Warning: Could not fetch timestamp for fulfillment of intent %s (block #%d): %v, using current time instead",
 					e.IntentID, e.BlockNumber, err)
@@ -205,7 +218,8 @@ func FromFulfillment(fulfillment *Fulfillment) *IntentFulfilledEvent {
 	}
 }
 
-func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client) (*Settlement, error) {
+// ToSettlement converts an IntentSettledEvent to a Settlement
+func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client, ctx ...context.Context) (*Settlement, error) {
 	// Get block timestamp
 	var timestamp time.Time
 	if client != nil {
@@ -213,7 +227,13 @@ func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client) (*Settlement
 			log.Printf("Warning: Settlement for intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
 			timestamp = time.Now()
 		} else {
-			ts, err := fetchBlockTimestamp(client, e.BlockNumber, e.IntentID, "settlement")
+			// Use provided context if available, otherwise use background context
+			requestCtx := context.Background()
+			if len(ctx) > 0 && ctx[0] != nil {
+				requestCtx = ctx[0]
+			}
+
+			ts, err := fetchBlockTimestamp(requestCtx, client, e.BlockNumber, e.IntentID, "settlement")
 			if err != nil {
 				log.Printf("Warning: Could not fetch timestamp for settlement of intent %s (block #%d): %v, using current time instead",
 					e.IntentID, e.BlockNumber, err)
