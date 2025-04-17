@@ -50,3 +50,13 @@ CREATE TABLE IF NOT EXISTS last_processed_blocks (
 CREATE INDEX IF NOT EXISTS idx_intents_status ON intents(status);
 CREATE INDEX IF NOT EXISTS idx_fulfillments_id ON fulfillments(id);
 CREATE INDEX IF NOT EXISTS idx_settlements_id ON settlements(id);
+
+-- Create composite indexes for improved query performance
+CREATE INDEX IF NOT EXISTS idx_intents_status_created_at ON intents(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_intents_sender ON intents(sender);
+CREATE INDEX IF NOT EXISTS idx_intents_recipient ON intents(recipient);
+CREATE INDEX IF NOT EXISTS idx_intents_sender_status ON intents(sender, status);
+CREATE INDEX IF NOT EXISTS idx_intents_recipient_status ON intents(recipient, status);
+CREATE INDEX IF NOT EXISTS idx_intents_created_at ON intents(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fulfillments_created_at ON fulfillments(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_settlements_created_at ON settlements(created_at DESC);

@@ -18,6 +18,15 @@ var schemaFS embed.FS
 // PostgresDB implements the Database interface using PostgreSQL
 type PostgresDB struct {
 	db *sql.DB
+
+	// Prepared statements
+	listIntentsStmt            *sql.Stmt
+	listIntentsWithStatusStmt  *sql.Stmt
+	listIntentsBySenderStmt    *sql.Stmt
+	listIntentsByRecipientStmt *sql.Stmt
+	listFulfillmentsStmt       *sql.Stmt
+	listSettlementsStmt        *sql.Stmt
+	getIntentStmt              *sql.Stmt
 }
 
 // NewPostgresDB creates a new PostgreSQL database connection
@@ -33,16 +42,21 @@ func NewPostgresDB(databaseURL string) (*PostgresDB, error) {
 	}
 
 	// Set optimized connection pool settings
-	db.SetMaxOpenConns(25)                  // Increased from 25 to handle more concurrent requests
-	db.SetMaxIdleConns(3)                  // Increased from 5 to maintain more idle connections
-	db.SetConnMaxLifetime(5 * time.Minute) // Increased from 5 minutes for longer connection reuse
-	db.SetConnMaxIdleTime(1 * time.Minute)  // Set idle timeout to clean up unused connections
+	db.SetMaxOpenConns(50)                  // Increased from 25 to handle more concurrent requests
+	db.SetMaxIdleConns(10)                  // Increased from 5 to maintain more idle connections
+	db.SetConnMaxLifetime(15 * time.Minute) // Increased from 5 minutes for longer connection reuse
+	db.SetConnMaxIdleTime(5 * time.Minute)  // Set idle timeout to clean up unused connections
 
 	postgresDB := &PostgresDB{db: db}
 
 	// Initialize the database schema
 	if err := postgresDB.InitDB(context.Background()); err != nil {
 		return nil, fmt.Errorf("failed to initialize database: %v", err)
+	}
+
+	// Prepare statements for improved performance
+	if err := postgresDB.PrepareStatements(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to prepare statements: %v", err)
 	}
 
 	return postgresDB, nil
@@ -661,6 +675,60 @@ func (p *PostgresDB) ListIntentsPaginated(ctx context.Context, page, pageSize in
 	return intents, totalCount, nil
 }
 
+// ListIntentsPaginatedOptimized retrieves intents with pagination using a single query with window functions
+func (p *PostgresDB) ListIntentsPaginatedOptimized(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	var rows *sql.Rows
+	var err error
+
+	// Use prepared statements for better performance
+	if status == "" {
+		// Use the statement without status filter
+		rows, err = p.listIntentsStmt.QueryContext(ctx, pageSize, offset)
+	} else {
+		// Use the statement with status filter
+		rows, err = p.listIntentsWithStatusStmt.QueryContext(ctx, status, pageSize, offset)
+	}
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	var totalCount int
+
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+			&totalCount,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating intents: %v", err)
+	}
+
+	return intents, totalCount, nil
+}
+
 // ListIntentsBySenderPaginated retrieves intents by sender with pagination
 func (p *PostgresDB) ListIntentsBySenderPaginated(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
 	// Calculate offset
@@ -717,6 +785,50 @@ func (p *PostgresDB) ListIntentsBySenderPaginated(ctx context.Context, sender st
 	return intents, totalCount, nil
 }
 
+// ListIntentsBySenderPaginatedOptimized retrieves intents by sender with pagination using a single query
+func (p *PostgresDB) ListIntentsBySenderPaginatedOptimized(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Use prepared statement
+	rows, err := p.listIntentsBySenderStmt.QueryContext(ctx, sender, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	var totalCount int
+
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+			&totalCount,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating intents: %v", err)
+	}
+
+	return intents, totalCount, nil
+}
+
 // ListIntentsByRecipientPaginated retrieves intents by recipient with pagination
 func (p *PostgresDB) ListIntentsByRecipientPaginated(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
 	// Calculate offset
@@ -766,6 +878,50 @@ func (p *PostgresDB) ListIntentsByRecipientPaginated(ctx context.Context, recipi
 		}
 		intents = append(intents, &intent)
 	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating intents: %v", err)
+	}
+
+	return intents, totalCount, nil
+}
+
+// ListIntentsByRecipientPaginatedOptimized retrieves intents by recipient with pagination using a single query
+func (p *PostgresDB) ListIntentsByRecipientPaginatedOptimized(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Use prepared statement
+	rows, err := p.listIntentsByRecipientStmt.QueryContext(ctx, recipient, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	var totalCount int
+
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+			&totalCount,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+
 	if err = rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("error iterating intents: %v", err)
 	}
@@ -877,4 +1033,302 @@ func (p *PostgresDB) ListSettlementsPaginated(ctx context.Context, page, pageSiz
 	}
 
 	return settlements, totalCount, nil
+}
+
+// ListFulfillmentsPaginatedOptimized retrieves fulfillments with pagination using a single query
+func (p *PostgresDB) ListFulfillmentsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Use prepared statement
+	rows, err := p.listFulfillmentsStmt.QueryContext(ctx, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query fulfillments: %v", err)
+	}
+	defer rows.Close()
+
+	var fulfillments []*models.Fulfillment
+	var totalCount int
+
+	for rows.Next() {
+		var f models.Fulfillment
+		err := rows.Scan(
+			&f.ID,
+			&f.Asset,
+			&f.Amount,
+			&f.Receiver,
+			&f.TxHash,
+			&f.CreatedAt,
+			&f.UpdatedAt,
+			&totalCount,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan fulfillment: %v", err)
+		}
+		fulfillments = append(fulfillments, &f)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating fulfillments: %v", err)
+	}
+
+	return fulfillments, totalCount, nil
+}
+
+// ListSettlementsPaginatedOptimized retrieves settlements with pagination using a single query
+func (p *PostgresDB) ListSettlementsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Settlement, int, error) {
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Use prepared statement
+	rows, err := p.listSettlementsStmt.QueryContext(ctx, pageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query settlements: %v", err)
+	}
+	defer rows.Close()
+
+	var settlements []*models.Settlement
+	var totalCount int
+
+	for rows.Next() {
+		var s models.Settlement
+		err := rows.Scan(
+			&s.ID,
+			&s.Asset,
+			&s.Amount,
+			&s.Receiver,
+			&s.Fulfilled,
+			&s.Fulfiller,
+			&s.ActualAmount,
+			&s.PaidTip,
+			&s.TxHash,
+			&s.CreatedAt,
+			&s.UpdatedAt,
+			&totalCount,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan settlement: %v", err)
+		}
+		settlements = append(settlements, &s)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating settlements: %v", err)
+	}
+
+	return settlements, totalCount, nil
+}
+
+// PrepareStatements prepares SQL statements for reuse
+func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
+	var err error
+
+	// Prepare statement for listing intents with window function for count
+	p.listIntentsStmt, err = p.db.PrepareContext(ctx, `
+		WITH data AS (
+			SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+				   intent_fee, status, created_at, updated_at,
+				   COUNT(*) OVER() AS total_count
+			FROM intents
+			ORDER BY created_at DESC
+			LIMIT $1 OFFSET $2
+		)
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+			   intent_fee, status, created_at, updated_at, 
+			   total_count 
+		FROM data
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare listIntentsStmt: %v", err)
+	}
+
+	// Prepare statement for listing intents with status filter
+	p.listIntentsWithStatusStmt, err = p.db.PrepareContext(ctx, `
+		WITH data AS (
+			SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+				   intent_fee, status, created_at, updated_at,
+				   COUNT(*) OVER() AS total_count
+			FROM intents
+			WHERE status = $1
+			ORDER BY created_at DESC
+			LIMIT $2 OFFSET $3
+		)
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+			   intent_fee, status, created_at, updated_at, 
+			   total_count
+		FROM data
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare listIntentsWithStatusStmt: %v", err)
+	}
+
+	// Prepare statement for listing intents by sender
+	p.listIntentsBySenderStmt, err = p.db.PrepareContext(ctx, `
+		WITH data AS (
+			SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+				   intent_fee, status, created_at, updated_at,
+				   COUNT(*) OVER() AS total_count
+			FROM intents
+			WHERE sender = $1
+			ORDER BY created_at DESC
+			LIMIT $2 OFFSET $3
+		)
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+			   intent_fee, status, created_at, updated_at, 
+			   total_count
+		FROM data
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare listIntentsBySenderStmt: %v", err)
+	}
+
+	// Prepare statement for listing intents by recipient
+	p.listIntentsByRecipientStmt, err = p.db.PrepareContext(ctx, `
+		WITH data AS (
+			SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+				   intent_fee, status, created_at, updated_at,
+				   COUNT(*) OVER() AS total_count
+			FROM intents
+			WHERE recipient = $1
+			ORDER BY created_at DESC
+			LIMIT $2 OFFSET $3
+		)
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+			   intent_fee, status, created_at, updated_at, 
+			   total_count
+		FROM data
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare listIntentsByRecipientStmt: %v", err)
+	}
+
+	// Prepare statement for listing fulfillments
+	p.listFulfillmentsStmt, err = p.db.PrepareContext(ctx, `
+		WITH data AS (
+			SELECT id, asset, amount, receiver, tx_hash, created_at, updated_at,
+				   COUNT(*) OVER() AS total_count
+			FROM fulfillments
+			ORDER BY created_at DESC
+			LIMIT $1 OFFSET $2
+		)
+		SELECT id, asset, amount, receiver, tx_hash, created_at, updated_at,
+			   total_count
+		FROM data
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare listFulfillmentsStmt: %v", err)
+	}
+
+	// Prepare statement for listing settlements
+	p.listSettlementsStmt, err = p.db.PrepareContext(ctx, `
+		WITH data AS (
+			SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, 
+				   paid_tip, tx_hash, created_at, updated_at,
+				   COUNT(*) OVER() AS total_count
+			FROM settlements
+			ORDER BY created_at DESC
+			LIMIT $1 OFFSET $2
+		)
+		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount,
+			   paid_tip, tx_hash, created_at, updated_at,
+			   total_count
+		FROM data
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare listSettlementsStmt: %v", err)
+	}
+
+	// Prepare statement for getting a single intent
+	p.getIntentStmt, err = p.db.PrepareContext(ctx, `
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+			   intent_fee, status, created_at, updated_at
+		FROM intents
+		WHERE id = $1
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare getIntentStmt: %v", err)
+	}
+
+	return nil
+}
+
+// ListIntentsKeysetPaginated retrieves intents using keyset pagination (more efficient for large datasets)
+func (p *PostgresDB) ListIntentsKeysetPaginated(ctx context.Context, lastTimestamp time.Time, lastID string, pageSize int, status string) ([]*models.Intent, bool, error) {
+	whereClause := ""
+	args := []interface{}{}
+	argIndex := 1
+
+	// Add status filter if provided
+	if status != "" {
+		whereClause = "WHERE status = $1"
+		args = append(args, status)
+		argIndex++
+	}
+
+	// Add keyset condition if not first page
+	if !lastTimestamp.IsZero() {
+		if whereClause == "" {
+			whereClause = "WHERE "
+		} else {
+			whereClause += " AND "
+		}
+		whereClause += fmt.Sprintf("(created_at, id) < ($%d, $%d)", argIndex, argIndex+1)
+		args = append(args, lastTimestamp, lastID)
+		argIndex += 2
+	}
+
+	// Build the query
+	query := fmt.Sprintf(`
+		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
+			   intent_fee, status, created_at, updated_at
+		FROM intents
+		%s
+		ORDER BY created_at DESC, id DESC
+		LIMIT $%d
+	`, whereClause, argIndex)
+
+	// Request one extra record to determine if there are more pages
+	args = append(args, pageSize+1)
+
+	// Execute the query
+	rows, err := p.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to query intents: %v", err)
+	}
+	defer rows.Close()
+
+	var intents []*models.Intent
+	for rows.Next() {
+		var intent models.Intent
+		err := rows.Scan(
+			&intent.ID,
+			&intent.SourceChain,
+			&intent.DestinationChain,
+			&intent.Token,
+			&intent.Amount,
+			&intent.Recipient,
+			&intent.Sender,
+			&intent.IntentFee,
+			&intent.Status,
+			&intent.CreatedAt,
+			&intent.UpdatedAt,
+		)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to scan intent: %v", err)
+		}
+		intents = append(intents, &intent)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("error iterating intents: %v", err)
+	}
+
+	// Determine if there are more pages by checking if we got more records than requested
+	hasMore := false
+	if len(intents) > pageSize {
+		intents = intents[:pageSize] // Remove the extra record
+		hasMore = true
+	}
+
+	return intents, hasMore, nil
 }
