@@ -33,9 +33,9 @@ func NewPostgresDB(databaseURL string) (*PostgresDB, error) {
 	}
 
 	// Set optimized connection pool settings
-	db.SetMaxOpenConns(50)                  // Increased from 25 to handle more concurrent requests
-	db.SetMaxIdleConns(10)                  // Increased from 5 to maintain more idle connections
-	db.SetConnMaxLifetime(15 * time.Minute) // Increased from 5 minutes for longer connection reuse
+	db.SetMaxOpenConns(25)                  // Increased from 25 to handle more concurrent requests
+	db.SetMaxIdleConns(5)                  // Increased from 5 to maintain more idle connections
+	db.SetConnMaxLifetime(5 * time.Minute) // Increased from 5 minutes for longer connection reuse
 	db.SetConnMaxIdleTime(5 * time.Minute)  // Set idle timeout to clean up unused connections
 
 	postgresDB := &PostgresDB{db: db}
