@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gin-gonic/gin"
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/db"
@@ -28,19 +28,42 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 		var client *ethclient.Client
 		var err error
 
-		if strings.HasPrefix(chainConfig.RPCURL, "wss://") {
-			rpcClient, err := rpc.DialWebsocket(context.Background(), chainConfig.RPCURL, "")
-			if err != nil {
-				return nil, fmt.Errorf("failed to create RPC client for chain %d: %v", chainID, err)
+		// For historical operations like catch-up, HTTP is more reliable than WebSocket
+		// This avoids WebSocket connection drops during long-running operations
+		httpURL := strings.Replace(chainConfig.RPCURL, "wss://", "https://", 1)
+		httpURL = strings.Replace(httpURL, "ws://", "http://", 1)
+
+		// Log the RPC URL for debugging
+		log.Printf("Connecting to chain %d using RPC URL: %s", chainID, httpURL)
+
+		// Try to establish connection with retries
+		maxRetries := 3
+		var lastErr error
+
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			client, err = ethclient.Dial(httpURL)
+			if err == nil {
+				// Successfully connected
+				break
 			}
-			client = ethclient.NewClient(rpcClient)
-		} else {
-			client, err = ethclient.Dial(chainConfig.RPCURL)
-			if err != nil {
-				return nil, fmt.Errorf("failed to connect to chain %d: %v", chainID, err)
+
+			lastErr = err
+			if attempt < maxRetries-1 {
+				// Wait before retrying with exponential backoff
+				retryDelay := time.Duration(5*(attempt+1)) * time.Second
+				log.Printf("Failed to connect to chain %d (attempt %d/%d): %v. Retrying in %v...",
+					chainID, attempt+1, maxRetries, err, retryDelay)
+				time.Sleep(retryDelay)
 			}
 		}
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to chain %d after %d attempts: %v",
+				chainID, maxRetries, lastErr)
+		}
+
 		clients[chainID] = client
+		log.Printf("Successfully connected to chain %d", chainID)
 	}
 	return clients, nil
 }

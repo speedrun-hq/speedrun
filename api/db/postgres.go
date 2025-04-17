@@ -1135,7 +1135,7 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 		)
 		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
 			   intent_fee, status, created_at, updated_at, 
-			   COALESCE(MAX(total_count), 0) AS total_count 
+			   total_count 
 		FROM data
 	`)
 	if err != nil {
@@ -1155,7 +1155,7 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 		)
 		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
 			   intent_fee, status, created_at, updated_at, 
-			   COALESCE(MAX(total_count), 0) AS total_count 
+			   total_count
 		FROM data
 	`)
 	if err != nil {
@@ -1175,7 +1175,7 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 		)
 		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
 			   intent_fee, status, created_at, updated_at, 
-			   COALESCE(MAX(total_count), 0) AS total_count 
+			   total_count
 		FROM data
 	`)
 	if err != nil {
@@ -1195,7 +1195,7 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 		)
 		SELECT id, source_chain, destination_chain, token, amount, recipient, sender, 
 			   intent_fee, status, created_at, updated_at, 
-			   COALESCE(MAX(total_count), 0) AS total_count 
+			   total_count
 		FROM data
 	`)
 	if err != nil {
@@ -1212,7 +1212,7 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 			LIMIT $1 OFFSET $2
 		)
 		SELECT id, asset, amount, receiver, tx_hash, created_at, updated_at,
-			   COALESCE(MAX(total_count), 0) AS total_count
+			   total_count
 		FROM data
 	`)
 	if err != nil {
@@ -1231,7 +1231,7 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 		)
 		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount,
 			   paid_tip, tx_hash, created_at, updated_at,
-			   COALESCE(MAX(total_count), 0) AS total_count
+			   total_count
 		FROM data
 	`)
 	if err != nil {
