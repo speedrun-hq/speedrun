@@ -24,9 +24,13 @@ const WarningBanner: React.FC = () => {
                 clipRule="evenodd"
               />
             </svg>
-            <span className="font-bold">WARNING: You're using a live alpha.</span>
+            <span className="font-bold">
+              WARNING: You're using a live alpha.
+            </span>
           </div>
-          <span>Smart contracts have not been audited. Use at your own risk.</span>
+          <span>
+            Smart contracts have not been audited. Use at your own risk.
+          </span>
           <span>Some features may be unstable as we ship updates quickly.</span>
         </div>
         <button
