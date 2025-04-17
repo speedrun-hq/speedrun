@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -45,14 +44,6 @@ func NewEventCatchupService(intentServices map[uint64]*IntentService, fulfillmen
 func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	log.Println("Starting event catchup service")
 
-	// Define timeouts and retry settings
-	const (
-		phaseTimeout     = 5 * time.Minute  // Max time to wait for each phase
-		operationTimeout = 30 * time.Second // Max time for individual operations
-		maxRetries       = 3                // Max retries for failed operations
-		retryBackoff     = 5 * time.Second  // Backoff between retries
-	)
-
 	// Load config
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -69,12 +60,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	s.mu.Lock()
 	for chainID := range s.intentServices {
 		log.Printf("Initializing intent progress tracking for chain %d", chainID)
-
-		// Add timeout for database operation
-		dbCtx, dbCancel := context.WithTimeout(ctx, operationTimeout)
-		lastBlock, err := s.db.GetLastProcessedBlock(dbCtx, chainID)
-		dbCancel()
-
+		lastBlock, err := s.db.GetLastProcessedBlock(ctx, chainID)
 		if err != nil {
 			s.mu.Unlock()
 			return fmt.Errorf("failed to get last processed block for chain %d: %v", chainID, err)
@@ -89,67 +75,24 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	}
 	s.mu.Unlock()
 
-	// Get current block numbers for all chains with retries
+	// Get current block numbers for all chains
 	currentBlocks := make(map[uint64]uint64)
 	for chainID, intentService := range s.intentServices {
-		var currentBlock uint64
-		var blockErr error
-
-		// Retry block number query with exponential backoff
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			blockCtx, blockCancel := context.WithTimeout(ctx, operationTimeout)
-			currentBlock, blockErr = intentService.client.BlockNumber(blockCtx)
-			blockCancel()
-
-			if blockErr == nil {
-				break // Success
-			}
-
-			// If this is not the last attempt, wait before retrying
-			if attempt < maxRetries-1 {
-				retryDelay := retryBackoff * time.Duration(attempt+1)
-				log.Printf("Failed to get current block for chain %d (attempt %d/%d): %v. Retrying in %v...",
-					chainID, attempt+1, maxRetries, blockErr, retryDelay)
-				time.Sleep(retryDelay)
-			}
+		currentBlock, err := intentService.client.BlockNumber(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get current block number for chain %d: %v", chainID, err)
 		}
-
-		if blockErr != nil {
-			log.Printf("ERROR: Failed to get current block for chain %d after %d attempts: %v",
-				chainID, maxRetries, blockErr)
-			continue // Skip this chain but continue with others
-		}
-
 		currentBlocks[chainID] = currentBlock
 	}
-
-	if len(currentBlocks) == 0 {
-		return fmt.Errorf("failed to get current block number for any chain")
-	}
-
-	// INTENT PHASE
-	log.Printf("Starting intent catch-up phase")
 
 	// Create a wait group to track all intent catch-up goroutines
 	var intentWg sync.WaitGroup
 	intentErrors := make(chan error, len(s.intentServices))
 
-	// Create a context with timeout for intent phase
-	intentCtx, intentCancel := context.WithTimeout(ctx, phaseTimeout)
-	defer intentCancel()
-
-	// Create a done channel to signal completion
-	intentDone := make(chan struct{})
-
 	// Start intent catch-up for all chains in parallel
 	for chainID, intentService := range s.intentServices {
-		currentBlock, ok := currentBlocks[chainID]
-		if !ok {
-			log.Printf("Skipping intent catch-up for chain %d: couldn't get current block", chainID)
-			continue
-		}
-
 		lastBlock := s.intentProgress[chainID]
+		currentBlock := currentBlocks[chainID]
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 		if lastBlock >= currentBlock {
@@ -164,7 +107,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 			log.Printf("Starting intent event catch-up for chain %d (blocks %d to %d)",
 				chainID, lastBlock+1, currentBlock)
 
-			if err := s.catchUpOnIntentEvents(intentCtx, intentService, contractAddress, lastBlock, currentBlock); err != nil {
+			if err := s.catchUpOnIntentEvents(ctx, intentService, contractAddress, lastBlock, currentBlock); err != nil {
 				intentErrors <- fmt.Errorf("failed to catch up on intent events for chain %d: %v", chainID, err)
 				return
 			}
@@ -175,48 +118,30 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		}(chainID, intentService, lastBlock, currentBlock)
 	}
 
-	// Wait for all intent catch-ups to complete with timeout
+	// Wait for all intent catch-ups to complete
 	go func() {
 		intentWg.Wait()
-		close(intentDone)
+		close(intentErrors)
 	}()
 
-	// Wait for completion or timeout
-	select {
-	case <-intentDone:
-		log.Printf("All intent catch-up tasks completed")
-	case <-intentCtx.Done():
-		log.Printf("WARNING: Intent catch-up phase timed out after %v, proceeding to next phase anyway", phaseTimeout)
-	}
-
-	// Drain errors channel
-	close(intentErrors)
-	errCount := 0
+	// Check for any errors from intent catch-ups
 	for err := range intentErrors {
-		errCount++
-		log.Printf("Error during intent catch-up: %v", err)
+		if err != nil {
+			log.Printf("Error during intent catch-up: %v", err)
+		}
 	}
 
-	if errCount > 0 {
-		log.Printf("WARNING: %d errors occurred during intent catch-up phase", errCount)
-	}
+	log.Printf("All intent services have completed catch-up")
 
-	log.Printf("Intent catch-up phase completed, proceeding to fulfillment phase")
-
-	// FULFILLMENT PHASE
 	log.Printf("Starting fulfillment catch-up")
 
 	// Initialize progress tracking for all chains
 	s.mu.Lock()
 	for chainID := range s.fulfillmentServices {
-		dbCtx, dbCancel := context.WithTimeout(ctx, operationTimeout)
-		lastBlock, err := s.db.GetLastProcessedBlock(dbCtx, chainID)
-		dbCancel()
-
+		lastBlock, err := s.db.GetLastProcessedBlock(ctx, chainID)
 		if err != nil {
 			s.mu.Unlock()
-			log.Printf("WARNING: Failed to get last processed block for chain %d: %v", chainID, err)
-			continue // Skip this chain but continue with others
+			return fmt.Errorf("failed to get last processed block for chain %d: %v", chainID, err)
 		}
 		if lastBlock < cfg.ChainConfigs[chainID].DefaultBlock {
 			lastBlock = cfg.ChainConfigs[chainID].DefaultBlock
@@ -225,26 +150,15 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	}
 	s.mu.Unlock()
 
-	// Create context with timeout for fulfillment phase
-	fulfillmentCtx, fulfillmentCancel := context.WithTimeout(ctx, phaseTimeout)
-	defer fulfillmentCancel()
-
 	var fulfillmentWg sync.WaitGroup
 	fulfillmentErrors := make(chan error, len(s.fulfillmentServices))
-	fulfillmentDone := make(chan struct{})
 
 	for chainID, fulfillmentService := range s.fulfillmentServices {
-		currentBlock, ok := currentBlocks[chainID]
-		if !ok {
-			log.Printf("Skipping fulfillment catch-up for chain %d: couldn't get current block", chainID)
-			continue
-		}
-
 		lastBlock := s.fulfillmentProgress[chainID]
+		currentBlock := currentBlocks[chainID]
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
-
 		if lastBlock >= currentBlock {
-			log.Printf("No missed fulfillment events to process for chain %d", chainID)
+			log.Printf("No missed events to process for chain %d", chainID)
 			continue
 		}
 
@@ -255,7 +169,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 			log.Printf("Starting fulfillment event catch-up for chain %d (blocks %d to %d)",
 				chainID, lastBlock+1, currentBlock)
 
-			if err := s.catchUpOnFulfillmentEvents(fulfillmentCtx, fulfillmentService, contractAddress, lastBlock, currentBlock); err != nil {
+			if err := s.catchUpOnFulfillmentEvents(ctx, fulfillmentService, contractAddress, lastBlock, currentBlock); err != nil {
 				fulfillmentErrors <- fmt.Errorf("failed to catch up on fulfillment events for chain %d: %v", chainID, err)
 				return
 			}
@@ -266,48 +180,30 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		}(chainID, fulfillmentService, lastBlock, currentBlock)
 	}
 
-	// Wait for all fulfillment catch-ups to complete with timeout
+	// Wait for all fulfillment catch-ups to complete
 	go func() {
 		fulfillmentWg.Wait()
-		close(fulfillmentDone)
+		close(fulfillmentErrors)
 	}()
 
-	// Wait for completion or timeout
-	select {
-	case <-fulfillmentDone:
-		log.Printf("All fulfillment catch-up tasks completed")
-	case <-fulfillmentCtx.Done():
-		log.Printf("WARNING: Fulfillment catch-up phase timed out after %v, proceeding to next phase anyway", phaseTimeout)
-	}
-
-	// Drain errors channel
-	close(fulfillmentErrors)
-	errCount = 0
+	// Check for any errors from fulfillment catch-ups
 	for err := range fulfillmentErrors {
-		errCount++
-		log.Printf("Error during fulfillment catch-up: %v", err)
+		if err != nil {
+			log.Printf("Error during fulfillment catch-up: %v", err)
+		}
 	}
 
-	if errCount > 0 {
-		log.Printf("WARNING: %d errors occurred during fulfillment catch-up phase", errCount)
-	}
+	log.Printf("All fulfillment services have completed catch-up")
 
-	log.Printf("Fulfillment catch-up phase completed, proceeding to settlement phase")
-
-	// SETTLEMENT PHASE
 	log.Printf("Starting settlement catch-up")
 
 	// Initialize progress tracking for all chains
 	s.mu.Lock()
 	for chainID := range s.settlementServices {
-		dbCtx, dbCancel := context.WithTimeout(ctx, operationTimeout)
-		lastBlock, err := s.db.GetLastProcessedBlock(dbCtx, chainID)
-		dbCancel()
-
+		lastBlock, err := s.db.GetLastProcessedBlock(ctx, chainID)
 		if err != nil {
 			s.mu.Unlock()
-			log.Printf("WARNING: Failed to get last processed block for chain %d: %v", chainID, err)
-			continue // Skip this chain but continue with others
+			return fmt.Errorf("failed to get last processed block for chain %d: %v", chainID, err)
 		}
 		if lastBlock < cfg.ChainConfigs[chainID].DefaultBlock {
 			lastBlock = cfg.ChainConfigs[chainID].DefaultBlock
@@ -316,26 +212,15 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	}
 	s.mu.Unlock()
 
-	// Create context with timeout for settlement phase
-	settlementCtx, settlementCancel := context.WithTimeout(ctx, phaseTimeout)
-	defer settlementCancel()
-
 	var settlementWg sync.WaitGroup
 	settlementErrors := make(chan error, len(s.settlementServices))
-	settlementDone := make(chan struct{})
 
 	for chainID, settlementService := range s.settlementServices {
-		currentBlock, ok := currentBlocks[chainID]
-		if !ok {
-			log.Printf("Skipping settlement catch-up for chain %d: couldn't get current block", chainID)
-			continue
-		}
-
 		lastBlock := s.settlementProgress[chainID]
+		currentBlock := currentBlocks[chainID]
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
-
 		if lastBlock >= currentBlock {
-			log.Printf("No missed settlement events to process for chain %d", chainID)
+			log.Printf("No missed events to process for chain %d", chainID)
 			continue
 		}
 
@@ -346,7 +231,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 			log.Printf("Starting settlement event catch-up for chain %d (blocks %d to %d)",
 				chainID, lastBlock+1, currentBlock)
 
-			if err := s.catchUpOnSettlementEvents(settlementCtx, settlementService, contractAddress, lastBlock, currentBlock); err != nil {
+			if err := s.catchUpOnSettlementEvents(ctx, settlementService, contractAddress, lastBlock, currentBlock); err != nil {
 				settlementErrors <- fmt.Errorf("failed to catch up on settlement events for chain %d: %v", chainID, err)
 				return
 			}
@@ -357,57 +242,29 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		}(chainID, settlementService, lastBlock, currentBlock)
 	}
 
-	// Wait for all settlement catch-ups to complete with timeout
+	// Wait for all settlement catch-ups to complete
 	go func() {
 		settlementWg.Wait()
-		close(settlementDone)
+		close(settlementErrors)
 	}()
 
-	// Wait for completion or timeout
-	select {
-	case <-settlementDone:
-		log.Printf("All settlement catch-up tasks completed")
-	case <-settlementCtx.Done():
-		log.Printf("WARNING: Settlement catch-up phase timed out after %v, proceeding anyway", phaseTimeout)
-	}
-
-	// Drain errors channel
-	close(settlementErrors)
-	errCount = 0
+	// Check for any errors from settlement catch-ups
 	for err := range settlementErrors {
-		errCount++
-		log.Printf("Error during settlement catch-up: %v", err)
-	}
-
-	if errCount > 0 {
-		log.Printf("WARNING: %d errors occurred during settlement catch-up phase", errCount)
-	}
-
-	log.Printf("All catch-up phases have completed, updating last processed blocks")
-
-	// Update last processed blocks for all chains only after all services have completed
-	for chainID, currentBlock := range currentBlocks {
-		dbCtx, dbCancel := context.WithTimeout(ctx, operationTimeout)
-		err := s.db.UpdateLastProcessedBlock(dbCtx, chainID, currentBlock)
-		dbCancel()
-
 		if err != nil {
-			log.Printf("WARNING: Failed to update last processed block for chain %d: %v", chainID, err)
-			// Continue anyway
+			log.Printf("Error during settlement catch-up: %v", err)
 		}
 	}
 
-	log.Printf("Starting real-time event subscriptions")
+	log.Printf("All settlement services have completed catch-up")
 
-	// SUBSCRIPTION PHASE - Start live event listeners for each chain
-	// Setup a timeout for the subscription phase
-	subCtx, subCancel := context.WithTimeout(ctx, operationTimeout)
-	defer subCancel()
+	// Update last processed blocks for all chains only after all services have completed
+	for chainID, currentBlock := range currentBlocks {
+		if err := s.db.UpdateLastProcessedBlock(ctx, chainID, currentBlock); err != nil {
+			return fmt.Errorf("failed to update last processed block for chain %d: %v", chainID, err)
+		}
+	}
 
-	errCount = 0
-	successCount := 0
-
-	// Start intent event listeners
+	// Start live event intentlisteners for each chain
 	for chainID, intentService := range s.intentServices {
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 		log.Printf("Starting intent event listener for chain %d at contract %s",
@@ -420,36 +277,17 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 			},
 		}
 
-		// Set up the subscription with retries
-		var intentSub ethereum.Subscription
-		var subErr error
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			intentLogs := make(chan types.Log)
-			intentSub, subErr = intentService.client.SubscribeFilterLogs(subCtx, intentQuery, intentLogs)
-
-			if subErr == nil {
-				log.Printf("Successfully subscribed to intent events for chain %d", chainID)
-				successCount++
-				go intentService.processEventLogs(ctx, intentSub, intentLogs)
-				break
-			}
-
-			// If not last attempt, wait and retry
-			if attempt < maxRetries-1 {
-				retryDelay := retryBackoff * time.Duration(attempt+1)
-				log.Printf("WARNING: Failed to subscribe to intent logs for chain %d (attempt %d/%d): %v. Retrying in %v...",
-					chainID, attempt+1, maxRetries, subErr, retryDelay)
-				time.Sleep(retryDelay)
-			} else {
-				log.Printf("ERROR: Failed to subscribe to intent logs for chain %d after %d attempts: %v",
-					chainID, maxRetries, subErr)
-				errCount++
-			}
+		intentLogs := make(chan types.Log)
+		intentSub, err := intentService.client.SubscribeFilterLogs(ctx, intentQuery, intentLogs)
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to intent logs for chain %d: %v", chainID, err)
 		}
+		log.Printf("Successfully subscribed to intent events for chain %d", chainID)
+
+		go intentService.processEventLogs(ctx, intentSub, intentLogs)
 	}
 
-	// Start fulfillment event listeners
+	// Start live event fulfillment listeners for each chain
 	for chainID, fulfillmentService := range s.fulfillmentServices {
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 		fulfillmentQuery := ethereum.FilterQuery{
@@ -459,36 +297,16 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 			},
 		}
 
-		// Set up the subscription with retries
-		var fulfillmentSub ethereum.Subscription
-		var subErr error
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			fulfillmentLogs := make(chan types.Log)
-			fulfillmentSub, subErr = fulfillmentService.client.SubscribeFilterLogs(subCtx, fulfillmentQuery, fulfillmentLogs)
-
-			if subErr == nil {
-				log.Printf("Successfully subscribed to fulfillment events for chain %d", chainID)
-				successCount++
-				go fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs)
-				break
-			}
-
-			// If not last attempt, wait and retry
-			if attempt < maxRetries-1 {
-				retryDelay := retryBackoff * time.Duration(attempt+1)
-				log.Printf("WARNING: Failed to subscribe to fulfillment logs for chain %d (attempt %d/%d): %v. Retrying in %v...",
-					chainID, attempt+1, maxRetries, subErr, retryDelay)
-				time.Sleep(retryDelay)
-			} else {
-				log.Printf("ERROR: Failed to subscribe to fulfillment logs for chain %d after %d attempts: %v",
-					chainID, maxRetries, subErr)
-				errCount++
-			}
+		fulfillmentLogs := make(chan types.Log)
+		fulfillmentSub, err := fulfillmentService.client.SubscribeFilterLogs(ctx, fulfillmentQuery, fulfillmentLogs)
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to fulfillment logs for chain %d: %v", chainID, err)
 		}
+
+		go fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs)
 	}
 
-	// Start settlement event listeners
+	// Start live event settlement listeners for each chain
 	for chainID, settlementService := range s.settlementServices {
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 		settlementQuery := ethereum.FilterQuery{
@@ -498,39 +316,14 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 			},
 		}
 
-		// Set up the subscription with retries
-		var settlementSub ethereum.Subscription
-		var subErr error
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			settlementLogs := make(chan types.Log)
-			settlementSub, subErr = settlementService.client.SubscribeFilterLogs(subCtx, settlementQuery, settlementLogs)
-
-			if subErr == nil {
-				log.Printf("Successfully subscribed to settlement events for chain %d", chainID)
-				successCount++
-				go settlementService.processEventLogs(ctx, settlementSub, settlementLogs)
-				break
-			}
-
-			// If not last attempt, wait and retry
-			if attempt < maxRetries-1 {
-				retryDelay := retryBackoff * time.Duration(attempt+1)
-				log.Printf("WARNING: Failed to subscribe to settlement logs for chain %d (attempt %d/%d): %v. Retrying in %v...",
-					chainID, attempt+1, maxRetries, subErr, retryDelay)
-				time.Sleep(retryDelay)
-			} else {
-				log.Printf("ERROR: Failed to subscribe to settlement logs for chain %d after %d attempts: %v",
-					chainID, maxRetries, subErr)
-				errCount++
-			}
+		settlementLogs := make(chan types.Log)
+		settlementSub, err := settlementService.client.SubscribeFilterLogs(ctx, settlementQuery, settlementLogs)
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to settlement logs for chain %d: %v", chainID, err)
 		}
-	}
 
-	if errCount > 0 {
-		log.Printf("WARNING: Failed to set up %d event subscriptions", errCount)
+		go settlementService.processEventLogs(ctx, settlementSub, settlementLogs)
 	}
-	log.Printf("Successfully established %d event subscriptions", successCount)
 
 	return nil
 }
@@ -643,7 +436,7 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 	// Use a max range of 5,000 blocks per query to stay well under the 10,000 limit
 	const maxBlockRange = uint64(5000)
 
-	// Process in chunks to avoid RPC provider limitations
+	// Process in chunks to avoid RPC provider l	imitations
 	for chunkStart := fromBlock; chunkStart < toBlock; chunkStart += maxBlockRange {
 		chunkEnd := chunkStart + maxBlockRange
 		if chunkEnd > toBlock {
