@@ -73,7 +73,7 @@ const config: Config = {
     footer: {
       style: 'dark',
       links: [], // No links in the footer sections
-      copyright: `<span class="footer-left">© ${new Date().getFullYear()} <a href="https://speedrun.exchange">speedrun.exchange</a></span><span class="footer-separator">|</span><span class="footer-right">powered by <a href="https://www.zetachain.com/" target="_blank" rel="noopener noreferrer">zetachain</a></span>`,
+      copyright: `<span class="footer-left">© ${new Date().getFullYear()} <a href="https://speedrun.exchange">speedrun</a></span><span class="footer-separator">|</span><span class="footer-right">powered by <a href="https://www.zetachain.com/" target="_blank" rel="noopener noreferrer">zetachain</a></span>`,
     },
     prism: {
       theme: prismThemes.dracula, // Arcade-friendly dark theme

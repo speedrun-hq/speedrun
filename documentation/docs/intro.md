@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Introduction
 
-## What is Speedrun?
+## What is Speedrun
 
 Speedrun is an intent settlement protocol focused on delivering blazing fast cross-chain transactions while maintaining strong security.
 
