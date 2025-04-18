@@ -44,7 +44,7 @@ contract IntentCreator {
     address arbitrumIntent = 0xD6B0E2a8D115cCA2823c5F80F8416644F3970dD2;
 
     IIntent(arbitrumIntent).initiate(
-      0xaf88d065e77c8cc2239327c5edb3a432268e5831,   // USDC on Base
+      0xaf88d065e77c8cc2239327c5edb3a432268e5831,   // USDC on Arbitrum
       1_000e6,                                      // Amount: 1000 tokens
       8453,                                         // Destination chain ID (here: Base)
       abi.encodePacked(msg.sender),                 // Receiver (as bytes)
