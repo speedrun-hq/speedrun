@@ -14,7 +14,26 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
  */
 const sidebars: SidebarsConfig = {
   // By default, Docusaurus generates a sidebar from the docs folder structure
-  tutorialSidebar: ['intro'],
+  tutorialSidebar: [
+    'intro',
+    {
+      type: 'category',
+      label: 'Developers',
+      items: [
+        'initiate-intent',
+        'handle-intent',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Fulfillers',
+      items: [
+        'fulfill-intents',
+      ],
+    },
+    'contract-addresses',
+    'terminology',
+  ],
 };
 
 export default sidebars;

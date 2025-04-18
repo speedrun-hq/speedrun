@@ -15,6 +15,11 @@
   --ifm-color-primary-lightest: #94ecb7;
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  
+  /* Smaller heading sizes */
+  --ifm-h1-font-size: 1.5rem;
+  --ifm-h2-font-size: 1.2rem;
+  --ifm-h3-font-size: 1rem;
 }
 
 /* Force dark theme with black background */
@@ -46,6 +51,30 @@ body {
   --ifm-menu-color-background-active: #111 !important; /* Slightly lighter active menu item */
   --ifm-card-background-color: #000000 !important; /* Black card backgrounds */
   --ifm-toc-border-color: #222 !important; /* Darker border for table of contents */
+}
+
+/* Adjust heading sizes and line heights */
+h1 {
+  font-size: var(--ifm-h1-font-size) !important;
+  line-height: 1.3;
+  margin-top: 1.2rem;
+  margin-bottom: 0.8rem;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: var(--ifm-h2-font-size) !important;
+  line-height: 1.3;
+  margin-top: 1rem;
+  margin-bottom: 0.6rem;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: var(--ifm-h3-font-size) !important;
+  line-height: 1.3;
+  margin-top: 0.8rem;
+  margin-bottom: 0.4rem;
 }
 
 /* Force black background on all major containers */
@@ -131,4 +160,105 @@ html[data-theme='dark'] footer {
 .footer__copyright a {
   color: #4ade80 !important;
   text-decoration: none;
+}
+
+/* Address list styling - one chain per line */
+.address-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+  width: 100%;
+}
+
+.address-row {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid #222;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.address-row:hover {
+  background-color: #0a0a0a;
+  box-shadow: 0 0 5px rgba(74, 222, 128, 0.2);
+}
+
+.network-label {
+  font-family: 'Press Start 2P', cursive;
+  color: #4ade80;
+  font-size: 0.8rem;
+  min-width: 120px;
+  margin-right: 1rem;
+}
+
+.address-block {
+  font-family: monospace;
+  color: #ffffff;
+  background-color: #111;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  display: inline-block;
+  width: auto;
+  flex-grow: 0;
+  user-select: all;
+  white-space: nowrap;
+  border: 1px solid #333;
+}
+
+/* Terminology page styling */
+.terminology-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.term-container {
+  background-color: #111;
+  border-radius: 4px;
+  border: 1px solid #333;
+  padding: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.term-container:hover {
+  border-color: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.2);
+}
+
+.term {
+  font-family: 'Press Start 2P', cursive;
+  color: #4ade80;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #222;
+}
+
+.definition {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #eee;
+}
+
+/* Responsive layout for smaller screens */
+@media (max-width: 768px) {
+  .address-row {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1rem 0.5rem;
+  }
+  
+  .network-label {
+    margin-bottom: 0.5rem;
+    margin-right: 0;
+  }
+  
+  .address-block {
+    width: auto;
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
 }

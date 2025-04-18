@@ -2,7 +2,7 @@
 sidebar_position: 1
 ---
 
-# Welcome
+# Introduction
 
 ## What is Speedrun?
 
