@@ -4,6 +4,8 @@
 
 *coming soon*
 
-Currently Speedrun only support token transfers without receive handling on the destination chain.
+Currently, Speedrun only supports simple token transfers without any handling logic on the destination chain.
 
-In the future, the ability to define callback on the destination chain will be supported.
+In the future, support for customizable callbacks on the destination chain will be introduced, allowing developers to define specific logic to be executed upon receipt.
+
+Example: executing a trade on a destination chain DEX.
