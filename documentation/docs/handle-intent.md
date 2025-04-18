@@ -1,9 +1,9 @@
 # Handle an Intent
 
-
-This page will explain how to handle an intent on Speedrun.
-
 ## Overview
 
-*Content coming soon*
+*coming soon*
 
+Currently Speedrun only support token transfers without receive handling on the destination chain.
+
+In the future, the ability to define callback on the destination chain will be supported.
