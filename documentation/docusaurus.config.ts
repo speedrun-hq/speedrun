@@ -78,6 +78,7 @@ const config: Config = {
     prism: {
       theme: prismThemes.dracula, // Arcade-friendly dark theme
       darkTheme: prismThemes.dracula,
+      additionalLanguages: ['solidity'],
     },
   } satisfies Preset.ThemeConfig,
 };

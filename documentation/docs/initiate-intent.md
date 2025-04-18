@@ -25,28 +25,36 @@ Creates a new intent for cross-chain transfer:
 
 ## Example
 
+Transferring 1000 USDC from Arbitrum to Base.
+
 ```solidity
 interface IIntent {
-    function initiate(
-        address asset,
-        uint256 amount,
-        uint256 targetChain,
-        bytes calldata receiver,
-        uint256 tip,
-        uint256 salt
-    ) external;
+  function initiate(
+    address asset,
+    uint256 amount,
+    uint256 targetChain,
+    bytes calldata receiver,
+    uint256 tip,
+    uint256 salt
+  ) external;
 }
 
-contract IntentCaller {
-    function createIntent(address intentContract) external {
-        IIntent(intentContract).initiate(
-            0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, // Token address (placeholder)
-            1_000e18,                                   // Amount: 1000 tokens
-            7000,                                       // Destination chain ID
-            abi.encodePacked(msg.sender),               // Receiver (as bytes)
-            10e18,                                      // Tip for fulfiller
-            42                                          // Fixed salt value
-        );
-    }
+contract IntentCreator {
+  function createIntent() external {
+    address arbitrumIntent = 0xD6B0E2a8D115cCA2823c5F80F8416644F3970dD2;
+
+    IIntent(arbitrumIntent).initiate(
+      0xaf88d065e77c8cc2239327c5edb3a432268e5831,   // USDC on Base
+      1_000e6,                                      // Amount: 1000 tokens
+      8453,                                         // Destination chain ID (here: Base)
+      abi.encodePacked(msg.sender),                 // Receiver (as bytes)
+      3e6,                                          // Tip for fulfiller
+      42                                            // Fixed salt value
+    );
+  }
 }
 ```
+
+## Fetch the Intent
+
+*Coming soon*
