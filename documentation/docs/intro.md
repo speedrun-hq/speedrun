@@ -6,15 +6,11 @@ sidebar_position: 1
 
 ## What is Speedrun
 
-Speedrun is an intent settlement protocol focused on delivering blazing fast cross-chain transactions while maintaining strong security.
-
-Built on ZetaChain's interoperability layer, Speedrun leverages this foundation to enable rapid token transfers between different blockchains without compromising on security.
-
-The platform's "speedrunner" mechanism creates a competitive environment where liquidity providers race to fulfill transfer intents as quickly as possible, dramatically reducing wait times compared to traditional cross-chain solutions.
+Speedrun is an intent settlement protocol focused on delivering blazing fast cross-chain transactions while maintaining strong security. Built on ZetaChain's interoperability layer, Speedrun leverages this foundation to enable rapid token transfers between different blockchains without compromising on security.
 
 ## Why Speedrun
 
-ZetaChain architecture ensures trustlessness and robust security but this architecture introduces higher latency compared to centralized bridges. Speedrun introduces intent-based execution, turning latency into a market opportunity. ZetaChain’s high reliability makes it a safe and predictable foundation for third-party fulfillers to earn fees with low risk
+ZetaChain architecture ensures trustlessness and robust security but this architecture might introduce higher latency compared to centralized bridges. Speedrun introduces intent-based execution, turning latency into a market opportunity. ZetaChain’s high reliability makes it a safe and predictable foundation for third-party fulfillers to earn fees with low risk
 
 ## Features
 
