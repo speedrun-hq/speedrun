@@ -15,6 +15,9 @@ import Link from "next/link";
 export default function CreateNewIntent() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { address } = useAccount();
+  
+  // Temporary transfer limit during alpha phase - only supports USDC for now
+  const MAX_TRANSFER_AMOUNT = 10;
 
   const {
     formState,
@@ -126,12 +129,19 @@ export default function CreateNewIntent() {
                 onChange={updateAmount}
                 placeholder="0.00"
                 disabled={formState.isSubmitting}
-                max={balance}
+                max={balance && parseFloat(balance) < MAX_TRANSFER_AMOUNT ? balance : MAX_TRANSFER_AMOUNT.toString()}
                 step="0.01"
               />
-              <p className="mt-2 text-[#00ff00] text-[10px] arcade-text opacity-80">
-                fee: {formState.tip || "0.01"} {symbol}
-              </p>
+              <div className="mt-2 flex flex-col">
+                <p className="text-[#00ff00] text-[10px] arcade-text opacity-80">
+                  fee: {formState.tip || "0.01"} {symbol}
+                </p>
+                {formState.amount && parseFloat(formState.amount) > MAX_TRANSFER_AMOUNT && (
+                  <p className="text-red-500 text-[10px] arcade-text mt-1">
+                    Transfers are currently limited to {MAX_TRANSFER_AMOUNT} {symbol}
+                  </p>
+                )}
+              </div>
             </div>
 
             {formState.error && (
@@ -199,7 +209,8 @@ export default function CreateNewIntent() {
             disabled={
               !isConnected ||
               (!isValid && !formState.success) ||
-              formState.isSubmitting
+              formState.isSubmitting ||
+              (formState.amount && parseFloat(formState.amount) > MAX_TRANSFER_AMOUNT ? true : false)
             }
             className="w-full arcade-btn bg-yellow-500 text-black hover:bg-yellow-400 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={
