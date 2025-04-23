@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 // Animation frames for the jumping celebration
 const celebrationFrames = [
@@ -27,15 +27,16 @@ const celebrationFrames = [
 // Ground pattern
 const groundPattern = "___.___.___.___.___.___.___.___.___.___.";
 
-interface CompletedAnimationProps {}
+// No props needed
+type CompletedAnimationProps = Record<string, never>;
 
-const CompletedAnimation: React.FC<CompletedAnimationProps> = ({}) => {
+const CompletedAnimation: React.FC<CompletedAnimationProps> = () => {
   const [frameIndex, setFrameIndex] = useState(0);
   const requestRef = useRef<number>();
   const previousTimeRef = useRef<number>();
 
   // Animation frame
-  const animate = (time: number) => {
+  const animate = useCallback((time: number) => {
     if (previousTimeRef.current === undefined) {
       previousTimeRef.current = time;
     }
@@ -49,7 +50,7 @@ const CompletedAnimation: React.FC<CompletedAnimationProps> = ({}) => {
     }
 
     requestRef.current = requestAnimationFrame(animate);
-  };
+  }, []);
 
   // Animation loop
   useEffect(() => {
@@ -59,7 +60,7 @@ const CompletedAnimation: React.FC<CompletedAnimationProps> = ({}) => {
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, []);
+  }, [animate]);
 
   return (
     <div className="flex flex-col items-center my-4 w-full">

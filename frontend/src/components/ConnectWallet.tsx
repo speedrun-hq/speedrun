@@ -48,7 +48,7 @@ export function ConnectWallet() {
                     type="button"
                     className="arcade-btn-sm border-red-500 text-red-500 hover:bg-red-500 hover:text-black transition-all duration-200 arcade-text text-xs min-w-[120px] justify-center"
                   >
-                    WRONG NETWORK
+                    SWITCH NETWORK
                   </button>
                 );
               }
@@ -60,21 +60,22 @@ export function ConnectWallet() {
                     type="button"
                     className="flex items-center arcade-btn-sm border-primary-500 text-primary-500 hover:bg-primary-500 hover:text-black transition-all duration-200 arcade-text text-xs px-2 py-1"
                   >
-                    {chain.hasIcon && (
+                    {chain.hasIcon && chain.iconUrl ? (
                       <div
                         className="w-4 h-4 rounded-full overflow-hidden mr-1 flex items-center justify-center"
-                        style={{ background: chain.iconBackground }}
+                        style={{
+                          background: chain.iconBackground || "transparent",
+                          marginRight: "4px",
+                        }}
                       >
-                        {chain.iconUrl && (
-                          <img
-                            alt={chain.name ?? "Chain icon"}
-                            src={chain.iconUrl}
-                            className="w-3 h-3"
-                          />
-                        )}
+                        <img
+                          alt={chain.name ?? "Chain icon"}
+                          src={chain.iconUrl}
+                          className="w-3 h-3"
+                        />
                       </div>
-                    )}
-                    {chain.name}
+                    ) : null}
+                    {chain.name || "Unknown Network"}
                   </button>
 
                   <button

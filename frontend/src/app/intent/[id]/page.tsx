@@ -6,7 +6,7 @@ import { apiService } from "@/services/api";
 import { Intent, Fulfillment, CHAIN_ID_TO_NAME } from "@/types";
 import Link from "next/link";
 import { getExplorerUrl } from "@/utils/chain";
-import { TOKENS } from "@/constants/tokens";
+import { TOKENS } from "@/config/chainConfig";
 
 export default function IntentPage() {
   const { id } = useParams();

@@ -1,4 +1,4 @@
-import { TOKENS } from "@/constants/tokens";
+import { TOKENS } from "@/config/chainConfig";
 
 /**
  * Truncate long strings (like addresses and IDs)

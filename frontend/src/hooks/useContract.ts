@@ -1,12 +1,10 @@
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "wagmi/actions";
 import { Intent as IntentContract } from "@/contracts/Intent";
-import { Intent, CHAIN_ID_TO_NAME, CHAIN_NAME_TO_ID } from "@/types";
-import { parseEther } from "viem";
+import { Intent, CHAIN_ID_TO_NAME } from "@/types";
 import { useTokenApproval } from "./useTokenApproval";
-import { TOKENS } from "@/constants/tokens";
-import { useCallback, useRef, useState } from "react";
-import { Abi } from "viem";
+import { TOKENS } from "@/config/chainConfig";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { keccak256, toUtf8Bytes } from "ethers";
 
 type ContractType = {
@@ -26,7 +24,19 @@ type ContractType = {
     IntentInitiated: (args?: {
       intentId?: `0x${string}`;
       asset?: `0x${string}`;
-    }) => Promise<any>;
+    }) => Promise<{
+      id: string;
+      type: "event";
+      filter: {
+        address?: `0x${string}`;
+        topics?: (`0x${string}` | null)[];
+      };
+      eventName: string;
+      args?: {
+        intentId?: `0x${string}`;
+        asset?: `0x${string}`;
+      };
+    }>;
   };
 };
 
@@ -34,13 +44,13 @@ export function useContract() {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-  const { approveToken, isLoadingAllowance } = useTokenApproval();
+  const { approveToken } = useTokenApproval();
   const isMounted = useRef(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Cleanup on unmount
-  useCallback(() => {
+  useEffect(() => {
     return () => {
       isMounted.current = false;
     };

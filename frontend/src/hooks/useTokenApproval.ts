@@ -2,13 +2,11 @@ import {
   useAccount,
   useNetwork,
   useWalletClient,
-  useContractWrite,
-  useContractRead,
   usePublicClient,
 } from "wagmi";
 import { parseUnits, getContract } from "viem";
-import { TOKENS } from "@/constants/tokens";
-import { useState, useCallback } from "react";
+import { TOKENS } from "@/config/chainConfig";
+import { useCallback } from "react";
 import { ChainName, CHAIN_NAME_TO_ID } from "@/types";
 
 // ERC20 ABI for approve and allowance
@@ -114,6 +112,6 @@ export function useTokenApproval() {
 
   return {
     approveToken,
-    isLoadingAllowance: false,
+    // isLoadingAllowance: false,
   };
 }

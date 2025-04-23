@@ -1,11 +1,10 @@
 import { useCallback, useState, useEffect, useRef } from "react";
-import { useAccount, useBalance, useNetwork } from "wagmi";
+import { useAccount, useNetwork } from "wagmi";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { apiService } from "@/services/api";
 import { useContract } from "./useContract";
-import { TOKENS, TokenSymbol } from "@/constants/tokens";
-import { getChainId, getChainName, ChainName } from "@/utils/chain";
-import { Intent, Fulfillment } from "@/types";
+import { TOKENS, TokenSymbol } from "@/config/chainConfig";
+import { getChainId, ChainName } from "@/utils/chain";
 
 interface FormState {
   sourceChain: ChainName;
@@ -50,6 +49,46 @@ export function useIntentForm() {
   );
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
+  // Function to stop polling
+  const stopPolling = useCallback(() => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+      pollingInterval.current = null;
+    }
+  }, []);
+
+  // Function to start polling the intent status
+  const startPolling = useCallback(
+    (intentId: string) => {
+      // Clear any existing interval
+      stopPolling();
+
+      // Set initial status to pending
+      setIntentStatus("pending");
+
+      // Start a new polling interval
+      pollingInterval.current = setInterval(async () => {
+        try {
+          // Fetch the latest intent data
+          const intent = await apiService.getIntent(intentId);
+
+          // Update the status based on the intent's status
+          if (intent.status === "fulfilled" || intent.status === "settled") {
+            setIntentStatus("fulfilled");
+            // Stop polling once we've reached a terminal state
+            stopPolling();
+          } else {
+            setIntentStatus("pending");
+          }
+        } catch (error) {
+          console.error("Error polling intent status:", error);
+          // Don't stop polling on error, just try again next interval
+        }
+      }, 1500); // Poll every 1.5 seconds
+    },
+    [stopPolling],
+  );
+
   // Start polling when we have an intentId and success is true
   useEffect(() => {
     if (formState.success && formState.intentId) {
@@ -61,7 +100,7 @@ export function useIntentForm() {
         stopPolling();
       };
     }
-  }, [formState.success, formState.intentId]);
+  }, [formState.success, formState.intentId, startPolling, stopPolling]);
 
   // Query fulfillment when intent status changes to fulfilled
   useEffect(() => {
@@ -114,43 +153,6 @@ export function useIntentForm() {
 
     checkFulfillment();
   }, [intentStatus, formState.intentId]);
-
-  // Function to start polling the intent status
-  const startPolling = useCallback((intentId: string) => {
-    // Clear any existing interval
-    stopPolling();
-
-    // Set initial status to pending
-    setIntentStatus("pending");
-
-    // Start a new polling interval
-    pollingInterval.current = setInterval(async () => {
-      try {
-        // Fetch the latest intent data
-        const intent = await apiService.getIntent(intentId);
-
-        // Update the status based on the intent's status
-        if (intent.status === "fulfilled" || intent.status === "settled") {
-          setIntentStatus("fulfilled");
-          // Stop polling once we've reached a terminal state
-          stopPolling();
-        } else {
-          setIntentStatus("pending");
-        }
-      } catch (error) {
-        console.error("Error polling intent status:", error);
-        // Don't stop polling on error, just try again next interval
-      }
-    }, 1500); // Poll every 1.5 seconds
-  }, []);
-
-  // Function to stop polling
-  const stopPolling = useCallback(() => {
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-      pollingInterval.current = null;
-    }
-  }, []);
 
   // Get token balance
   const { balance, symbol, isLoading, isError } = useTokenBalance(

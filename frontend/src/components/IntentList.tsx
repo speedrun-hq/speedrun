@@ -15,7 +15,8 @@ const IntentList: React.FC = () => {
   const [error, setError] = useState<unknown>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  // Keeping this for future use
+  // const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     const fetchIntents = async () => {
@@ -31,7 +32,8 @@ const IntentList: React.FC = () => {
         const response = await apiService.listIntents(pagination);
         setIntents(response.data);
         setTotalPages(response.total_pages);
-        setTotalCount(response.total_count);
+        // Keeping this for future use
+        // setTotalCount(response.total_count);
       } catch (err) {
         setError(err);
       } finally {
@@ -50,24 +52,26 @@ const IntentList: React.FC = () => {
     setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev));
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "pending":
-        return "text-primary-500 border-primary-500";
-      case "completed":
-        return "text-yellow-500 border-yellow-500";
-      case "failed":
-        return "text-gray-500 border-gray-500";
-      case "cancelled":
-        return "text-gray-500 border-gray-500";
-      default:
-        return "text-gray-500 border-gray-500";
-    }
-  };
+  // Unused but might be needed in future
+  // const getStatusColor = (status: string) => {
+  //   switch (status.toLowerCase()) {
+  //     case "pending":
+  //       return "text-primary-500 border-primary-500";
+  //     case "completed":
+  //       return "text-yellow-500 border-yellow-500";
+  //     case "failed":
+  //       return "text-gray-500 border-gray-500";
+  //     case "cancelled":
+  //       return "text-gray-500 border-gray-500";
+  //     default:
+  //       return "text-gray-500 border-gray-500";
+  //   }
+  // };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
+  // Unused but might be needed in future
+  // const formatDate = (dateString: string) => {
+  //   return new Date(dateString).toLocaleString();
+  // };
 
   if (loading) {
     return (
