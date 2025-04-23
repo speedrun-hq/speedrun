@@ -80,9 +80,12 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 		case err := <-sub.Err():
 			if err != nil {
 				log.Printf("Error in subscription: %v", err)
-				if err := s.handleSubscriptionError(ctx, sub, logs); err != nil {
+				newSub, err := s.handleSubscriptionError(ctx, sub, logs)
+				if err != nil {
 					return
 				}
+				// Update the subscription and continue the loop
+				sub = newSub
 			}
 		case vLog := <-logs:
 			if err := s.processLog(ctx, vLog); err != nil {
@@ -95,7 +98,7 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 	}
 }
 
-func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log) error {
+func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log) (ethereum.Subscription, error) {
 	oldSub.Unsubscribe()
 
 	// Get the contract address from the old subscription
@@ -111,7 +114,7 @@ func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		// Check if context is cancelled
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
 
 		query := ethereum.FilterQuery{
@@ -125,8 +128,7 @@ func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub 
 		newSub, err := s.client.SubscribeFilterLogs(ctx, query, logs)
 		if err == nil {
 			log.Printf("Successfully resubscribed to settlement events for chain %d", s.chainID)
-			oldSub = newSub
-			return nil
+			return newSub, nil
 		}
 
 		// If we reach here, resubscription failed
@@ -141,11 +143,11 @@ func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub 
 		case <-time.After(backoffTime):
 			// Continue with next retry
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
 	}
 
-	return fmt.Errorf("failed to resubscribe to settlement events after %d attempts", maxRetries)
+	return nil, fmt.Errorf("failed to resubscribe to settlement events after %d attempts", maxRetries)
 }
 
 func (s *SettlementService) processLog(ctx context.Context, vLog types.Log) error {

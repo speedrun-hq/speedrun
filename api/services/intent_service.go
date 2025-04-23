@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/models"
-	"github.com/speedrun-hq/speedrun/api/models/events"
 	"github.com/speedrun-hq/speedrun/api/utils"
 )
 
@@ -305,7 +304,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	}
 
 	// Set a timeout for intent conversion
-	intentCtx, intentCancel := context.WithTimeout(ctx, 5*time.Second)
+	_, intentCancel := context.WithTimeout(ctx, 5*time.Second)
 	intent, err := event.ToIntent(client)
 	intentCancel()
 
@@ -562,75 +561,4 @@ func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain
 	}
 
 	return intent, nil
-}
-
-func (s *IntentService) processEventLogs(subscription ethereum.Subscription, logs chan types.Log, eventType string, client *ethclient.Client) {
-	// Recover from panics
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("Recovered from panic in processEventLogs: %v", r)
-			s.activeGoroutines.Add(-1)
-			return
-		}
-	}()
-
-	defer s.activeGoroutines.Add(-1)
-
-	for {
-		select {
-		case <-s.ctx.Done():
-			log.Printf("Context cancelled, stopping event logs processing for %s", eventType)
-			return
-		case err := <-subscription.Err():
-			if err != nil {
-				log.Printf("Error in subscription for %s: %v", eventType, err)
-				s.errChannel <- fmt.Errorf("subscription error for %s: %v", eventType, err)
-			}
-			return
-		case eventLog := <-logs:
-			logCtx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
-
-			// Process the event
-			start := time.Now()
-			log.Printf("Processing %s event log: %v", eventType, eventLog)
-
-			// Extract the event data
-			event, err := s.extractEventData(logCtx, eventLog)
-			if err != nil {
-				log.Printf("Error extracting event data: %v", err)
-				cancel()
-				continue
-			}
-
-			// For each event type, process accordingly
-			switch eventType {
-			case "intent":
-				intentEvent := event.(*events.IntentInitiatedEvent)
-
-				// Use the updated ToIntent method with logCtx for context
-				intent, err := intentEvent.ToIntent(client, logCtx)
-				if err != nil {
-					log.Printf("Error converting event to intent: %v", err)
-					cancel()
-					continue
-				}
-
-				// Save the intent to the database with a timeout context
-				dbCtx, dbCancel := context.WithTimeout(s.ctx, 10*time.Second)
-				err = s.db.InsertIntent(dbCtx, intent)
-				dbCancel()
-
-				if err != nil {
-					log.Printf("Error saving intent to database: %v", err)
-					cancel()
-					continue
-				}
-
-				log.Printf("Added intent to database: %s (processing time: %v)", intent.ID, time.Since(start))
-				// Additional fulfillment logic here...
-			}
-
-			cancel()
-		}
-	}
 }

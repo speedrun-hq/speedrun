@@ -284,7 +284,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		}
 		log.Printf("Successfully subscribed to intent events for chain %d", chainID)
 
-		go intentService.processEventLogs(ctx, intentSub, intentLogs)
+		go intentService.processEventLogs(ctx, intentSub, intentLogs, fmt.Sprintf("chain_%d", chainID))
 	}
 
 	// Start live event fulfillment listeners for each chain
