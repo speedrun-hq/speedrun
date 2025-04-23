@@ -63,9 +63,9 @@ export function ConnectWallet() {
                     {chain.hasIcon && chain.iconUrl ? (
                       <div
                         className="w-4 h-4 rounded-full overflow-hidden mr-1 flex items-center justify-center"
-                        style={{ 
-                          background: chain.iconBackground || 'transparent',
-                          marginRight: '4px'
+                        style={{
+                          background: chain.iconBackground || "transparent",
+                          marginRight: "4px",
                         }}
                       >
                         <img
@@ -75,7 +75,7 @@ export function ConnectWallet() {
                         />
                       </div>
                     ) : null}
-                    {chain.name || 'Unknown Network'}
+                    {chain.name || "Unknown Network"}
                   </button>
 
                   <button

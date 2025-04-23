@@ -58,33 +58,36 @@ export function useIntentForm() {
   }, []);
 
   // Function to start polling the intent status
-  const startPolling = useCallback((intentId: string) => {
-    // Clear any existing interval
-    stopPolling();
+  const startPolling = useCallback(
+    (intentId: string) => {
+      // Clear any existing interval
+      stopPolling();
 
-    // Set initial status to pending
-    setIntentStatus("pending");
+      // Set initial status to pending
+      setIntentStatus("pending");
 
-    // Start a new polling interval
-    pollingInterval.current = setInterval(async () => {
-      try {
-        // Fetch the latest intent data
-        const intent = await apiService.getIntent(intentId);
+      // Start a new polling interval
+      pollingInterval.current = setInterval(async () => {
+        try {
+          // Fetch the latest intent data
+          const intent = await apiService.getIntent(intentId);
 
-        // Update the status based on the intent's status
-        if (intent.status === "fulfilled" || intent.status === "settled") {
-          setIntentStatus("fulfilled");
-          // Stop polling once we've reached a terminal state
-          stopPolling();
-        } else {
-          setIntentStatus("pending");
+          // Update the status based on the intent's status
+          if (intent.status === "fulfilled" || intent.status === "settled") {
+            setIntentStatus("fulfilled");
+            // Stop polling once we've reached a terminal state
+            stopPolling();
+          } else {
+            setIntentStatus("pending");
+          }
+        } catch (error) {
+          console.error("Error polling intent status:", error);
+          // Don't stop polling on error, just try again next interval
         }
-      } catch (error) {
-        console.error("Error polling intent status:", error);
-        // Don't stop polling on error, just try again next interval
-      }
-    }, 1500); // Poll every 1.5 seconds
-  }, [stopPolling]);
+      }, 1500); // Poll every 1.5 seconds
+    },
+    [stopPolling],
+  );
 
   // Start polling when we have an intentId and success is true
   useEffect(() => {

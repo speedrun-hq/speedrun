@@ -14,14 +14,19 @@ const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 const alchemyId = process.env.NEXT_PUBLIC_ALCHEMY_ID;
 
 if (!projectId) {
-  console.error("Missing NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID environment variable");
+  console.error(
+    "Missing NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID environment variable",
+  );
 }
 
 if (!alchemyId) {
   console.error("Missing NEXT_PUBLIC_ALCHEMY_ID environment variable");
 }
 
-console.log("Configuring chains with Alchemy ID:", alchemyId ? "✓ Available" : "✗ Missing");
+console.log(
+  "Configuring chains with Alchemy ID:",
+  alchemyId ? "✓ Available" : "✗ Missing",
+);
 
 // Get custom chain configurations from our centralized config
 const customChains = getCustomChains(alchemyId || "demo");
@@ -36,10 +41,7 @@ providers.push(publicProvider());
 const { chains, publicClient } = configureChains(customChains, providers);
 
 // Debug logging for chain configuration
-console.log(
-  "Chains configured:",
-  chains.map((chain) => chain.name).join(", ")
-);
+console.log("Chains configured:", chains.map((chain) => chain.name).join(", "));
 
 // Configure wallet options
 const { wallets } = getDefaultWallets({

@@ -26,7 +26,7 @@ type ContractType = {
       asset?: `0x${string}`;
     }) => Promise<{
       id: string;
-      type: 'event';
+      type: "event";
       filter: {
         address?: `0x${string}`;
         topics?: (`0x${string}` | null)[];
