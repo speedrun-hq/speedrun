@@ -1,6 +1,6 @@
 import { useAccount, useContractRead, useNetwork } from "wagmi";
 import { formatUnits } from "viem";
-import { TOKENS, TokenSymbol } from "@/constants/tokens";
+import { TOKENS, TokenSymbol } from "@/config/chainConfig";
 import { ChainName, getChainId } from "@/utils/chain";
 
 // ERC20 ABI for balanceOf

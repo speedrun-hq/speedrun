@@ -1,7 +1,7 @@
 import React from "react";
 import { Intent } from "@/types";
 import Link from "next/link";
-import { getChainName } from "@/config/chains";
+import { getChainName } from "@/config/chainConfig";
 import {
   formatTokenAmount,
   getTokenSymbol,

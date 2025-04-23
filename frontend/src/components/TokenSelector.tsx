@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { TokenSymbol } from "@/constants/tokens";
+import { TokenSymbol } from "@/config/chainConfig";
 
 interface TokenSelectorProps {
   value: TokenSymbol;

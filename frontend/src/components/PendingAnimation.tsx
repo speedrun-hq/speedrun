@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 // Animation frames for a running pixel human
 const runnerFrames = [
@@ -42,7 +42,7 @@ const PendingAnimation: React.FC<PendingAnimationProps> = ({
   // const timerRef = useRef<NodeJS.Timeout>();
 
   // Animation frame
-  const animate = (time: number) => {
+  const animate = useCallback((time: number) => {
     if (previousTimeRef.current === undefined) {
       previousTimeRef.current = time;
     }
@@ -57,7 +57,7 @@ const PendingAnimation: React.FC<PendingAnimationProps> = ({
     }
 
     requestRef.current = requestAnimationFrame(animate);
-  };
+  }, []);
 
   // Timer
   // useEffect(() => {
@@ -78,7 +78,7 @@ const PendingAnimation: React.FC<PendingAnimationProps> = ({
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, []);
+  }, [animate]);
 
   // Format time as mm:ss
   // const formatTime = (totalSeconds: number) => {

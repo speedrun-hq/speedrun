@@ -1,47 +1,18 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import Image from "next/image";
 import {
   SUPPORTED_CHAINS,
   COMING_SOON_SOURCE_CHAINS,
   COMING_SOON_DESTINATION_CHAINS,
-  BITCOIN_CHAIN_ID,
-  ZETACHAIN_CHAIN_ID,
-  SOLANA_CHAIN_ID,
-} from "@/config/chains";
-import { base, arbitrum, mainnet, bsc, polygon, avalanche } from "wagmi/chains";
+  CHAIN_LOGO_MAP,
+  CHAIN_COLOR_MAP,
+} from "@/config/chainConfig";
 
 // Default border color for all selectors
 const BORDER_COLOR = "border-yellow-500";
 const SHADOW_COLOR = "shadow-yellow-500/50";
 const TEXT_COLOR = "text-yellow-500";
-
-// Chain logo mapping
-const chainLogoMap: Record<number, string> = {
-  [mainnet.id]: "/images/eth.png",
-  [bsc.id]: "/images/bnb.png",
-  [polygon.id]: "/images/pol.png",
-  [base.id]: "/images/base.png",
-  [arbitrum.id]: "/images/arb.png",
-  [avalanche.id]: "/images/ava.png",
-  [BITCOIN_CHAIN_ID]: "/images/btc.png",
-  [SOLANA_CHAIN_ID]: "/images/sol.png",
-  [ZETACHAIN_CHAIN_ID]: "/images/zeta.png",
-};
-
-// Keep color map for fallback
-const chainColorMap: Record<number, string> = {
-  [mainnet.id]: "text-gray-400",
-  [bsc.id]: "text-yellow-400",
-  [polygon.id]: "text-purple-500",
-  [base.id]: "text-blue-400",
-  [arbitrum.id]: "text-blue-600",
-  [avalanche.id]: "text-red-600",
-  [BITCOIN_CHAIN_ID]: "text-orange-500",
-  [SOLANA_CHAIN_ID]: "text-purple-400",
-  [ZETACHAIN_CHAIN_ID]: "text-green-500",
-};
 
 interface ChainSelectorProps {
   value: number;
@@ -105,15 +76,15 @@ export function ChainSelector({
       >
         <span className="flex items-center">
           {selectedChain &&
-            (chainLogoMap[selectedChain.id] ? (
+            (CHAIN_LOGO_MAP[selectedChain.id] ? (
               <img
-                src={chainLogoMap[selectedChain.id]}
+                src={CHAIN_LOGO_MAP[selectedChain.id]}
                 alt={selectedChain.name}
                 className="w-5 h-5 mr-2"
               />
             ) : (
               <span
-                className={`mr-2 inline-block text-xl leading-none ${chainColorMap[selectedChain.id]}`}
+                className={`mr-2 inline-block text-xl leading-none ${CHAIN_COLOR_MAP[selectedChain.id]}`}
               >
                 •
               </span>
@@ -140,15 +111,15 @@ export function ChainSelector({
                   chain.id === value ? "bg-black/50" : ""
                 }`}
               >
-                {chainLogoMap[chain.id] ? (
+                {CHAIN_LOGO_MAP[chain.id] ? (
                   <img
-                    src={chainLogoMap[chain.id]}
+                    src={CHAIN_LOGO_MAP[chain.id]}
                     alt={chain.name}
                     className="w-5 h-5 mr-2"
                   />
                 ) : (
                   <span
-                    className={`mr-2 inline-block text-xl leading-none ${chainColorMap[chain.id]}`}
+                    className={`mr-2 inline-block text-xl leading-none ${CHAIN_COLOR_MAP[chain.id]}`}
                   >
                     •
                   </span>
@@ -164,9 +135,9 @@ export function ChainSelector({
                 className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex items-center justify-between"
               >
                 <div className="flex items-center mr-2">
-                  {chainLogoMap[chain.id] ? (
+                  {CHAIN_LOGO_MAP[chain.id] ? (
                     <img
-                      src={chainLogoMap[chain.id]}
+                      src={CHAIN_LOGO_MAP[chain.id]}
                       alt={chain.name}
                       className="w-5 h-5 mr-2 opacity-50"
                     />

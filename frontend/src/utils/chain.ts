@@ -8,7 +8,7 @@ import {
   isValidChainId,
   getChainRpcUrl,
   getExplorerUrl,
-} from "@/config/chains";
+} from "@/config/chainConfig";
 
 export type { ChainName };
 export {
