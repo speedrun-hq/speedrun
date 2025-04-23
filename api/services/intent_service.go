@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -82,12 +83,42 @@ func (s *IntentService) ActiveGoroutines() int32 {
 // Returns:
 //   - error: Any error that occurred during setup
 func (s *IntentService) StartListening(ctx context.Context, contractAddress common.Address) error {
+	// Check if the client is a websocket client, which is necessary for subscriptions
+	clientType := reflect.TypeOf(s.client.Client()).String()
+	log.Printf("INFO: Intent service using client type: %s", clientType)
+	if !strings.Contains(strings.ToLower(clientType), "websocket") {
+		log.Printf("WARNING: Intent service may not receive real-time events because client type is %s, not websocket", clientType)
+	}
+
+	// Get current block number as a starting point to avoid processing old events
+	startBlockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	latestBlock, err := s.client.BlockNumber(startBlockCtx)
+	cancel()
+	if err != nil {
+		log.Printf("WARNING: Failed to get current block number: %v, will listen to all new blocks", err)
+	} else {
+		log.Printf("INFO: Starting intent event subscription from block %d", latestBlock)
+	}
+
+	// Configure the filter query for events
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
 			{s.abi.Events[IntentInitiatedEventName].ID},
 		},
 	}
+
+	// If we got the latest block, set it as the FromBlock to avoid processing old events
+	if err == nil {
+		// Set FromBlock to latest block to avoid processing old events
+		// The "latest" block is represented as nil, but we'll set it explicitly to the latest block number
+		// This ensures we only process new events going forward
+		query.FromBlock = big.NewInt(int64(latestBlock))
+	}
+
+	// Log the full query details for debugging
+	log.Printf("DEBUG: Intent subscription filter query: Addresses=%v, Topics=%v, FromBlock=%v",
+		query.Addresses, query.Topics, query.FromBlock)
 
 	logs := make(chan types.Log)
 	sub, err := s.client.SubscribeFilterLogs(ctx, query, logs)
@@ -100,6 +131,9 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 	s.mu.Lock()
 	s.subs[subID] = sub
 	s.mu.Unlock()
+
+	log.Printf("INFO: Successfully subscribed to intent events for contract %s on chain %d",
+		contractAddress.Hex(), s.chainID)
 
 	// Start a goroutine to monitor the error channel
 	go s.monitorErrors(ctx)
