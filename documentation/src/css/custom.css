@@ -1,0 +1,386 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* You can override the default Infima variables here. */
+:root {
+  --ifm-color-primary: #4ade80; /* Tailwind text-green-400 */
+  --ifm-color-primary-dark: #31d86c;
+  --ifm-color-primary-darker: #25d562;
+  --ifm-color-primary-darkest: #1fb151;
+  --ifm-color-primary-light: #63e494;
+  --ifm-color-primary-lighter: #6fe69e;
+  --ifm-color-primary-lightest: #94ecb7;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  
+  /* Smaller heading sizes */
+  --ifm-h1-font-size: 1.5rem;
+  --ifm-h2-font-size: 1.2rem;
+  --ifm-h3-font-size: 1rem;
+}
+
+/* Force dark theme with black background */
+html {
+  background-color: #000000;
+}
+
+body {
+  background-color: #000000;
+}
+
+/* For readability concerns, you should choose a lighter palette in dark mode. */
+[data-theme='dark'] {
+  --ifm-color-primary: #4ade80; /* Tailwind text-green-400 */
+  --ifm-color-primary-dark: #31d86c;
+  --ifm-color-primary-darker: #25d562;
+  --ifm-color-primary-darkest: #1fb151;
+  --ifm-color-primary-light: #63e494;
+  --ifm-color-primary-lighter: #6fe69e;
+  --ifm-color-primary-lightest: #94ecb7;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --ifm-background-color: #000000 !important; /* Completely dark background */
+  --ifm-background-surface-color: #000000 !important; /* Surface color */
+  --ifm-footer-background-color: #000000 !important; /* Completely black footer */
+  --ifm-footer-color: #4ade80 !important; /* Green text in footer */
+  --ifm-footer-link-color: #4ade80 !important; /* Green links in footer */
+  --ifm-footer-title-color: #4ade80 !important; /* Green title in footer */
+  --ifm-navbar-background-color: #000000 !important; /* Black navbar */
+  --ifm-menu-color-background-active: #111 !important; /* Slightly lighter active menu item */
+  --ifm-card-background-color: #000000 !important; /* Black card backgrounds */
+  --ifm-toc-border-color: #222 !important; /* Darker border for table of contents */
+}
+
+/* Adjust heading sizes and line heights */
+h1 {
+  font-size: var(--ifm-h1-font-size) !important;
+  line-height: 1.3;
+  margin-top: 1.2rem;
+  margin-bottom: 0.8rem;
+  letter-spacing: -0.02em;
+  color: #4ade80 !important; /* Green color for h1 */
+  text-shadow: 0 0 5px rgba(74, 222, 128, 0.4); /* Subtle neon effect */
+}
+
+h2 {
+  font-size: var(--ifm-h2-font-size) !important;
+  line-height: 1.3;
+  margin-top: 1rem;
+  margin-bottom: 0.6rem;
+  letter-spacing: -0.01em;
+  color: #4ade80 !important; /* Green color for h2 */
+  text-shadow: 0 0 4px rgba(74, 222, 128, 0.3); /* Subtle neon effect */
+}
+
+h3 {
+  font-size: var(--ifm-h3-font-size) !important;
+  line-height: 1.3;
+  margin-top: 0.8rem;
+  margin-bottom: 0.4rem;
+  color: #4ade80 !important; /* Green color for h3 */
+  text-shadow: 0 0 3px rgba(74, 222, 128, 0.2); /* Subtle neon effect */
+}
+
+/* Force black background on all major containers */
+.main-wrapper,
+.navbar,
+.navbar__inner,
+.navbar-sidebar,
+.navbar-sidebar__brand,
+.navbar-sidebar__items,
+.menu,
+.theme-doc-sidebar-container,
+.theme-doc-sidebar-menu,
+.table-of-contents,
+.pagination-nav,
+.footer {
+  background-color: #000000 !important;
+}
+
+/* Additional elements that might need styling */
+.card,
+.pagination-nav__item,
+.dropdown__menu,
+.markdown,
+.docusaurus-highlight-code-line {
+  background-color: #000000 !important;
+}
+
+/* Ensure sidebar collapses to black too */
+.menu__link,
+.menu__list-item,
+.menu__list {
+  background-color: #000000 !important;
+}
+
+/* Ensure dropdown menus are black */
+.dropdown__link,
+.dropdown__container,
+.dropdown__menu {
+  background-color: #000000 !important;
+}
+
+/* Arcade font */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+.arcade-text {
+  font-family: 'Press Start 2P', cursive;
+}
+
+h1, h2, h3 {
+  font-family: 'Press Start 2P', cursive;
+}
+
+/* Neon animation effect */
+.neon-pulse {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+@keyframes neon-pulse {
+  0%, 100% {
+    text-shadow: 0 0 7px #4ade80, 0 0 10px #4ade80, 0 0 21px #4ade80;
+  }
+  50% {
+    text-shadow: 0 0 10px #4ade80, 0 0 15px #4ade80, 0 0 30px #4ade80;
+  }
+}
+
+/* Custom footer style - Force black background */
+html[data-theme='dark'] .footer,
+html[data-theme='dark'] footer {
+  background-color: #000000 !important;
+  color: #4ade80 !important;
+  padding: 16px;
+  border-top: 1px solid #111;
+}
+
+.footer__copyright {
+  font-family: 'Press Start 2P', cursive;
+  color: #4ade80 !important;
+  font-size: 14px;
+  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.footer-left {
+  text-align: left;
+}
+
+.footer-right {
+  text-align: right;
+}
+
+.footer-separator {
+  color: #333;
+  margin: 0 10px;
+}
+
+.footer__copyright a {
+  color: #4ade80 !important;
+  text-decoration: none;
+}
+
+/* Address list styling - one chain per line */
+.address-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+  width: 100%;
+}
+
+.address-row {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid #222;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.address-row:hover {
+  background-color: #0a0a0a;
+  box-shadow: 0 0 5px rgba(74, 222, 128, 0.2);
+}
+
+.network-label {
+  font-family: 'Press Start 2P', cursive;
+  color: #4ade80;
+  font-size: 0.8rem;
+  min-width: 120px;
+  margin-right: 1rem;
+}
+
+.address-block {
+  font-family: monospace;
+  color: #ffffff;
+  background-color: #111;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  display: inline-block;
+  width: auto;
+  flex-grow: 0;
+  user-select: all;
+  white-space: nowrap;
+  border: 1px solid #333;
+}
+
+/* Terminology page styling */
+.terminology-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.term-container {
+  background-color: #111;
+  border-radius: 4px;
+  border: 1px solid #333;
+  padding: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.term-container:hover {
+  border-color: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.2);
+}
+
+.term {
+  font-family: 'Press Start 2P', cursive;
+  color: #4ade80;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #222;
+}
+
+.definition {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #eee;
+}
+
+/* Responsive layout for smaller screens */
+@media (max-width: 768px) {
+  .address-row {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1rem 0.5rem;
+  }
+  
+  .network-label {
+    margin-bottom: 0.5rem;
+    margin-right: 0;
+  }
+  
+  .address-block {
+    width: auto;
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
+  
+  .footer__copyright {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .footer-separator {
+    display: none;
+  }
+  
+  .footer-left, 
+  .footer-right {
+    text-align: center;
+  }
+}
+
+/* Pixel style for the main Speedrun title */
+.navbar__title {
+  color: #4ade80 !important;
+  font-weight: bold;
+  font-family: 'Press Start 2P', cursive;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 1rem;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  padding: 0.25rem 0.5rem;
+  text-shadow: 0 0 5px rgba(74, 222, 128, 0.5), 0 0 10px rgba(74, 222, 128, 0.3);
+  position: relative;
+  display: inline-block;
+  z-index: 1;
+}
+
+/* Remove the pixel border for the title - commenting out or removing this entirely */
+/* 
+.navbar__title::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  right: -3px;
+  bottom: -3px;
+  border: 2px solid #4ade80;
+  border-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 0H4V4H0V0Z' fill='%234ade80'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 0H1V1H0V0Z' fill='black'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 0H4V1H3V0Z' fill='black'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 3H1V4H0V3Z' fill='black'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 3H4V4H3V3Z' fill='black'/%3E%3C/svg%3E") 1;
+  border-width: 4px;
+  pointer-events: none;
+  opacity: 0.8;
+  z-index: 0;
+}
+*/
+
+/* Add a subtle scanline effect to the title */
+.navbar__title::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.15) 50%,
+    rgba(0, 0, 0, 0.15) 100%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Animated pixel effect for the title */
+@keyframes pixel-flicker {
+  0%, 100% { 
+    text-shadow: 0 0 5px rgba(74, 222, 128, 0.5), 0 0 10px rgba(74, 222, 128, 0.3);
+  }
+  50% { 
+    text-shadow: 0 0 7px rgba(74, 222, 128, 0.7), 0 0 12px rgba(74, 222, 128, 0.5);
+  }
+}
+
+.navbar__title:hover {
+  animation: pixel-flicker 1.5s infinite;
+}
+
+/* Optional: Add a pixel animation to the border on hover */
+/*
+@keyframes border-pulse {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.navbar__title:hover::before {
+  animation: border-pulse 2s infinite;
+}
+*/
