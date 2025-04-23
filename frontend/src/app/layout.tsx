@@ -46,7 +46,22 @@ export default function RootLayout({
             <div className="container mx-auto">
               <div className="flex flex-col md:flex-row justify-center items-center gap-2 md:gap-4">
                 <a
-                  href="https://github.com/speedrun-hq/speedrun"
+                  href="https://x.com/speedrun_hq"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center text-green-400 hover:text-green-300 transition-none z-20 relative"
+                >
+                  <svg
+                    className="h-4 w-4 mr-1"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" />
+                  </svg>
+                  X
+                </a>
+                <a
+                  href="https://github.com/speedrun-hq"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center text-green-400 hover:text-green-300 transition-none z-20 relative"
