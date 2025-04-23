@@ -51,6 +51,6 @@
 - [BNB Chain Intent](https://bscscan.com/address/0x68282fa70a32e52711d437b6c5984b714eec3ed0)
 - [Polygon Intent](https://polygonscan.com/address/0x4017717c550e4b6e61048d412a718d6a8078d264)
 - [Avalanche Intent](https://snowtrace.io/address/0x9a22a7d337af1801beecdbe7f4f04bbd09f9e5bb)
-- [ZetaChain Intent] (https://zetachain.blockscout.com/address/0x986e2db1af08688dd3c9311016026dad15969e09)
+- [ZetaChain Intent](https://zetachain.blockscout.com/address/0x986e2db1af08688dd3c9311016026dad15969e09)
 - [ZetaChain Router](https://zetachain.blockscout.com/address/0xcd74f36bad8f842641e67ec390be092a243297d6)
 - [Algebra Swap Module](https://zetachain.blockscout.com/address/0x5d71aa0a455b7a714faf6fdf87829f98cbfe5bae)

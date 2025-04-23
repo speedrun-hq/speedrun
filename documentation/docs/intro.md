@@ -4,6 +4,10 @@ sidebar_position: 1
 
 # Introduction
 
+<div align="center">
+  <img src="/img/banner.png" alt="Banner" width="1000" />
+</div>
+
 ## What is Speedrun
 
 Speedrun is an intent settlement protocol designed for **blazing fast cross-chain transactions** with robust security. Built on **ZetaChain as interoperability layer**, it enables rapid token transfers between blockchains without compromising security or decentralization.

@@ -60,7 +60,7 @@ const config: Config = {
       title: 'Speedrun',
       logo: {
         alt: 'Speedrun Logo',
-        src: 'img/logo.png', // Placeholder for the logo
+        src: 'img/logo1.png', // Placeholder for the logo
       },
       items: [
         {

@@ -41,6 +41,10 @@ The process is fully transparent. Users can track their transfer status in real-
 
 **In short:** Speedrun separates *user experience* from *settlement mechanics*, enabling fast transfers while preserving the security of decentralized cross-chain settlement.
 
+<div align="center">
+  <img src="/img/architecture.png" alt="Architecture" width="1400" />
+</div>
+
 ## Components
 
 ### Smart Contracts
@@ -117,8 +121,4 @@ The Swap Module is a specialized contract deployed on ZetaChain that:
 
 Importantly, the platform itself is **not a DEX**. Instead, it leverages existing liquidity pools and decentralized exchanges on ZetaChain to efficiently convert between different ZRC20 tokens. This design choice allows the system to focus on its core competency - facilitating fast cross-chain transfers through the intent settlement protocol - while taking advantage of the established DeFi ecosystem on ZetaChain.
 
-### Contract Diagram
 
-<div align="center">
-  <img src="/img/architecture.png" alt="Architecture" width="1400" />
-</div>
