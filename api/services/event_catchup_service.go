@@ -521,12 +521,41 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 		log.Printf("Starting intent event listener for chain %d at contract %s",
 			chainID, contractAddress.Hex())
 
+		// For live subscriptions, use the last processed block + 1 as the starting point
+		// This ensures we don't miss events and don't process duplicates
+		var fromBlock uint64
+		s.mu.Lock()
+		if lastBlock, exists := s.intentProgress[chainID]; exists && lastBlock > 0 {
+			fromBlock = lastBlock + 1
+			log.Printf("Setting intent listener for chain %d to start from block %d", chainID, fromBlock)
+		} else {
+			// If we don't have a stored last block, get the current one
+			blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			currentBlock, err := intentService.client.BlockNumber(blockCtx)
+			cancel()
+			if err != nil {
+				log.Printf("WARNING: Unable to get current block for chain %d: %v", chainID, err)
+			} else {
+				fromBlock = currentBlock
+				log.Printf("No stored progress found, setting intent listener for chain %d to start from current block %d", chainID, fromBlock)
+			}
+		}
+		s.mu.Unlock()
+
 		intentQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
 			Topics: [][]common.Hash{
 				{intentService.abi.Events[IntentInitiatedEventName].ID},
 			},
 		}
+
+		// Set FromBlock explicitly to avoid processing old events
+		if fromBlock > 0 {
+			intentQuery.FromBlock = big.NewInt(int64(fromBlock))
+		}
+
+		log.Printf("Intent subscription filter for chain %d: FromBlock=%v, Addresses=%s, Topics=%v",
+			chainID, intentQuery.FromBlock, contractAddress.Hex(), intentQuery.Topics[0][0].Hex())
 
 		intentLogs := make(chan types.Log)
 		// Create a context that remains alive for the subscription
@@ -566,19 +595,48 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 		go intentService.processEventLogs(ctx, intentSub, intentLogs, fmt.Sprintf("chain_%d", chainID))
 	}
 
-	// Start fulfillment listeners
+	// Start fulfillment listeners with similar block tracking
 	log.Printf("Starting live fulfillment event listeners")
 	for chainID, fulfillmentService := range s.fulfillmentServices {
 		chainID := chainID // Create a copy of the loop variable for the closure
 		fulfillmentService := fulfillmentService
 
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+		// For live subscriptions, use the last processed block + 1 as the starting point
+		var fromBlock uint64
+		s.mu.Lock()
+		if lastBlock, exists := s.fulfillmentProgress[chainID]; exists && lastBlock > 0 {
+			fromBlock = lastBlock + 1
+			log.Printf("Setting fulfillment listener for chain %d to start from block %d", chainID, fromBlock)
+		} else {
+			// If we don't have a stored last block, get the current one
+			blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			currentBlock, err := fulfillmentService.client.BlockNumber(blockCtx)
+			cancel()
+			if err != nil {
+				log.Printf("WARNING: Unable to get current block for chain %d: %v", chainID, err)
+			} else {
+				fromBlock = currentBlock
+				log.Printf("No stored progress found, setting fulfillment listener for chain %d to start from current block %d", chainID, fromBlock)
+			}
+		}
+		s.mu.Unlock()
+
 		fulfillmentQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
 			Topics: [][]common.Hash{
 				{fulfillmentService.abi.Events[IntentFulfilledEventName].ID},
 			},
 		}
+
+		// Set FromBlock explicitly
+		if fromBlock > 0 {
+			fulfillmentQuery.FromBlock = big.NewInt(int64(fromBlock))
+		}
+
+		log.Printf("Fulfillment subscription filter for chain %d: FromBlock=%v, Addresses=%s, Topics=%v",
+			chainID, fulfillmentQuery.FromBlock, contractAddress.Hex(), fulfillmentQuery.Topics[0][0].Hex())
 
 		fulfillmentLogs := make(chan types.Log)
 		// Use the parent context for the subscription
@@ -616,19 +674,48 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 		go fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs)
 	}
 
-	// Start settlement listeners
+	// Start settlement listeners with similar block tracking
 	log.Printf("Starting live settlement event listeners")
 	for chainID, settlementService := range s.settlementServices {
 		chainID := chainID // Create a copy of the loop variable for the closure
 		settlementService := settlementService
 
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+		// For live subscriptions, use the last processed block + 1 as the starting point
+		var fromBlock uint64
+		s.mu.Lock()
+		if lastBlock, exists := s.settlementProgress[chainID]; exists && lastBlock > 0 {
+			fromBlock = lastBlock + 1
+			log.Printf("Setting settlement listener for chain %d to start from block %d", chainID, fromBlock)
+		} else {
+			// If we don't have a stored last block, get the current one
+			blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			currentBlock, err := settlementService.client.BlockNumber(blockCtx)
+			cancel()
+			if err != nil {
+				log.Printf("WARNING: Unable to get current block for chain %d: %v", chainID, err)
+			} else {
+				fromBlock = currentBlock
+				log.Printf("No stored progress found, setting settlement listener for chain %d to start from current block %d", chainID, fromBlock)
+			}
+		}
+		s.mu.Unlock()
+
 		settlementQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
 			Topics: [][]common.Hash{
 				{settlementService.abi.Events[IntentSettledEventName].ID},
 			},
 		}
+
+		// Set FromBlock explicitly
+		if fromBlock > 0 {
+			settlementQuery.FromBlock = big.NewInt(int64(fromBlock))
+		}
+
+		log.Printf("Settlement subscription filter for chain %d: FromBlock=%v, Addresses=%s, Topics=%v",
+			chainID, settlementQuery.FromBlock, contractAddress.Hex(), settlementQuery.Topics[0][0].Hex())
 
 		settlementLogs := make(chan types.Log)
 		// Use the parent context for the subscription
