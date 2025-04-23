@@ -514,6 +514,9 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 	// Start intent listeners
 	log.Printf("Starting live intent event listeners")
 	for chainID, intentService := range s.intentServices {
+		chainID := chainID // Create a copy of the loop variable for the closure
+		intentService := intentService
+
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 		log.Printf("Starting intent event listener for chain %d at contract %s",
 			chainID, contractAddress.Hex())
@@ -526,14 +529,39 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 		}
 
 		intentLogs := make(chan types.Log)
-		subCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		intentSub, err := intentService.client.SubscribeFilterLogs(subCtx, intentQuery, intentLogs)
-		cancel()
-
+		// Create a context that remains alive for the subscription
+		// Don't create a timeout context for the subscription as it needs to run indefinitely
+		intentSub, err := intentService.client.SubscribeFilterLogs(ctx, intentQuery, intentLogs)
 		if err != nil {
 			return fmt.Errorf("failed to subscribe to intent logs for chain %d: %v", chainID, err)
 		}
 		log.Printf("Successfully subscribed to intent events for chain %d", chainID)
+
+		// Add monitoring goroutine for subscription errors
+		go func() {
+			for {
+				select {
+				case err := <-intentSub.Err():
+					if err != nil {
+						log.Printf("ERROR: Intent subscription for chain %d encountered an error: %v", chainID, err)
+						// Try to resubscribe
+						resubCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+						newSub, resubErr := intentService.client.SubscribeFilterLogs(resubCtx, intentQuery, intentLogs)
+						cancel()
+
+						if resubErr != nil {
+							log.Printf("CRITICAL: Failed to resubscribe intent listener for chain %d: %v", chainID, resubErr)
+						} else {
+							intentSub = newSub
+							log.Printf("Successfully resubscribed intent listener for chain %d", chainID)
+						}
+					}
+				case <-ctx.Done():
+					log.Printf("Intent subscription monitor for chain %d shutting down", chainID)
+					return
+				}
+			}
+		}()
 
 		go intentService.processEventLogs(ctx, intentSub, intentLogs, fmt.Sprintf("chain_%d", chainID))
 	}
@@ -541,6 +569,9 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 	// Start fulfillment listeners
 	log.Printf("Starting live fulfillment event listeners")
 	for chainID, fulfillmentService := range s.fulfillmentServices {
+		chainID := chainID // Create a copy of the loop variable for the closure
+		fulfillmentService := fulfillmentService
+
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 		fulfillmentQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
@@ -550,13 +581,37 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 		}
 
 		fulfillmentLogs := make(chan types.Log)
-		subCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		fulfillmentSub, err := fulfillmentService.client.SubscribeFilterLogs(subCtx, fulfillmentQuery, fulfillmentLogs)
-		cancel()
-
+		// Use the parent context for the subscription
+		fulfillmentSub, err := fulfillmentService.client.SubscribeFilterLogs(ctx, fulfillmentQuery, fulfillmentLogs)
 		if err != nil {
 			return fmt.Errorf("failed to subscribe to fulfillment logs for chain %d: %v", chainID, err)
 		}
+
+		// Add monitoring goroutine for subscription errors
+		go func() {
+			for {
+				select {
+				case err := <-fulfillmentSub.Err():
+					if err != nil {
+						log.Printf("ERROR: Fulfillment subscription for chain %d encountered an error: %v", chainID, err)
+						// Try to resubscribe
+						resubCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+						newSub, resubErr := fulfillmentService.client.SubscribeFilterLogs(resubCtx, fulfillmentQuery, fulfillmentLogs)
+						cancel()
+
+						if resubErr != nil {
+							log.Printf("CRITICAL: Failed to resubscribe fulfillment listener for chain %d: %v", chainID, resubErr)
+						} else {
+							fulfillmentSub = newSub
+							log.Printf("Successfully resubscribed fulfillment listener for chain %d", chainID)
+						}
+					}
+				case <-ctx.Done():
+					log.Printf("Fulfillment subscription monitor for chain %d shutting down", chainID)
+					return
+				}
+			}
+		}()
 
 		go fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs)
 	}
@@ -564,6 +619,9 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 	// Start settlement listeners
 	log.Printf("Starting live settlement event listeners")
 	for chainID, settlementService := range s.settlementServices {
+		chainID := chainID // Create a copy of the loop variable for the closure
+		settlementService := settlementService
+
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 		settlementQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
@@ -573,13 +631,37 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 		}
 
 		settlementLogs := make(chan types.Log)
-		subCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		settlementSub, err := settlementService.client.SubscribeFilterLogs(subCtx, settlementQuery, settlementLogs)
-		cancel()
-
+		// Use the parent context for the subscription
+		settlementSub, err := settlementService.client.SubscribeFilterLogs(ctx, settlementQuery, settlementLogs)
 		if err != nil {
 			return fmt.Errorf("failed to subscribe to settlement logs for chain %d: %v", chainID, err)
 		}
+
+		// Add monitoring goroutine for subscription errors
+		go func() {
+			for {
+				select {
+				case err := <-settlementSub.Err():
+					if err != nil {
+						log.Printf("ERROR: Settlement subscription for chain %d encountered an error: %v", chainID, err)
+						// Try to resubscribe
+						resubCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+						newSub, resubErr := settlementService.client.SubscribeFilterLogs(resubCtx, settlementQuery, settlementLogs)
+						cancel()
+
+						if resubErr != nil {
+							log.Printf("CRITICAL: Failed to resubscribe settlement listener for chain %d: %v", chainID, resubErr)
+						} else {
+							settlementSub = newSub
+							log.Printf("Successfully resubscribed settlement listener for chain %d", chainID)
+						}
+					}
+				case <-ctx.Done():
+					log.Printf("Settlement subscription monitor for chain %d shutting down", chainID)
+					return
+				}
+			}
+		}()
 
 		go settlementService.processEventLogs(ctx, settlementSub, settlementLogs)
 	}

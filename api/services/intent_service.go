@@ -161,38 +161,62 @@ func (s *IntentService) processEventLogs(ctx context.Context, sub ethereum.Subsc
 	healthTicker := time.NewTicker(1 * time.Minute)
 	defer healthTicker.Stop()
 
+	// Add a ticker for debugging to periodically log subscription status
+	debugTicker := time.NewTicker(30 * time.Second)
+	defer debugTicker.Stop()
+
+	// Track the number of events processed for debugging
+	eventCount := 0
+
 	for {
 		select {
 		case err := <-sub.Err():
 			if err != nil {
 				s.errChannel <- fmt.Errorf("subscription error: %v", err)
+				log.Printf("ERROR: Subscription %s on chain %d error: %v", subID, s.chainID, err)
 				// Try to resubscribe
 				if err := s.handleSubscriptionError(ctx, sub, logs, subID); err != nil {
 					s.errChannel <- fmt.Errorf("failed to resubscribe: %v", err)
+					log.Printf("CRITICAL: Failed to resubscribe %s on chain %d: %v", subID, s.chainID, err)
 					return
 				}
 			}
 		case vLog, ok := <-logs:
 			if !ok {
 				s.errChannel <- fmt.Errorf("log channel closed unexpectedly")
+				log.Printf("ERROR: Log channel closed unexpectedly for %s on chain %d", subID, s.chainID)
 				return
 			}
+
+			eventCount++
+			log.Printf("EVENT RECEIVED: Chain %d, Block %d, TxHash %s, Topics: %v",
+				s.chainID, vLog.BlockNumber, vLog.TxHash.Hex(), len(vLog.Topics))
 
 			// Process the log in a separate goroutine to avoid blocking
 			// But use a timeout to prevent processing for too long
 			logCtx, logCancel := context.WithTimeout(ctx, 30*time.Second)
+			startTime := time.Now()
 			err := s.processLog(logCtx, vLog)
+			processingTime := time.Since(startTime)
 			logCancel()
 
 			if err != nil {
 				s.errChannel <- fmt.Errorf("error processing log: %v", err)
+				log.Printf("ERROR: Failed to process log for chain %d, subscription %s: %v", s.chainID, subID, err)
+			} else {
+				log.Printf("Successfully processed event from chain %d, block %d, tx %s (took %v)",
+					s.chainID, vLog.BlockNumber, vLog.TxHash.Hex(), processingTime)
 			}
 		case <-healthTicker.C:
 			// Log system health information
-			log.Printf("IntentService health: activeGoroutines=%d, chainID=%d",
-				s.ActiveGoroutines(), s.chainID)
+			log.Printf("IntentService health: activeGoroutines=%d, chainID=%d, events_processed=%d",
+				s.ActiveGoroutines(), s.chainID, eventCount)
+		case <-debugTicker.C:
+			// Extra debugging info
+			log.Printf("DEBUG: Intent subscription %s on chain %d still active, processed %d events so far",
+				subID, s.chainID, eventCount)
 		case <-ctx.Done():
-			log.Printf("Context cancelled, stopping event processing for chain %d", s.chainID)
+			log.Printf("Context cancelled, stopping event processing for chain %d, subscription %s", s.chainID, subID)
 			return
 		}
 	}
@@ -352,14 +376,46 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 
 // validateLog checks if the log has the required structure and data.
 func (s *IntentService) validateLog(vLog types.Log) error {
+	log.Printf("DEBUG: Validating log: BlockNum=%d, TxHash=%s, Address=%s, Topics=%d, DataSize=%d bytes",
+		vLog.BlockNumber, vLog.TxHash.Hex(), vLog.Address.Hex(), len(vLog.Topics), len(vLog.Data))
+
+	if len(vLog.Topics) == 0 {
+		return fmt.Errorf("invalid log: no topics found")
+	}
+
+	// Log the first topic which should be the event signature
+	if len(vLog.Topics) > 0 {
+		expectedSig := s.abi.Events[IntentInitiatedEventName].ID.Hex()
+		actualSig := vLog.Topics[0].Hex()
+		log.Printf("DEBUG: Event signature check - Expected: %s, Got: %s, Match: %v",
+			expectedSig, actualSig, expectedSig == actualSig)
+	}
+
 	if len(vLog.Topics) < IntentInitiatedRequiredTopics {
+		log.Printf("ERROR: Invalid log: expected at least %d topics, got %d",
+			IntentInitiatedRequiredTopics, len(vLog.Topics))
 		return fmt.Errorf("invalid log: expected at least %d topics, got %d", IntentInitiatedRequiredTopics, len(vLog.Topics))
 	}
+
+	// Validate event signature
+	expectedSig := s.abi.Events[IntentInitiatedEventName].ID
+	if vLog.Topics[0] != expectedSig {
+		log.Printf("ERROR: Invalid event signature - Expected: %s, Got: %s",
+			expectedSig.Hex(), vLog.Topics[0].Hex())
+		return fmt.Errorf("invalid event signature: expected %s, got %s",
+			expectedSig.Hex(), vLog.Topics[0].Hex())
+	}
+
+	log.Printf("DEBUG: Log validation passed - BlockNum=%d, TxHash=%s",
+		vLog.BlockNumber, vLog.TxHash.Hex())
 	return nil
 }
 
 // extractEventData extracts and validates the event data from the log.
 func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*models.IntentInitiatedEvent, error) {
+	log.Printf("DEBUG: Extracting event data from log: BlockNum=%d, TxHash=%s",
+		vLog.BlockNumber, vLog.TxHash.Hex())
+
 	event := &models.IntentInitiatedEvent{
 		BlockNumber: vLog.BlockNumber,
 		TxHash:      vLog.TxHash.Hex(),
@@ -367,6 +423,7 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 
 	// Parse indexed parameters from topics
 	if len(vLog.Topics) < 3 {
+		log.Printf("ERROR: Invalid log: expected at least 3 topics, got %d", len(vLog.Topics))
 		return nil, fmt.Errorf("invalid log: expected at least 3 topics, got %d", len(vLog.Topics))
 	}
 
@@ -376,17 +433,34 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	event.IntentID = vLog.Topics[1].Hex()
 	event.Asset = common.HexToAddress(vLog.Topics[2].Hex()).Hex()
 
+	log.Printf("DEBUG: Extracted indexed parameters - IntentID: %s, Asset: %s",
+		event.IntentID, event.Asset)
+
 	// Parse non-indexed parameters from data
+	if len(vLog.Data) == 0 {
+		log.Printf("ERROR: Log data is empty, cannot unpack parameters")
+		return nil, fmt.Errorf("event data is empty")
+	}
+
+	log.Printf("DEBUG: Unpacking event data (%d bytes) using ABI for %s",
+		len(vLog.Data), IntentInitiatedEventName)
+
 	unpacked, err := s.abi.Unpack(IntentInitiatedEventName, vLog.Data)
 	if err != nil {
+		log.Printf("ERROR: Failed to unpack event data: %v", err)
 		return nil, fmt.Errorf("failed to unpack event data: %v", err)
 	}
 
+	log.Printf("DEBUG: Unpacked %d fields from event data", len(unpacked))
+
 	if len(unpacked) < IntentInitiatedRequiredFields {
+		log.Printf("ERROR: Invalid event data: expected %d fields, got %d",
+			IntentInitiatedRequiredFields, len(unpacked))
 		return nil, fmt.Errorf("invalid event data: expected %d fields, got %d", IntentInitiatedRequiredFields, len(unpacked))
 	}
 
 	if err := s.validateEventFields(unpacked, event); err != nil {
+		log.Printf("ERROR: Failed to validate event fields: %v", err)
 		return nil, err
 	}
 
@@ -394,8 +468,10 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	txCtx, txCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer txCancel()
 
+	log.Printf("DEBUG: Fetching transaction %s to extract sender", vLog.TxHash.Hex())
 	tx, _, err := s.client.TransactionByHash(txCtx, vLog.TxHash)
 	if err != nil {
+		log.Printf("ERROR: Failed to get transaction: %v", err)
 		return nil, fmt.Errorf("failed to get transaction: %v", err)
 	}
 
@@ -403,11 +479,14 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	signer := types.LatestSignerForChainID(big.NewInt(int64(s.chainID)))
 	sender, err := signer.Sender(tx)
 	if err != nil {
+		log.Printf("ERROR: Failed to get sender address: %v", err)
 		return nil, fmt.Errorf("failed to get sender address: %v", err)
 	}
 
 	event.Sender = sender.Hex()
+	log.Printf("DEBUG: Extracted sender: %s", event.Sender)
 
+	log.Printf("DEBUG: Successfully extracted all event data for intent %s", event.IntentID)
 	return event, nil
 }
 
@@ -415,32 +494,54 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 func (s *IntentService) validateEventFields(unpacked []interface{}, event *models.IntentInitiatedEvent) error {
 	var ok bool
 
+	log.Printf("DEBUG: Validating event fields (%d values)", len(unpacked))
+
+	// Log the types of unpacked values for debugging
+	for i, val := range unpacked {
+		if val == nil {
+			log.Printf("DEBUG: Field %d is nil", i)
+		} else {
+			log.Printf("DEBUG: Field %d type: %T, value: %v", i, val, val)
+		}
+	}
+
 	event.Amount, ok = unpacked[0].(*big.Int)
 	if !ok || event.Amount == nil {
+		log.Printf("ERROR: Invalid amount in event data: %v", unpacked[0])
 		return fmt.Errorf("invalid amount in event data")
 	}
+	log.Printf("DEBUG: Extracted amount: %s", event.Amount.String())
 
 	targetChainBig, ok := unpacked[1].(*big.Int)
 	if !ok || targetChainBig == nil {
+		log.Printf("ERROR: Invalid target chain in event data: %v", unpacked[1])
 		return fmt.Errorf("invalid target chain in event data")
 	}
 	event.TargetChain = targetChainBig.Uint64()
+	log.Printf("DEBUG: Extracted target chain: %d", event.TargetChain)
 
 	event.Receiver, ok = unpacked[2].([]byte)
 	if !ok || len(event.Receiver) == 0 {
+		log.Printf("ERROR: Invalid receiver in event data: %v", unpacked[2])
 		return fmt.Errorf("invalid receiver in event data")
 	}
+	log.Printf("DEBUG: Extracted receiver: %x (byte length: %d)", event.Receiver, len(event.Receiver))
 
 	event.Tip, ok = unpacked[3].(*big.Int)
 	if !ok || event.Tip == nil {
+		log.Printf("ERROR: Invalid tip in event data: %v", unpacked[3])
 		return fmt.Errorf("invalid tip in event data")
 	}
+	log.Printf("DEBUG: Extracted tip: %s", event.Tip.String())
 
 	event.Salt, ok = unpacked[4].(*big.Int)
 	if !ok || event.Salt == nil {
+		log.Printf("ERROR: Invalid salt in event data: %v", unpacked[4])
 		return fmt.Errorf("invalid salt in event data")
 	}
+	log.Printf("DEBUG: Extracted salt: %s", event.Salt.String())
 
+	log.Printf("DEBUG: All event fields validated successfully")
 	return nil
 }
 
