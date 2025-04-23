@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import {
   SUPPORTED_CHAINS,
   COMING_SOON_SOURCE_CHAINS,
@@ -16,7 +17,20 @@ const BORDER_COLOR = "border-yellow-500";
 const SHADOW_COLOR = "shadow-yellow-500/50";
 const TEXT_COLOR = "text-yellow-500";
 
-// Note: needs to be defined in this file for the Tailwind style to correctly render
+// Chain logo mapping
+const chainLogoMap: Record<number, string> = {
+  [mainnet.id]: "/images/eth.png",
+  [bsc.id]: "/images/bnb.png",
+  [polygon.id]: "/images/pol.png",
+  [base.id]: "/images/base.png",
+  [arbitrum.id]: "/images/arb.png",
+  [avalanche.id]: "/images/ava.png",
+  [BITCOIN_CHAIN_ID]: "/images/btc.png",
+  [SOLANA_CHAIN_ID]: "/images/sol.png",
+  [ZETACHAIN_CHAIN_ID]: "/images/zeta.png",
+};
+
+// Keep color map for fallback
 const chainColorMap: Record<number, string> = {
   [mainnet.id]: "text-gray-400",
   [bsc.id]: "text-yellow-400",
@@ -91,11 +105,19 @@ export function ChainSelector({
       >
         <span className="flex items-center">
           {selectedChain && (
-            <span
-              className={`mr-2 inline-block text-xl leading-none ${chainColorMap[selectedChain.id]}`}
-            >
-              •
-            </span>
+            chainLogoMap[selectedChain.id] ? (
+              <img
+                src={chainLogoMap[selectedChain.id]}
+                alt={selectedChain.name}
+                className="w-5 h-5 mr-2"
+              />
+            ) : (
+              <span
+                className={`mr-2 inline-block text-xl leading-none ${chainColorMap[selectedChain.id]}`}
+              >
+                •
+              </span>
+            )
           )}
           {selectedChain?.name || label}
         </span>
@@ -119,11 +141,19 @@ export function ChainSelector({
                   chain.id === value ? "bg-black/50" : ""
                 }`}
               >
-                <span
-                  className={`mr-2 inline-block text-xl leading-none ${chainColorMap[chain.id]}`}
-                >
-                  •
-                </span>
+                {chainLogoMap[chain.id] ? (
+                  <img
+                    src={chainLogoMap[chain.id]}
+                    alt={chain.name}
+                    className="w-5 h-5 mr-2"
+                  />
+                ) : (
+                  <span
+                    className={`mr-2 inline-block text-xl leading-none ${chainColorMap[chain.id]}`}
+                  >
+                    •
+                  </span>
+                )}
                 <span className={`${TEXT_COLOR}`}>{chain.name}</span>
               </button>
             ))}
@@ -135,11 +165,19 @@ export function ChainSelector({
                 className="w-full px-4 py-3 text-left arcade-text text-xs text-gray-500 cursor-not-allowed flex items-center justify-between"
               >
                 <div className="flex items-center mr-2">
-                  <span
-                    className={`mr-2 inline-block text-xl leading-none text-gray-500 flex-shrink-0`}
-                  >
-                    •
-                  </span>
+                  {chainLogoMap[chain.id] ? (
+                    <img
+                      src={chainLogoMap[chain.id]}
+                      alt={chain.name}
+                      className="w-5 h-5 mr-2 opacity-50"
+                    />
+                  ) : (
+                    <span
+                      className={`mr-2 inline-block text-xl leading-none text-gray-500 flex-shrink-0`}
+                    >
+                      •
+                    </span>
+                  )}
                   <span>{chain.name}</span>
                 </div>
                 <span className="text-gray-500 opacity-70 text-[10px] whitespace-nowrap flex-shrink-0">
