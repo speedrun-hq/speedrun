@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"runtime/debug"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -33,12 +36,16 @@ const (
 // IntentService handles monitoring and processing of intent events from the blockchain.
 // It subscribes to intent events, processes them, and stores them in the database.
 type IntentService struct {
-	client         *ethclient.Client
-	clientResolver ClientResolver
-	db             db.Database
-	abi            abi.ABI
-	chainID        uint64
-	subs           map[string]ethereum.Subscription
+	client           *ethclient.Client
+	clientResolver   ClientResolver
+	db               db.Database
+	abi              abi.ABI
+	chainID          uint64
+	subs             map[string]ethereum.Subscription
+	activeGoroutines int32      // Counter for active goroutines
+	errChannel       chan error // Channel for collecting errors from goroutines
+	mu               sync.Mutex // Mutex for thread-safe operations
+	ctx              context.Context
 }
 
 func NewIntentService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentInitiatedEventABI string, chainID uint64) (*IntentService, error) {
@@ -48,13 +55,21 @@ func NewIntentService(client *ethclient.Client, clientResolver ClientResolver, d
 	}
 
 	return &IntentService{
-		client:         client,
-		clientResolver: clientResolver,
-		db:             db,
-		abi:            parsedABI,
-		chainID:        chainID,
-		subs:           make(map[string]ethereum.Subscription),
+		client:           client,
+		clientResolver:   clientResolver,
+		db:               db,
+		abi:              parsedABI,
+		chainID:          chainID,
+		subs:             make(map[string]ethereum.Subscription),
+		activeGoroutines: 0,
+		errChannel:       make(chan error, 100), // Buffer to prevent blocking
+		ctx:              context.Background(),
 	}, nil
+}
+
+// ActiveGoroutines returns the current count of active goroutines
+func (s *IntentService) ActiveGoroutines() int32 {
+	return atomic.LoadInt32(&s.activeGoroutines)
 }
 
 // StartListening starts a goroutine to listen for intent events from the specified contract address.
@@ -80,71 +95,191 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 		return fmt.Errorf("failed to subscribe to logs: %v", err)
 	}
 
-	go s.processEventLogs(ctx, sub, logs)
+	// Store the subscription
+	subID := contractAddress.Hex()
+	s.mu.Lock()
+	s.subs[subID] = sub
+	s.mu.Unlock()
+
+	// Start a goroutine to monitor the error channel
+	go s.monitorErrors(ctx)
+
+	// Start the event processing goroutine
+	go s.processEventLogs(ctx, sub, logs, subID)
+
 	return nil
 }
 
-// processEventLogs handles the event processing loop for the subscription.
-// It manages subscription errors, log processing, and context cancellation.
-func (s *IntentService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log) {
-	defer sub.Unsubscribe()
-
+// monitorErrors processes errors from goroutines
+func (s *IntentService) monitorErrors(ctx context.Context) {
 	for {
 		select {
-		case err := <-sub.Err():
-			if err != nil {
-				log.Printf("Error in subscription: %v", err)
-				if err := s.handleSubscriptionError(ctx, sub, logs); err != nil {
-					return
-				}
-			}
-		case vLog := <-logs:
-			if err := s.processLog(ctx, vLog); err != nil {
-				log.Printf("Error processing log: %v", err)
-				continue
-			}
+		case err := <-s.errChannel:
+			log.Printf("ERROR in IntentService goroutine: %v", err)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
+// processEventLogs handles the event processing loop for the subscription.
+// It manages subscription errors, log processing, and context cancellation.
+func (s *IntentService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string) {
+	// Increment goroutine counter
+	atomic.AddInt32(&s.activeGoroutines, 1)
+	defer atomic.AddInt32(&s.activeGoroutines, -1)
+
+	// Add panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			err := fmt.Errorf("recovered from panic in processEventLogs: %v\nstack: %s", r, debug.Stack())
+			s.errChannel <- err
+			log.Printf("CRITICAL: %v", err)
+
+			// Attempt to restart the subscription after a pause
+			time.Sleep(5 * time.Second)
+			s.mu.Lock()
+			if sub, ok := s.subs[subID]; ok {
+				sub.Unsubscribe()
+				delete(s.subs, subID)
+			}
+			s.mu.Unlock()
+		}
+	}()
+
+	log.Printf("Starting event log processing for chain %d, subscription %s", s.chainID, subID)
+
+	defer func() {
+		sub.Unsubscribe()
+		s.mu.Lock()
+		delete(s.subs, subID)
+		s.mu.Unlock()
+		log.Printf("Ended event log processing for chain %d, subscription %s", s.chainID, subID)
+	}()
+
+	// Use a ticker to periodically check system health
+	healthTicker := time.NewTicker(1 * time.Minute)
+	defer healthTicker.Stop()
+
+	for {
+		select {
+		case err := <-sub.Err():
+			if err != nil {
+				s.errChannel <- fmt.Errorf("subscription error: %v", err)
+				// Try to resubscribe
+				if err := s.handleSubscriptionError(ctx, sub, logs, subID); err != nil {
+					s.errChannel <- fmt.Errorf("failed to resubscribe: %v", err)
+					return
+				}
+			}
+		case vLog, ok := <-logs:
+			if !ok {
+				s.errChannel <- fmt.Errorf("log channel closed unexpectedly")
+				return
+			}
+
+			// Process the log in a separate goroutine to avoid blocking
+			// But use a timeout to prevent processing for too long
+			logCtx, logCancel := context.WithTimeout(ctx, 30*time.Second)
+			err := s.processLog(logCtx, vLog)
+			logCancel()
+
+			if err != nil {
+				s.errChannel <- fmt.Errorf("error processing log: %v", err)
+			}
+		case <-healthTicker.C:
+			// Log system health information
+			log.Printf("IntentService health: activeGoroutines=%d, chainID=%d",
+				s.ActiveGoroutines(), s.chainID)
+		case <-ctx.Done():
+			log.Printf("Context cancelled, stopping event processing for chain %d", s.chainID)
+			return
+		}
+	}
+}
+
 // handleSubscriptionError attempts to recover from a subscription error by resubscribing.
-func (s *IntentService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log) error {
+func (s *IntentService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log, subID string) error {
 	oldSub.Unsubscribe()
 
-	// Get the contract address from the old subscription
-	contractAddress := common.HexToAddress("0x0") // Default value
-	if sub, ok := oldSub.(interface{ Query() ethereum.FilterQuery }); ok {
-		if len(sub.Query().Addresses) > 0 {
-			contractAddress = sub.Query().Addresses[0]
+	// Get contract address from subID (which we set to contract address hex)
+	contractAddress := common.HexToAddress(subID)
+	if contractAddress == (common.Address{}) {
+		return fmt.Errorf("invalid subscription ID")
+	}
+
+	// Implement exponential backoff for retry
+	maxRetries := 5
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Check if context is cancelled
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		// Create a new query
+		query := ethereum.FilterQuery{
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{s.abi.Events[IntentInitiatedEventName].ID},
+			},
+		}
+
+		// Try to resubscribe
+		newSub, err := s.client.SubscribeFilterLogs(ctx, query, logs)
+		if err == nil {
+			// Update the subscription
+			s.mu.Lock()
+			s.subs[subID] = newSub
+			s.mu.Unlock()
+			log.Printf("Successfully resubscribed to events for chain %d", s.chainID)
+			return nil
+		}
+
+		// If we reach here, resubscription failed
+		backoffTime := time.Duration(1<<attempt) * time.Second
+		if backoffTime > 30*time.Second {
+			backoffTime = 30 * time.Second
+		}
+		log.Printf("Resubscription attempt %d/%d failed: %v. Retrying in %v",
+			attempt+1, maxRetries, err, backoffTime)
+
+		select {
+		case <-time.After(backoffTime):
+			// Continue with next retry
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 
-	query := ethereum.FilterQuery{
-		Addresses: []common.Address{contractAddress},
-		Topics: [][]common.Hash{
-			{s.abi.Events[IntentInitiatedEventName].ID},
-		},
-	}
-
-	_, err := s.client.SubscribeFilterLogs(ctx, query, logs)
-	if err != nil {
-		log.Printf("Failed to resubscribe: %v", err)
-		return err
-	}
-
-	return nil
+	return fmt.Errorf("failed to resubscribe after %d attempts", maxRetries)
 }
 
 // processLog processes a single log entry from the blockchain.
 // It validates the log, extracts event data, and stores the intent in the database.
 func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	logStart := time.Now()
+	defer func() {
+		logLatency := time.Since(logStart)
+		if logLatency > 1*time.Second {
+			log.Printf("SLOW LOG PROCESSING: Chain %d, Block %d, TxHash %s took %v",
+				s.chainID, vLog.BlockNumber, vLog.TxHash.Hex(), logLatency)
+		}
+	}()
+
 	if err := s.validateLog(vLog); err != nil {
 		return err
 	}
 
-	event, err := s.extractEventData(vLog)
+	// Set a timeout for event data extraction
+	extractCtx, extractCancel := context.WithTimeout(ctx, 5*time.Second)
+	event, err := s.extractEventData(extractCtx, vLog)
+	extractCancel()
+
 	if err != nil {
 		return err
 	}
@@ -168,7 +303,11 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		client = s.client
 	}
 
+	// Set a timeout for intent conversion
+	_, intentCancel := context.WithTimeout(ctx, 5*time.Second)
 	intent, err := event.ToIntent(client)
+	intentCancel()
+
 	if err != nil {
 		log.Printf("Warning: Failed to get block timestamp: %v", err)
 		// Continue with what we have
@@ -180,8 +319,11 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 			s.chainID, intent.SourceChain)
 	}
 
-	// Check if intent already exists
-	existingIntent, err := s.db.GetIntent(ctx, intent.ID)
+	// Check if intent already exists - set a timeout
+	dbCtx, dbCancel := context.WithTimeout(ctx, 5*time.Second)
+	existingIntent, err := s.db.GetIntent(dbCtx, intent.ID)
+	dbCancel()
+
 	if err != nil && !strings.Contains(err.Error(), "not found") {
 		return fmt.Errorf("failed to check for existing intent: %v", err)
 	}
@@ -191,7 +333,12 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		return nil
 	}
 
-	if err := s.db.CreateIntent(ctx, intent); err != nil {
+	// Create the intent with a timeout
+	createCtx, createCancel := context.WithTimeout(ctx, 5*time.Second)
+	err = s.db.CreateIntent(createCtx, intent)
+	createCancel()
+
+	if err != nil {
 		// Skip if intent already exists
 		if strings.Contains(err.Error(), "duplicate key") {
 			return nil
@@ -199,6 +346,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		return fmt.Errorf("failed to store intent in database: %v", err)
 	}
 
+	log.Printf("Successfully processed and stored intent: %s", intent.ID)
 	return nil
 }
 
@@ -211,7 +359,7 @@ func (s *IntentService) validateLog(vLog types.Log) error {
 }
 
 // extractEventData extracts and validates the event data from the log.
-func (s *IntentService) extractEventData(vLog types.Log) (*models.IntentInitiatedEvent, error) {
+func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*models.IntentInitiatedEvent, error) {
 	event := &models.IntentInitiatedEvent{
 		BlockNumber: vLog.BlockNumber,
 		TxHash:      vLog.TxHash.Hex(),
@@ -242,8 +390,11 @@ func (s *IntentService) extractEventData(vLog types.Log) (*models.IntentInitiate
 		return nil, err
 	}
 
-	// Get the sender address from the transaction
-	tx, _, err := s.client.TransactionByHash(context.Background(), vLog.TxHash)
+	// Get the sender address from the transaction - add timeout
+	txCtx, txCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer txCancel()
+
+	tx, _, err := s.client.TransactionByHash(txCtx, vLog.TxHash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transaction: %v", err)
 	}

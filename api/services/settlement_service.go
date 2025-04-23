@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -79,9 +80,12 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 		case err := <-sub.Err():
 			if err != nil {
 				log.Printf("Error in subscription: %v", err)
-				if err := s.handleSubscriptionError(ctx, sub, logs); err != nil {
+				newSub, err := s.handleSubscriptionError(ctx, sub, logs)
+				if err != nil {
 					return
 				}
+				// Update the subscription and continue the loop
+				sub = newSub
 			}
 		case vLog := <-logs:
 			if err := s.processLog(ctx, vLog); err != nil {
@@ -94,7 +98,7 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 	}
 }
 
-func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log) error {
+func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log) (ethereum.Subscription, error) {
 	oldSub.Unsubscribe()
 
 	// Get the contract address from the old subscription
@@ -105,19 +109,45 @@ func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub 
 		}
 	}
 
-	query := ethereum.FilterQuery{
-		Addresses: []common.Address{contractAddress},
-		Topics: [][]common.Hash{
-			{s.abi.Events[IntentFulfilledEventName].ID},
-		},
+	// Implement exponential backoff for retry
+	maxRetries := 5
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Check if context is cancelled
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		query := ethereum.FilterQuery{
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{s.abi.Events[IntentSettledEventName].ID},
+			},
+		}
+
+		// Try to resubscribe
+		newSub, err := s.client.SubscribeFilterLogs(ctx, query, logs)
+		if err == nil {
+			log.Printf("Successfully resubscribed to settlement events for chain %d", s.chainID)
+			return newSub, nil
+		}
+
+		// If we reach here, resubscription failed
+		backoffTime := time.Duration(1<<attempt) * time.Second
+		if backoffTime > 30*time.Second {
+			backoffTime = 30 * time.Second
+		}
+		log.Printf("Settlement service resubscription attempt %d/%d failed: %v. Retrying in %v",
+			attempt+1, maxRetries, err, backoffTime)
+
+		select {
+		case <-time.After(backoffTime):
+			// Continue with next retry
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 
-	_, err := s.client.SubscribeFilterLogs(ctx, query, logs)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return nil, fmt.Errorf("failed to resubscribe to settlement events after %d attempts", maxRetries)
 }
 
 func (s *SettlementService) processLog(ctx context.Context, vLog types.Log) error {
