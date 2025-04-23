@@ -104,8 +104,8 @@ export function ChainSelector({
         className={`w-full px-4 py-2 bg-black border-2 ${BORDER_COLOR} rounded-lg ${TEXT_COLOR} arcade-text text-xs focus:outline-none flex justify-between items-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         <span className="flex items-center">
-          {selectedChain && (
-            chainLogoMap[selectedChain.id] ? (
+          {selectedChain &&
+            (chainLogoMap[selectedChain.id] ? (
               <img
                 src={chainLogoMap[selectedChain.id]}
                 alt={selectedChain.name}
@@ -117,8 +117,7 @@ export function ChainSelector({
               >
                 •
               </span>
-            )
-          )}
+            ))}
           {selectedChain?.name || label}
         </span>
         <span className="ml-2">{isOpen ? "▲" : "▼"}</span>

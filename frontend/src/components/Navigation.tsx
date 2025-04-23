@@ -53,10 +53,10 @@ const Navigation = () => {
             href="/"
             className="arcade-text text-2xl text-primary-500 hover:text-primary-400 relative z-10 font-bold pl-2 flex items-center"
           >
-            <img 
-              src="/images/speed.png" 
-              alt="Speedrun Logo" 
-              className="h-10 mr-2" 
+            <img
+              src="/images/speed.png"
+              alt="Speedrun Logo"
+              className="h-10 mr-2"
             />
             SPEEDRUN
           </Link>
