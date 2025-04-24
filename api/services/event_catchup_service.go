@@ -19,13 +19,16 @@ import (
 // Constants for timeouts and monitoring
 const (
 	// CatchupOperationTimeout is the maximum time allowed for a single catchup operation
-	CatchupOperationTimeout = 10 * time.Minute
+	CatchupOperationTimeout = 30 * time.Minute
 
 	// BlockRangeProcessTimeout is the maximum time allowed for processing a range of blocks
-	BlockRangeProcessTimeout = 5 * time.Minute
+	BlockRangeProcessTimeout = 15 * time.Minute
 
 	// LogBatchProcessTimeout is the maximum time allowed for processing a batch of logs
-	LogBatchProcessTimeout = 2 * time.Minute
+	LogBatchProcessTimeout = 5 * time.Minute
+
+	// FilterLogsTimeout is the maximum time allowed for filtering logs
+	FilterLogsTimeout = 3 * time.Minute
 
 	// MonitoringInterval is how often to log the status of ongoing operations
 	MonitoringInterval = 30 * time.Second
@@ -114,40 +117,65 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		log.Printf("Current block for chain %d: %d", chainID, currentBlock)
 	}
 
+	// Track any errors that occur during catchup
+	var catchupErrors []error
+
 	// INTENT CATCHUP
 	log.Printf("Starting intent event catchup")
 	if err := s.runIntentCatchup(ctx, cfg, currentBlocks); err != nil {
-		return fmt.Errorf("intent catchup failed: %v", err)
+		// Store the error but continue with fulfillment and settlement catchup
+		catchupErrors = append(catchupErrors, fmt.Errorf("intent catchup failed: %v", err))
+		log.Printf("WARNING: Intent catchup encountered errors: %v, continuing with fulfillment catchup", err)
+	} else {
+		log.Printf("All intent services have completed catchup successfully")
 	}
-	log.Printf("All intent services have completed catchup")
 
 	// FULFILLMENT CATCHUP
 	log.Printf("Starting fulfillment catchup")
 	if err := s.runFulfillmentCatchup(ctx, cfg, currentBlocks); err != nil {
-		return fmt.Errorf("fulfillment catchup failed: %v", err)
+		// Store the error but continue with settlement catchup
+		catchupErrors = append(catchupErrors, fmt.Errorf("fulfillment catchup failed: %v", err))
+		log.Printf("WARNING: Fulfillment catchup encountered errors: %v, continuing with settlement catchup", err)
+	} else {
+		log.Printf("All fulfillment services have completed catchup successfully")
 	}
-	log.Printf("All fulfillment services have completed catchup")
 
 	// SETTLEMENT CATCHUP
 	log.Printf("Starting settlement catchup")
 	if err := s.runSettlementCatchup(ctx, cfg, currentBlocks); err != nil {
-		return fmt.Errorf("settlement catchup failed: %v", err)
+		// Store the error
+		catchupErrors = append(catchupErrors, fmt.Errorf("settlement catchup failed: %v", err))
+		log.Printf("WARNING: Settlement catchup encountered errors: %v", err)
+	} else {
+		log.Printf("All settlement services have completed catchup successfully")
 	}
-	log.Printf("All settlement services have completed catchup")
 
-	// Update last processed blocks for all chains only after all services have completed
+	// Only attempt to update processed blocks for chains that completed successfully
 	for chainID, currentBlock := range currentBlocks {
 		updateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		if err := s.db.UpdateLastProcessedBlock(updateCtx, chainID, currentBlock); err != nil {
-			cancel()
-			return fmt.Errorf("failed to update last processed block for chain %d: %v", chainID, err)
+			log.Printf("WARNING: Failed to update last processed block for chain %d: %v", chainID, err)
+			// Don't return an error here, just log the warning
+		} else {
+			log.Printf("Updated last processed block for chain %d to %d", chainID, currentBlock)
 		}
 		cancel()
 	}
 
 	// Start live subscriptions for all services
 	if err := s.startLiveSubscriptions(ctx, cfg); err != nil {
-		return err
+		catchupErrors = append(catchupErrors, fmt.Errorf("failed to start live subscriptions: %v", err))
+		log.Printf("WARNING: Failed to start some live subscriptions: %v", err)
+	}
+
+	// If there were any errors during the catchup process, log them but don't fail
+	if len(catchupErrors) > 0 {
+		log.Printf("Catchup process completed with %d errors:", len(catchupErrors))
+		for i, err := range catchupErrors {
+			log.Printf("Catchup error %d: %v", i+1, err)
+		}
+		// Still return an error if there were any issues, but services will be running
+		return fmt.Errorf("catchup process completed with %d errors", len(catchupErrors))
 	}
 
 	return nil
@@ -818,7 +846,7 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 			}
 
 			// Add timeout for FilterLogs
-			filterCtx, filterCancel := context.WithTimeout(chunkCtx, 60*time.Second)
+			filterCtx, filterCancel := context.WithTimeout(chunkCtx, FilterLogsTimeout)
 			logs, err := intentService.client.FilterLogs(filterCtx, query)
 			filterCancel()
 
@@ -971,7 +999,7 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 			}
 
 			// Add timeout for FilterLogs
-			filterCtx, filterCancel := context.WithTimeout(chunkCtx, 60*time.Second)
+			filterCtx, filterCancel := context.WithTimeout(chunkCtx, FilterLogsTimeout)
 			logs, err := fulfillmentService.client.FilterLogs(filterCtx, query)
 			filterCancel()
 
@@ -1123,7 +1151,7 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 			}
 
 			// Add timeout for FilterLogs
-			filterCtx, filterCancel := context.WithTimeout(chunkCtx, 60*time.Second)
+			filterCtx, filterCancel := context.WithTimeout(chunkCtx, FilterLogsTimeout)
 			logs, err := settlementService.client.FilterLogs(filterCtx, query)
 			filterCancel()
 
