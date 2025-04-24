@@ -224,6 +224,10 @@ func main() {
 		log.Printf("Failed to catchup on events: %v", err)
 	}
 
+	// Start subscription supervisor to monitor and restart services if needed
+	go eventCatchupService.StartSubscriptionSupervisor(ctx, cfg)
+	log.Println("Started subscription supervisor to monitor service health")
+
 	// Perform a simple diagnostic check on clients
 	log.Println("Performing basic diagnostic checks on clients...")
 	for chainID, client := range clients {

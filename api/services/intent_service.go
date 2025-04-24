@@ -697,3 +697,18 @@ func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain
 
 	return intent, nil
 }
+
+// UnsubscribeAll unsubscribes from all active subscriptions
+func (s *IntentService) UnsubscribeAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	log.Printf("Unsubscribing from all intent subscriptions for chain %d (%d active subscriptions)",
+		s.chainID, len(s.subs))
+
+	for id, sub := range s.subs {
+		sub.Unsubscribe()
+		log.Printf("Unsubscribed from intent subscription %s on chain %d", id, s.chainID)
+		delete(s.subs, id)
+	}
+}

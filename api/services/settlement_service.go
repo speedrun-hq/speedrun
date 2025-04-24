@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -36,6 +37,7 @@ type SettlementService struct {
 	abi            abi.ABI
 	chainID        uint64
 	subs           map[string]ethereum.Subscription
+	mu             sync.Mutex
 }
 
 func NewSettlementService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentSettledEventABI string, chainID uint64) (*SettlementService, error) {
@@ -285,4 +287,26 @@ func (s *SettlementService) CreateSettlement(ctx context.Context, settlement *mo
 	}
 
 	return nil
+}
+
+// GetSubscriptionCount returns the number of active subscriptions
+func (s *SettlementService) GetSubscriptionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.subs)
+}
+
+// UnsubscribeAll unsubscribes from all active subscriptions
+func (s *SettlementService) UnsubscribeAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	log.Printf("Unsubscribing from all settlement subscriptions for chain %d (%d active subscriptions)",
+		s.chainID, len(s.subs))
+
+	for id, sub := range s.subs {
+		sub.Unsubscribe()
+		log.Printf("Unsubscribed from settlement subscription %s on chain %d", id, s.chainID)
+		delete(s.subs, id)
+	}
 }
