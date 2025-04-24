@@ -135,6 +135,25 @@ export default function About() {
               </div>
             </div>
           </div>
+
+          {/* Documentation Link Section */}
+          <div className="arcade-container border-primary-500 relative group">
+            <div className="absolute inset-0 bg-primary-500/10 blur-sm group-hover:bg-primary-500/20 transition-all duration-300" />
+            <div className="relative text-center">
+              <h3 className="arcade-text text-lg mb-4 text-primary-500">
+                LEARN MORE
+              </h3>
+              <a 
+                href="https://docs.speedrun.exchange/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-block arcade-text text-sm text-white bg-primary-500 hover:bg-primary-400 px-6 py-3 transition-colors duration-300 relative group"
+              >
+                <span className="relative z-10">CHECK OUT OUR DOCUMENTATION</span>
+                <div className="absolute inset-0 bg-primary-400 blur-sm opacity-50 group-hover:opacity-70 transition-opacity duration-300"></div>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </main>
