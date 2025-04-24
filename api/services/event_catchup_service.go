@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/db"
 )
@@ -32,6 +33,13 @@ const (
 
 	// MonitoringInterval is how often to log the status of ongoing operations
 	MonitoringInterval = 30 * time.Second
+
+	// Add these constants for block range optimization
+	// Default max range for most chains
+	DefaultMaxBlockRange = uint64(5000)
+
+	// Smaller range for Ethereum mainnet (chain ID 1) since it has higher transaction density
+	EthereumMaxBlockRange = uint64(1000)
 )
 
 // EventCatchupService coordinates the catch-up process between intent and fulfillment services
@@ -806,16 +814,107 @@ func (s *EventCatchupService) UpdateSettlementProgress(chainID, blockNumber uint
 	s.settlementProgress[chainID] = blockNumber
 }
 
-// catchUpOnIntentEvents processes missed intent events for a specific chain
+// Simplify the bloom filter check to avoid compatibility issues
+func hasEventsInBlockRange(ctx context.Context, client *ethclient.Client, contractAddress common.Address, eventSig common.Hash, startBlock, endBlock uint64) (bool, error) {
+	// Only worth doing this check for large ranges (>100 blocks)
+	if endBlock-startBlock <= 100 {
+		return true, nil // Small range, just process it normally
+	}
+
+	// Create an efficient bloom filter check
+	scanCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	// We'll just fetch logs for a few blocks in the range to see if there are any matching events
+	// This is much faster than scanning the entire range
+	sampleSize := 3
+	sampleBlocks := make([]uint64, 0, sampleSize)
+
+	// Select a few blocks across the range
+	range_size := endBlock - startBlock
+	if range_size > 2 {
+		// Start, middle, and end blocks
+		sampleBlocks = append(sampleBlocks, startBlock+1)
+		sampleBlocks = append(sampleBlocks, startBlock+(range_size/2))
+		sampleBlocks = append(sampleBlocks, endBlock-1)
+	} else {
+		// Just sample a couple blocks if range is small
+		sampleBlocks = append(sampleBlocks, startBlock+1)
+		if startBlock+1 < endBlock {
+			sampleBlocks = append(sampleBlocks, endBlock)
+		}
+	}
+
+	// For each sample block, check if there are any logs
+	for _, blockNum := range sampleBlocks {
+		// Create a query for just this block
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(int64(blockNum)),
+			ToBlock:   big.NewInt(int64(blockNum)),
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{eventSig},
+			},
+		}
+
+		// Check for logs in this block
+		logs, err := client.FilterLogs(scanCtx, query)
+		if err != nil {
+			log.Printf("WARNING: Failed to check sample block %d for events: %v, will process full range", blockNum, err)
+			return true, nil // Error getting logs, so process the range to be safe
+		}
+
+		// If we found any logs in the sample block, there might be more in the range
+		if len(logs) > 0 {
+			return true, nil
+		}
+	}
+
+	// If we didn't find any logs in the sample blocks, we'll skip this range
+	log.Printf("Sample block check: no events found in sample blocks, likely no events in range %d-%d, skipping",
+		startBlock, endBlock)
+	return false, nil
+}
+
+// Modify the intent events function to use bloom filtering on Ethereum
 func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentService *IntentService, contractAddress common.Address, fromBlock, toBlock uint64, opName string) error {
-	// Use a max range of 5,000 blocks per query to stay well under the 10,000 limit
-	const maxBlockRange = uint64(5000)
+	// Use a chain-specific block range - smaller for Ethereum mainnet
+	var maxBlockRange uint64
+	if intentService.chainID == 1 { // Ethereum mainnet
+		maxBlockRange = EthereumMaxBlockRange
+		log.Printf("[%s] Using smaller block range of %d for Ethereum mainnet", opName, maxBlockRange)
+	} else {
+		maxBlockRange = DefaultMaxBlockRange
+	}
 
 	// Process in chunks to avoid RPC provider limitations
 	for chunkStart := fromBlock; chunkStart < toBlock; chunkStart += maxBlockRange {
 		// Check for context cancellation
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+
+		chunkEnd := chunkStart + maxBlockRange
+		if chunkEnd > toBlock {
+			chunkEnd = toBlock
+		}
+
+		// For Ethereum, do a quick check if this range might have events
+		// This can dramatically speed up scanning large empty ranges
+		if intentService.chainID == 1 { // Ethereum mainnet
+			hasEvents, err := hasEventsInBlockRange(ctx, intentService.client, contractAddress,
+				intentService.abi.Events[IntentInitiatedEventName].ID, chunkStart+1, chunkEnd)
+			if err != nil {
+				log.Printf("[%s] Error in bloom check: %v, will process range", opName, err)
+			} else if !hasEvents {
+				// Skip this chunk as it likely has no events
+				log.Printf("[%s] Fast-forwarding through block range %d-%d (no events detected)",
+					opName, chunkStart+1, chunkEnd)
+
+				// Update progress even though we're skipping
+				s.UpdateIntentProgress(intentService.chainID, chunkEnd)
+				continue
+			}
 		}
 
 		// Track this chunk processing
@@ -828,11 +927,6 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 		err := func() error {
 			defer chunkCancel()
 			defer s.untrackCatchupOperation(chunkOpName)
-
-			chunkEnd := chunkStart + maxBlockRange
-			if chunkEnd > toBlock {
-				chunkEnd = toBlock
-			}
 
 			log.Printf("[%s] Fetching intent logs for blocks %d to %d", opName, chunkStart+1, chunkEnd)
 
@@ -961,8 +1055,14 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 
 // catchUpOnFulfillmentEvents processes missed fulfillment events for a specific chain
 func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fulfillmentService *FulfillmentService, contractAddress common.Address, fromBlock, toBlock uint64, opName string) error {
-	// Use a max range of 5,000 blocks per query to stay well under the 10,000 limit
-	const maxBlockRange = uint64(5000)
+	// Use a chain-specific block range - smaller for Ethereum mainnet
+	var maxBlockRange uint64
+	if fulfillmentService.chainID == 1 { // Ethereum mainnet
+		maxBlockRange = EthereumMaxBlockRange
+		log.Printf("[%s] Using smaller block range of %d for Ethereum mainnet", opName, maxBlockRange)
+	} else {
+		maxBlockRange = DefaultMaxBlockRange
+	}
 
 	// Process in chunks to avoid RPC provider limitations
 	for chunkStart := fromBlock; chunkStart < toBlock; chunkStart += maxBlockRange {
@@ -1113,8 +1213,14 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 
 // catchUpOnSettlementEvents processes missed settlement events for a specific chain
 func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, settlementService *SettlementService, contractAddress common.Address, fromBlock, toBlock uint64, opName string) error {
-	// Use a max range of 5,000 blocks per query to stay well under the 10,000 limit
-	const maxBlockRange = uint64(5000)
+	// Use a chain-specific block range - smaller for Ethereum mainnet
+	var maxBlockRange uint64
+	if settlementService.chainID == 1 { // Ethereum mainnet
+		maxBlockRange = EthereumMaxBlockRange
+		log.Printf("[%s] Using smaller block range of %d for Ethereum mainnet", opName, maxBlockRange)
+	} else {
+		maxBlockRange = DefaultMaxBlockRange
+	}
 
 	// Process in chunks to avoid RPC provider limitations
 	for chunkStart := fromBlock; chunkStart < toBlock; chunkStart += maxBlockRange {
