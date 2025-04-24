@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -37,6 +38,7 @@ type FulfillmentService struct {
 	abi            abi.ABI
 	chainID        uint64
 	subs           map[string]ethereum.Subscription
+	mu             sync.Mutex
 }
 
 // NewFulfillmentService creates a new FulfillmentService instance
@@ -374,4 +376,26 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 	}
 
 	return nil
+}
+
+// GetSubscriptionCount returns the number of active subscriptions
+func (s *FulfillmentService) GetSubscriptionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.subs)
+}
+
+// UnsubscribeAll unsubscribes from all active subscriptions
+func (s *FulfillmentService) UnsubscribeAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	log.Printf("Unsubscribing from all fulfillment subscriptions for chain %d (%d active subscriptions)",
+		s.chainID, len(s.subs))
+
+	for id, sub := range s.subs {
+		sub.Unsubscribe()
+		log.Printf("Unsubscribed from fulfillment subscription %s on chain %d", id, s.chainID)
+		delete(s.subs, id)
+	}
 }

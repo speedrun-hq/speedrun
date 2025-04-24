@@ -1233,3 +1233,157 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 
 	return nil
 }
+
+// StartSubscriptionSupervisor starts a background goroutine that periodically checks
+// if services are still running and restarts them if needed
+func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, cfg *config.Config) {
+	log.Printf("Starting subscription supervisor to monitor service health")
+
+	// Run health check every 5 minutes
+	healthCheckTicker := time.NewTicker(5 * time.Minute)
+	defer healthCheckTicker.Stop()
+
+	// Run full reconnection every 2 hours
+	reconnectTicker := time.NewTicker(2 * time.Hour)
+	defer reconnectTicker.Stop()
+
+	// Track last full reconnection time
+	lastFullReconnect := time.Now()
+
+	for {
+		select {
+		case <-healthCheckTicker.C:
+			log.Printf("Subscription supervisor checking service health...")
+
+			// Check intent services
+			for chainID, intentService := range s.intentServices {
+				activeGoroutines := intentService.ActiveGoroutines()
+				log.Printf("Intent service for chain %d: %d active goroutines", chainID, activeGoroutines)
+
+				if activeGoroutines == 0 {
+					log.Printf("WARNING: Intent service for chain %d has 0 active goroutines, restarting", chainID)
+					contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+					// Create a context with timeout for restart
+					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					err := intentService.StartListening(restartCtx, contractAddress)
+					if err != nil {
+						log.Printf("ERROR: Failed to restart intent service for chain %d: %v", chainID, err)
+					} else {
+						log.Printf("RECOVERY: Successfully restarted intent service for chain %d", chainID)
+					}
+					cancel()
+				}
+			}
+
+			// Check fulfillment services
+			for chainID, fulfillmentService := range s.fulfillmentServices {
+				count := fulfillmentService.GetSubscriptionCount()
+				log.Printf("Fulfillment service for chain %d: %d active subscriptions", chainID, count)
+
+				if count == 0 {
+					log.Printf("WARNING: Fulfillment service for chain %d has no active subscriptions, restarting", chainID)
+					contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+					// Create a context with timeout for restart
+					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					err := fulfillmentService.StartListening(restartCtx, contractAddress)
+					if err != nil {
+						log.Printf("ERROR: Failed to restart fulfillment service for chain %d: %v", chainID, err)
+					} else {
+						log.Printf("RECOVERY: Successfully restarted fulfillment service for chain %d", chainID)
+					}
+					cancel()
+				}
+			}
+
+			// Check settlement services
+			for chainID, settlementService := range s.settlementServices {
+				count := settlementService.GetSubscriptionCount()
+				log.Printf("Settlement service for chain %d: %d active subscriptions", chainID, count)
+
+				if count == 0 {
+					log.Printf("WARNING: Settlement service for chain %d has no active subscriptions, restarting", chainID)
+					contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+					// Create a context with timeout for restart
+					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					err := settlementService.StartListening(restartCtx, contractAddress)
+					if err != nil {
+						log.Printf("ERROR: Failed to restart settlement service for chain %d: %v", chainID, err)
+					} else {
+						log.Printf("RECOVERY: Successfully restarted settlement service for chain %d", chainID)
+					}
+					cancel()
+				}
+			}
+
+		case <-reconnectTicker.C:
+			// Perform a complete refresh of all WebSocket connections every 2 hours
+			timeSinceLastReconnect := time.Since(lastFullReconnect)
+			log.Printf("Performing scheduled full reconnection of all services (last reconnect: %v ago)", timeSinceLastReconnect)
+			lastFullReconnect = time.Now()
+
+			// Force reconnect all intent services
+			for chainID, intentService := range s.intentServices {
+				log.Printf("Scheduled reconnect: Restarting intent service for chain %d", chainID)
+				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+				// First, unsubscribe from all existing subscriptions
+				intentService.UnsubscribeAll()
+
+				// Create a context with timeout for restart
+				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				err := intentService.StartListening(restartCtx, contractAddress)
+				if err != nil {
+					log.Printf("ERROR: Failed to reconnect intent service for chain %d: %v", chainID, err)
+				} else {
+					log.Printf("Scheduled reconnect: Successfully reconnected intent service for chain %d", chainID)
+				}
+				cancel()
+			}
+
+			// Force reconnect all fulfillment services
+			for chainID, fulfillmentService := range s.fulfillmentServices {
+				log.Printf("Scheduled reconnect: Restarting fulfillment service for chain %d", chainID)
+				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+				// First, unsubscribe from all existing subscriptions
+				fulfillmentService.UnsubscribeAll()
+
+				// Create a context with timeout for restart
+				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				err := fulfillmentService.StartListening(restartCtx, contractAddress)
+				if err != nil {
+					log.Printf("ERROR: Failed to reconnect fulfillment service for chain %d: %v", chainID, err)
+				} else {
+					log.Printf("Scheduled reconnect: Successfully reconnected fulfillment service for chain %d", chainID)
+				}
+				cancel()
+			}
+
+			// Force reconnect all settlement services
+			for chainID, settlementService := range s.settlementServices {
+				log.Printf("Scheduled reconnect: Restarting settlement service for chain %d", chainID)
+				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+				// First, unsubscribe from all existing subscriptions
+				settlementService.UnsubscribeAll()
+
+				// Create a context with timeout for restart
+				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				err := settlementService.StartListening(restartCtx, contractAddress)
+				if err != nil {
+					log.Printf("ERROR: Failed to reconnect settlement service for chain %d: %v", chainID, err)
+				} else {
+					log.Printf("Scheduled reconnect: Successfully reconnected settlement service for chain %d", chainID)
+				}
+				cancel()
+			}
+
+		case <-ctx.Done():
+			log.Printf("Subscription supervisor shutting down")
+			return
+		}
+	}
+}
