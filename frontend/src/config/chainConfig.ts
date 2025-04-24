@@ -270,7 +270,7 @@ export function getChainRpcUrl(chainId: number): string {
     case ZETACHAIN_CHAIN_ID:
       return (
         process.env.NEXT_PUBLIC_ZETACHAIN_RPC_URL ||
-        "https://zetachain-mainnet-archive.allthatnode.com:8545"
+        "https://zetachain-mainnet.g.allthatnode.com/archive/evm"
       );
     default:
       return "";
@@ -398,11 +398,14 @@ export const getCustomChains = (alchemyId: string): Chain[] => {
       default: {
         http: [
           process.env.NEXT_PUBLIC_ZETACHAIN_RPC_URL ||
-            "https://zetachain-mainnet-archive.allthatnode.com:8545",
+            "https://zetachain-mainnet.g.allthatnode.com/archive/evm",
         ],
       },
       public: {
-        http: ["https://zetachain-mainnet-archive.allthatnode.com:8545"],
+        http: [
+          process.env.NEXT_PUBLIC_ZETACHAIN_RPC_URL ||
+            "https://zetachain-mainnet.g.allthatnode.com/archive/evm",
+        ],
       },
     },
     blockExplorers: {
