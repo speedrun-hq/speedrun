@@ -83,6 +83,14 @@ export default function RootLayout({
                   ©️ 2025 SPEEDRUN
                 </div>
                 <a
+                  href="https://docs.speedrun.exchange/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-green-400 hover:text-green-300 transition-none z-20 relative select-text"
+                >
+                  DOCS
+                </a>
+                <a
                   href="https://www.zetachain.com/"
                   target="_blank"
                   rel="noopener noreferrer"
