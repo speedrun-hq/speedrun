@@ -19,10 +19,10 @@ import (
 // Constants for timeouts and monitoring
 const (
 	// CatchupOperationTimeout is the maximum time allowed for a single catchup operation
-	CatchupOperationTimeout = 30 * time.Minute
+	CatchupOperationTimeout = 10 * time.Minute
 
 	// BlockRangeProcessTimeout is the maximum time allowed for processing a range of blocks
-	BlockRangeProcessTimeout = 15 * time.Minute
+	BlockRangeProcessTimeout = 5 * time.Minute
 
 	// LogBatchProcessTimeout is the maximum time allowed for processing a batch of logs
 	LogBatchProcessTimeout = 5 * time.Minute
