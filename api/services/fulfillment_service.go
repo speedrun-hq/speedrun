@@ -74,60 +74,125 @@ func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress
 		return fmt.Errorf("failed to subscribe to logs: %v", err)
 	}
 
-	go s.processEventLogs(ctx, sub, logs)
+	// Store the subscription with a unique ID
+	subID := contractAddress.Hex()
+	s.mu.Lock()
+	s.subs[subID] = sub
+	s.mu.Unlock()
+
+	log.Printf("INFO: Successfully subscribed to fulfillment events for contract %s on chain %d",
+		contractAddress.Hex(), s.chainID)
+
+	go s.processEventLogs(ctx, sub, logs, subID)
 	return nil
 }
 
 // processEventLogs handles the event processing loop for the subscription.
 // It manages subscription errors, log processing, and context cancellation.
-func (s *FulfillmentService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log) {
-	defer sub.Unsubscribe()
+func (s *FulfillmentService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string) {
+	// Get the contract address from subID (which we set to contract address hex)
+	contractAddress := common.HexToAddress(subID)
+
+	defer func() {
+		sub.Unsubscribe()
+		// Remove the subscription from the map when done
+		s.mu.Lock()
+		delete(s.subs, subID)
+		s.mu.Unlock()
+		log.Printf("Ended fulfillment event log processing for chain %d, subscription %s", s.chainID, subID)
+	}()
+
+	log.Printf("Starting fulfillment event log processing for chain %d, subscription %s", s.chainID, subID)
+
+	// Add a ticker for debugging to periodically log subscription status
+	debugTicker := time.NewTicker(30 * time.Second)
+	defer debugTicker.Stop()
 
 	for {
 		select {
 		case err := <-sub.Err():
 			if err != nil {
-				log.Printf("Error in subscription: %v", err)
-				if err := s.handleSubscriptionError(ctx, sub, logs); err != nil {
+				log.Printf("ERROR: Fulfillment subscription %s on chain %d error: %v", subID, s.chainID, err)
+				// Try to resubscribe
+				if err := s.handleSubscriptionError(ctx, sub, logs, subID, contractAddress); err != nil {
+					log.Printf("CRITICAL: Failed to resubscribe fulfillment service for chain %d: %v", s.chainID, err)
 					return
 				}
 			}
-		case vLog := <-logs:
+		case vLog, ok := <-logs:
+			if !ok {
+				log.Printf("ERROR: Fulfillment log channel closed unexpectedly for %s on chain %d", subID, s.chainID)
+				return
+			}
+
+			log.Printf("FULFILLMENT EVENT RECEIVED: Chain %d, Block %d, TxHash %s",
+				s.chainID, vLog.BlockNumber, vLog.TxHash.Hex())
+
 			if err := s.processLog(ctx, vLog); err != nil {
-				log.Printf("Error processing log: %v", err)
+				log.Printf("Error processing fulfillment log: %v", err)
 				continue
 			}
+		case <-debugTicker.C:
+			// Extra debugging info
+			log.Printf("DEBUG: Fulfillment subscription %s on chain %d still active", subID, s.chainID)
 		case <-ctx.Done():
+			log.Printf("Context cancelled, stopping fulfillment event processing for chain %d", s.chainID)
 			return
 		}
 	}
 }
 
 // handleSubscriptionError attempts to recover from a subscription error by resubscribing.
-func (s *FulfillmentService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log) error {
+func (s *FulfillmentService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log, subID string, contractAddress common.Address) error {
 	oldSub.Unsubscribe()
+	s.mu.Lock()
+	delete(s.subs, subID)
+	s.mu.Unlock()
 
-	// Get the contract address from the old subscription
-	contractAddress := common.HexToAddress("0x0") // Default value
-	if sub, ok := oldSub.(interface{ Query() ethereum.FilterQuery }); ok {
-		if len(sub.Query().Addresses) > 0 {
-			contractAddress = sub.Query().Addresses[0]
+	// Implement exponential backoff for retry
+	maxRetries := 5
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Check if context is cancelled
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		// Create a new query
+		query := ethereum.FilterQuery{
+			Addresses: []common.Address{contractAddress},
+			Topics: [][]common.Hash{
+				{s.abi.Events[IntentFulfilledEventName].ID},
+			},
+		}
+
+		// Try to resubscribe
+		newSub, err := s.client.SubscribeFilterLogs(ctx, query, logs)
+		if err == nil {
+			// Update the subscription
+			s.mu.Lock()
+			s.subs[subID] = newSub
+			s.mu.Unlock()
+			log.Printf("Successfully resubscribed to fulfillment events for chain %d", s.chainID)
+			return nil
+		}
+
+		// If we reach here, resubscription failed
+		backoffTime := time.Duration(1<<attempt) * time.Second
+		if backoffTime > 30*time.Second {
+			backoffTime = 30 * time.Second
+		}
+		log.Printf("Resubscription attempt %d/%d failed: %v. Retrying in %v",
+			attempt+1, maxRetries, err, backoffTime)
+
+		select {
+		case <-time.After(backoffTime):
+			// Continue with next retry
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 
-	query := ethereum.FilterQuery{
-		Addresses: []common.Address{contractAddress},
-		Topics: [][]common.Hash{
-			{s.abi.Events[IntentInitiatedEventName].ID},
-		},
-	}
-
-	_, err := s.client.SubscribeFilterLogs(ctx, query, logs)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return fmt.Errorf("failed to resubscribe after %d attempts", maxRetries)
 }
 
 // processLog processes a single fulfillment event log

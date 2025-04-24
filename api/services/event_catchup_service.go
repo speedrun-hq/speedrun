@@ -707,7 +707,7 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 			}
 		}()
 
-		go fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs)
+		go fulfillmentService.processEventLogs(ctx, fulfillmentSub, fulfillmentLogs, contractAddress.Hex())
 	}
 
 	// Start settlement listeners with similar block tracking
@@ -786,7 +786,7 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 			}
 		}()
 
-		go settlementService.processEventLogs(ctx, settlementSub, settlementLogs)
+		go settlementService.processEventLogs(ctx, settlementSub, settlementLogs, contractAddress.Hex(), contractAddress)
 	}
 
 	log.Printf("All live event listeners started successfully")

@@ -70,46 +70,77 @@ func (s *SettlementService) StartListening(ctx context.Context, contractAddress 
 		return fmt.Errorf("failed to subscribe to logs: %v", err)
 	}
 
-	go s.processEventLogs(ctx, sub, logs)
+	// Store the subscription with a unique ID
+	subID := contractAddress.Hex()
+	s.mu.Lock()
+	s.subs[subID] = sub
+	s.mu.Unlock()
+
+	log.Printf("INFO: Successfully subscribed to settlement events for contract %s on chain %d",
+		contractAddress.Hex(), s.chainID)
+
+	go s.processEventLogs(ctx, sub, logs, subID, contractAddress)
 	return nil
 }
 
-func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log) {
-	defer sub.Unsubscribe()
+func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string, contractAddress common.Address) {
+	defer func() {
+		sub.Unsubscribe()
+		// Remove the subscription from the map when done
+		s.mu.Lock()
+		delete(s.subs, subID)
+		s.mu.Unlock()
+		log.Printf("Ended settlement event log processing for chain %d, subscription %s", s.chainID, subID)
+	}()
+
+	log.Printf("Starting settlement event log processing for chain %d, subscription %s", s.chainID, subID)
+
+	// Add a ticker for debugging to periodically log subscription status
+	debugTicker := time.NewTicker(30 * time.Second)
+	defer debugTicker.Stop()
 
 	for {
 		select {
 		case err := <-sub.Err():
 			if err != nil {
-				log.Printf("Error in subscription: %v", err)
-				newSub, err := s.handleSubscriptionError(ctx, sub, logs)
+				log.Printf("ERROR: Settlement subscription %s on chain %d error: %v", subID, s.chainID, err)
+				// Try to resubscribe
+				newSub, err := s.handleSubscriptionError(ctx, sub, logs, subID, contractAddress)
 				if err != nil {
+					log.Printf("CRITICAL: Failed to resubscribe settlement service for chain %d: %v", s.chainID, err)
 					return
 				}
 				// Update the subscription and continue the loop
 				sub = newSub
 			}
-		case vLog := <-logs:
+		case vLog, ok := <-logs:
+			if !ok {
+				log.Printf("ERROR: Settlement log channel closed unexpectedly for %s on chain %d", subID, s.chainID)
+				return
+			}
+
+			log.Printf("SETTLEMENT EVENT RECEIVED: Chain %d, Block %d, TxHash %s",
+				s.chainID, vLog.BlockNumber, vLog.TxHash.Hex())
+
 			if err := s.processLog(ctx, vLog); err != nil {
-				log.Printf("Error processing log: %v", err)
+				log.Printf("Error processing settlement log: %v", err)
 				continue
 			}
+		case <-debugTicker.C:
+			// Extra debugging info
+			log.Printf("DEBUG: Settlement subscription %s on chain %d still active", subID, s.chainID)
 		case <-ctx.Done():
+			log.Printf("Context cancelled, stopping settlement event processing for chain %d", s.chainID)
 			return
 		}
 	}
 }
 
-func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log) (ethereum.Subscription, error) {
+func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log, subID string, contractAddress common.Address) (ethereum.Subscription, error) {
 	oldSub.Unsubscribe()
-
-	// Get the contract address from the old subscription
-	contractAddress := common.HexToAddress("0x0") // Default value
-	if sub, ok := oldSub.(interface{ Query() ethereum.FilterQuery }); ok {
-		if len(sub.Query().Addresses) > 0 {
-			contractAddress = sub.Query().Addresses[0]
-		}
-	}
+	s.mu.Lock()
+	delete(s.subs, subID)
+	s.mu.Unlock()
 
 	// Implement exponential backoff for retry
 	maxRetries := 5
@@ -129,6 +160,10 @@ func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub 
 		// Try to resubscribe
 		newSub, err := s.client.SubscribeFilterLogs(ctx, query, logs)
 		if err == nil {
+			// Store the new subscription
+			s.mu.Lock()
+			s.subs[subID] = newSub
+			s.mu.Unlock()
 			log.Printf("Successfully resubscribed to settlement events for chain %d", s.chainID)
 			return newSub, nil
 		}
