@@ -19,6 +19,8 @@ declare module "./TokenSelector" {
   export interface TokenSelectorProps {
     value: "USDC" | "USDT";
     onChange: (value: "USDC" | "USDT") => void;
+    sourceChain?: string;
+    destinationChain?: string;
   }
   export function TokenSelector(props: TokenSelectorProps): JSX.Element;
 }
