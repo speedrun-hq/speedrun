@@ -16,7 +16,7 @@ export default function CreateNewIntent() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { address } = useAccount();
 
-  // Temporary transfer limit during alpha phase - only supports USDC for now
+  // Temporary transfer limit during alpha phase
   const MAX_TRANSFER_AMOUNT = 10;
 
   const {
@@ -108,6 +108,8 @@ export default function CreateNewIntent() {
               <TokenSelector
                 value={formState.selectedToken}
                 onChange={updateToken}
+                sourceChain={formState.sourceChain}
+                destinationChain={formState.destinationChain}
               />
             </div>
 
@@ -236,7 +238,7 @@ export default function CreateNewIntent() {
               : formState.isSubmitting
                 ? formState.approvalHash
                   ? "SIGN INTENT TRANSACTION..."
-                  : "APPROVING USDC..."
+                  : `APPROVING ${formState.selectedToken}...`
                 : formState.success
                   ? "START NEW TRANSFER"
                   : "START"}

@@ -2,12 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import { TokenSymbol } from "@/config/chainConfig";
+import { ChainName } from "@/utils/chain";
 
 interface TokenSelectorProps {
   value: TokenSymbol;
   onChange: (value: TokenSymbol) => void;
   label?: string;
   disabled?: boolean;
+  sourceChain?: ChainName;
+  destinationChain?: ChainName;
 }
 
 export function TokenSelector({
@@ -15,12 +18,28 @@ export function TokenSelector({
   onChange,
   label = "SELECT TOKEN",
   disabled = false,
+  sourceChain = "BASE",
+  destinationChain = "ARBITRUM",
 }: TokenSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const tokens: TokenSymbol[] = ["USDC"];
-  // Coming soon tokens
-  const comingSoonTokens = ["BTC", "USDT", "ZETA"];
+
+  const isBaseChainInvolved =
+    sourceChain === "BASE" || destinationChain === "BASE";
+  const tokens: TokenSymbol[] = isBaseChainInvolved
+    ? ["USDC"]
+    : ["USDC", "USDT"];
+
+  const comingSoonTokens: TokenSymbol[] = isBaseChainInvolved
+    ? ["BTC", "USDT", "ZETA"]
+    : ["BTC", "ZETA"];
+
   const selectorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isBaseChainInvolved && value === "USDT") {
+      onChange("USDC");
+    }
+  }, [sourceChain, destinationChain, value, onChange, isBaseChainInvolved]);
 
   const handleClick = () => {
     if (disabled) return;
