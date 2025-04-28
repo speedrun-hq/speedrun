@@ -3,6 +3,7 @@ module github.com/speedrun-hq/speedrun/api
 go 1.24.0
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/ethereum/go-ethereum v1.15.7
 	github.com/gin-contrib/cors v1.7.4
 	github.com/gin-gonic/gin v1.10.0
