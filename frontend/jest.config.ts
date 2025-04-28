@@ -1,12 +1,11 @@
-// Note: This config is also defined in jest.config.ts for type safety
-// If you modify this file, please update the TypeScript version as well
-const nextJest = require("next/jest");
+import type { Config } from 'jest';
+import nextJest from 'next/jest';
 
 const createJestConfig = nextJest({
   dir: "./",
 });
 
-const customJestConfig = {
+const customJestConfig: Config = {
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   testEnvironment: "jest-environment-jsdom",
   moduleNameMapper: {
@@ -21,4 +20,4 @@ const customJestConfig = {
   },
 };
 
-module.exports = createJestConfig(customJestConfig);
+export default createJestConfig(customJestConfig); 

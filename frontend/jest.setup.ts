@@ -1,6 +1,3 @@
-// Note: This config is also defined in jest.setup.ts for type safety
-// If you modify this file, please update the TypeScript version as well
-
 // Learn more: https://github.com/testing-library/jest-dom
 import "@testing-library/jest-dom";
 
@@ -19,6 +16,14 @@ jest.mock("next/navigation", () => ({
 }));
 
 // Extend Jest matchers
+declare global {
+  namespace jest {
+    interface Matchers<R> {
+      toBeInTheDocument(): R;
+    }
+  }
+}
+
 expect.extend({
   toBeInTheDocument(received) {
     const pass = received !== null;
@@ -34,4 +39,4 @@ expect.extend({
       };
     }
   },
-});
+}); 
