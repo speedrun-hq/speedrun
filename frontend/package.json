@@ -49,6 +49,7 @@
     "prettier": "^3.2.5",
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.3.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.0"
   }
 }
