@@ -46,17 +46,20 @@ api/
 ### Installation
 
 1. Clone the repository:
+
    ```
    git clone https://github.com/speedrun-hq/speedrun
    cd speedrun/api
    ```
 
 2. Install dependencies:
+
    ```
    go mod download
    ```
 
 3. Copy the example environment file and configure it:
+
    ```
    cp .env.example .env
    # Edit .env with your configuration
@@ -88,6 +91,7 @@ POST /api/intents
 ```
 
 Request body:
+
 ```json
 {
   "source_chain": "zeta",
@@ -100,6 +104,7 @@ Request body:
 ```
 
 Response:
+
 ```json
 {
   "id": "0x1234567890123456789012345678901234567890123456789012345678901234",
@@ -122,6 +127,7 @@ GET /api/intents/:id
 ```
 
 Response:
+
 ```json
 {
   "id": "0x1234567890123456789012345678901234567890123456789012345678901234",
@@ -144,6 +150,7 @@ GET /api/intents
 ```
 
 Response:
+
 ```json
 [
   {
@@ -188,4 +195,4 @@ go test ./...
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.

@@ -30,9 +30,9 @@ Once an intent is detected, fulfillers must call the `fulfill` function on the c
 
 ```solidity
 function fulfill(
-    bytes32 intentId, 
-    address asset, 
-    uint256 amount, 
+    bytes32 intentId,
+    address asset,
+    uint256 amount,
     address receiver
 )
 ```
@@ -48,5 +48,4 @@ While the above represents the general fulfillment flow, Speedrun provides addit
 
 These tools help developers get started with fulfilling intents with minimal setup requirements.
 
-*More detailed documentation coming soon*
-
+_More detailed documentation coming soon_
