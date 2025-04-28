@@ -16,13 +16,13 @@ const nextConfig = {
 // It's needed because Next.js expects a .js file by default
 
 // Register ts-node to handle TypeScript config
-require('ts-node').register({ 
+require("ts-node").register({
   transpileOnly: true,
   compilerOptions: {
-    module: 'commonjs',
-    target: 'es2015',
+    module: "commonjs",
+    target: "es2015",
   },
 });
 
 // Export the TypeScript config
-module.exports = require('./next.config.ts').default;
+module.exports = require("./next.config.ts").default;
