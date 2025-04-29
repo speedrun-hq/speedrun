@@ -2,7 +2,7 @@
 
 ## Overview
 
-*coming soon*
+_coming soon_
 
 Currently, Speedrun only supports simple token transfers without any handling logic on the destination chain.
 
@@ -36,6 +36,7 @@ function onSettle(
 ```
 
 With these functions, developers will be able to execute custom logic when an intent is fulfilled and settled, enabling complex cross-chain operations like:
+
 - Automated token swaps on destination DEXs
 - Deposits into yield-generating protocols
 - Dynamic NFT minting based on cross-chain data
@@ -55,11 +56,11 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 contract CrossChainSwapper {
     // Uniswap V2 Router address
     address public immutable uniswapRouter;
-    
+
     constructor(address _uniswapRouter) {
         uniswapRouter = _uniswapRouter;
     }
-    
+
     // Called by the protocol during intent fulfillment
     function onFulfill(
         bytes32 intentId,
@@ -74,16 +75,16 @@ contract CrossChainSwapper {
             uint256 deadline,
             address receiver
         ) = decodeSwapParams(data);
-        
+
         // Ensure the first token in the path matches the received asset
         require(path[0] == asset, "Asset mismatch");
-        
+
         // Transfer tokens from the sender to this contract
         IERC20(asset).transferFrom(msg.sender, address(this), amount);
-        
+
         // Approve router to spend the tokens
         IERC20(asset).approve(uniswapRouter, amount);
-        
+
         // Execute the swap on Uniswap
         IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(
             amount,
@@ -93,23 +94,23 @@ contract CrossChainSwapper {
             deadline
         );
     }
-    
+
     // Helper function to decode swap parameters from the bytes data
-    function decodeSwapParams(bytes memory data) 
-        internal 
-        pure 
+    function decodeSwapParams(bytes memory data)
+        internal
+        pure
         returns (
             address[] memory path,
             uint256 minAmountOut,
             uint256 deadline,
             address receiver
-        ) 
+        )
     {
         // Decode the packed data
         // Example format: path addresses + minAmountOut + deadline + receiver
         return abi.decode(data, (address[], uint256, uint256, address));
     }
-    
+
     // onSettle implementation
     function onSettle(
         bytes32 intentId,
@@ -124,6 +125,7 @@ contract CrossChainSwapper {
 ```
 
 In this example:
+
 1. The `data` parameter contains encoded information about the swap: token path, minimum output amount, deadline, and the receiver address
 2. The contract uses `transferFrom` to get the tokens from the sender (requires prior approval)
 3. The `decodeSwapParams` function extracts all the parameters including the receiver from the encoded bytes

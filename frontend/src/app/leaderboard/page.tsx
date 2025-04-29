@@ -457,7 +457,7 @@ export default function Leaderboard() {
   const chains = Object.keys(CHAIN_NAME_TO_ID).map((chainName) => {
     // Format display name (BSC -> BNB CHAIN for display)
     const displayName = chainName === "BSC" ? "BNB CHAIN" : chainName;
-    
+
     return {
       name: displayName,
       colorClasses: getChainColorClasses(chainName),

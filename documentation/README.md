@@ -12,11 +12,13 @@ This is the documentation site for Speedrun, built with [Docusaurus](https://doc
 ### Setup
 
 1. Make sure you're using Node.js 18 or higher:
+
    ```
    nvm use
    ```
 
 2. Install dependencies:
+
    ```
    yarn
    ```

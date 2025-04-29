@@ -4,7 +4,7 @@
 
 ### Intent Contracts
 
-*These are the main user facing contracts, to initiate and fulfil intents on connected chains*
+_These are the main user facing contracts, to initiate and fulfil intents on connected chains_
 
 <div class="address-list">
   <div class="address-row">

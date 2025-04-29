@@ -94,6 +94,7 @@ All endpoints may return the following error responses:
 ```
 
 Common HTTP status codes:
+
 - 400: Bad Request
 - 404: Not Found
-- 500: Internal Server Error 
+- 500: Internal Server Error

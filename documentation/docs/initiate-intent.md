@@ -16,6 +16,7 @@ function initiate(
 ```
 
 Creates a new intent for cross-chain transfer:
+
 - `asset`: Address of the token to transfer
 - `amount`: Amount of tokens to transfer
 - `targetChain`: Chain ID of the destination chain
@@ -57,4 +58,4 @@ contract IntentCreator {
 
 ## Fetch the Intent
 
-*Coming soon*
+_Coming soon_

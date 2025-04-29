@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   postgres:
@@ -19,4 +19,4 @@ services:
       retries: 5
 
 volumes:
-  postgres_data: 
+  postgres_data:
