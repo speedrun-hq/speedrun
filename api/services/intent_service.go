@@ -49,6 +49,7 @@ type IntentService struct {
 	ctx              context.Context
 }
 
+// NewIntentService creates a new intent service
 func NewIntentService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentInitiatedEventABI string, chainID uint64) (*IntentService, error) {
 	parsedABI, err := abi.JSON(strings.NewReader(intentInitiatedEventABI))
 	if err != nil {
