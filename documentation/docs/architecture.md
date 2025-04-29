@@ -39,7 +39,7 @@ If no fulfiller steps in, the settlement is still guaranteed — but it takes lo
 
 The process is fully transparent. Users can track their transfer status in real-time, and fulfillers can monitor their fulfilled intents, fees earned, and settlement confirmations through the Speedrun interface and APIs.
 
-**In short:** Speedrun separates *user experience* from *settlement mechanics*, enabling fast transfers while preserving the security of decentralized cross-chain settlement.
+**In short:** Speedrun separates _user experience_ from _settlement mechanics_, enabling fast transfers while preserving the security of decentralized cross-chain settlement.
 
 <div align="center">
   <img src="/img/architecture.png" alt="Architecture" width="1400" />
@@ -51,8 +51,8 @@ The process is fully transparent. Users can track their transfer status in real-
 
 The smart contracts form the **core of Speedrun’s architecture**. They leverage **ZetaChain’s universal app framework** to support intent-based interoperability between chains. These contracts validate intents, enforce routing rules, and handle final settlement across connected chains.
 
-- Handle intent creation and validation  
-- Perform routing and settlement on ZetaChain  
+- Handle intent creation and validation
+- Perform routing and settlement on ZetaChain
 - Deployed across supported EVMs
 
 [Source code](hhttps://github.com/speedrun-hq/contracts-core)
@@ -60,6 +60,7 @@ The smart contracts form the **core of Speedrun’s architecture**. They leverag
 ### Backend API
 
 Speedrun provides a robust **backend API** that exposes information about intent creation and fulfillment. This API can be used by:
+
 - **Web developers** building Speedrun-enabled applications
 - **Liquidity providers** creating custom fulfillers
 
@@ -84,6 +85,7 @@ This tooling lowers the barrier to entry for new fulfillers and supports decentr
 ### Web Interface
 
 The [**speedrun.exchange**](https://speedrun.exchange) webapp offers a simple, user-facing gateway to Speedrun. It allows users to:
+
 - Initiate cross-chain transfers
 - Monitor transaction status
 - View intent and fulfillment history
@@ -97,6 +99,7 @@ In addition, it will feature a **dedicated dashboard for fulfillers**, providing
 ### Intent Contract
 
 The Intent contract is deployed on each connected blockchain (e.g., Base, Arbitrum) and serves as:
+
 - **Entrypoint** for users initiating cross-chain transfers
 - **Endpoint** for fulfilling completed transfers on the destination chain
 - **Registry** for tracking pending intents and their fulfillment status
@@ -106,6 +109,7 @@ When a user wants to transfer tokens across chains, they interact with the Inten
 ### Router Contract
 
 The Router contract is the central hub deployed on ZetaChain that:
+
 - **Coordinates** cross-chain transfers between different blockchains
 - **Manages** token associations between native tokens and their ZRC20 representations
 - **Handles** gas token refunds to ensure smooth operation across chains
@@ -115,10 +119,9 @@ The Router maintains a registry of supported tokens and their corresponding ZRC2
 ### Swap Module
 
 The Swap Module is a specialized contract deployed on ZetaChain that:
+
 - **Abstracts** the token swapping functionality for the Router
 - **Integrates** with existing decentralized exchanges (DEXs) on ZetaChain
 - **Optimizes** swap routes to minimize slippage and fees
 
 Importantly, the platform itself is **not a DEX**. Instead, it leverages existing liquidity pools and decentralized exchanges on ZetaChain to efficiently convert between different ZRC20 tokens. This design choice allows the system to focus on its core competency - facilitating fast cross-chain transfers through the intent settlement protocol - while taking advantage of the established DeFi ecosystem on ZetaChain.
-
-

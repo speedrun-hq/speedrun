@@ -2,15 +2,15 @@ name: Frontend CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'frontend/**'
-      - '.github/workflows/**'
+      - "frontend/**"
+      - ".github/workflows/**"
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'frontend/**'
-      - '.github/workflows/**'
+      - "frontend/**"
+      - ".github/workflows/**"
 
 jobs:
   test:
@@ -24,37 +24,37 @@ jobs:
         node-version: [18.x]
 
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-        cache-dependency-path: ./frontend/package-lock.json
+      - uses: actions/checkout@v3
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+          cache-dependency-path: ./frontend/package-lock.json
 
-    - name: Type check
-      run: npm run type-check
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Format check
-      run: npm run format:check
+      - name: Type check
+        run: npm run type-check
 
-    - name: Lint
-      run: npm run lint
+      - name: Format check
+        run: npm run format:check
 
-    - name: Run tests
-      run: npm test
-      env:
-        CI: true
-        NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
-        NEXT_PUBLIC_ALCHEMY_ID: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ID }}
+      - name: Lint
+        run: npm run lint
 
-    - name: Build
-      run: npm run build
-      env:
-        NEXT_PUBLIC_API_URL: http://localhost:8080
-        NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
-        NEXT_PUBLIC_ALCHEMY_ID: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ID }} 
+      - name: Run tests
+        run: npm test
+        env:
+          CI: true
+          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
+          NEXT_PUBLIC_ALCHEMY_ID: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ID }}
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
+          NEXT_PUBLIC_ALCHEMY_ID: ${{ secrets.NEXT_PUBLIC_ALCHEMY_ID }}

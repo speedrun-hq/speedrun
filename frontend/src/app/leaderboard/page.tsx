@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { apiService } from "@/services/api";
-import { Runner, Intent } from "@/types";
+import { Runner, Intent, CHAIN_NAME_TO_ID, CHAIN_ID_TO_NAME } from "@/types";
 
 interface ColorClasses {
   container: string;
@@ -219,20 +219,12 @@ export default function Leaderboard() {
         }
 
         // Process intents into leaderboard data
-        const chainIds = {
-          BASE: 8453,
-          ARBITRUM: 42161,
-          "BNB CHAIN": 56,
-          POLYGON: 137,
-          AVALANCHE: 43114,
-          ETHEREUM: 1,
-        };
-
+        // Use CHAIN_NAME_TO_ID mapping from types instead of hardcoded chainIds
         const data: { [key: string]: Runner[] } = {};
         const newErrors: { [key: string]: string } = {};
 
         // Process intents for each chain
-        Object.entries(chainIds).forEach(([chainName, chainId]) => {
+        Object.entries(CHAIN_NAME_TO_ID).forEach(([chainName, chainId]) => {
           try {
             // Filter intents for this chain
             const chainIntents = intents.filter((intent: Intent) => {
@@ -381,11 +373,11 @@ export default function Leaderboard() {
     fetchLeaderboardData();
   }, []);
 
-  // Chain configurations with fixed class names
-  const chains = [
-    {
-      name: "BASE",
-      colorClasses: {
+  // Generate chain configurations dynamically from the CHAIN_NAME_TO_ID mapping
+  const getChainColorClasses = (chainName: string) => {
+    // Define color schemes for known chains
+    const colorSchemes: Record<string, ColorClasses> = {
+      BASE: {
         container: "border-blue-500",
         headerText: "text-blue-500",
         rowText: "text-blue-300",
@@ -395,10 +387,7 @@ export default function Leaderboard() {
         glowBg: "bg-blue-500/10",
         glowBgHover: "bg-blue-500/20",
       },
-    },
-    {
-      name: "ARBITRUM",
-      colorClasses: {
+      ARBITRUM: {
         container: "border-indigo-700",
         headerText: "text-indigo-700",
         rowText: "text-indigo-300",
@@ -408,10 +397,7 @@ export default function Leaderboard() {
         glowBg: "bg-indigo-700/10",
         glowBgHover: "bg-indigo-700/20",
       },
-    },
-    {
-      name: "BNB CHAIN",
-      colorClasses: {
+      BSC: {
         container: "border-yellow-500",
         headerText: "text-yellow-500",
         rowText: "text-yellow-300",
@@ -421,10 +407,7 @@ export default function Leaderboard() {
         glowBg: "bg-yellow-500/10",
         glowBgHover: "bg-yellow-500/20",
       },
-    },
-    {
-      name: "POLYGON",
-      colorClasses: {
+      POLYGON: {
         container: "border-purple-600",
         headerText: "text-purple-600",
         rowText: "text-purple-300",
@@ -434,10 +417,7 @@ export default function Leaderboard() {
         glowBg: "bg-purple-600/10",
         glowBgHover: "bg-purple-600/20",
       },
-    },
-    {
-      name: "AVALANCHE",
-      colorClasses: {
+      AVALANCHE: {
         container: "border-red-600",
         headerText: "text-red-600",
         rowText: "text-red-300",
@@ -447,10 +427,7 @@ export default function Leaderboard() {
         glowBg: "bg-red-600/10",
         glowBgHover: "bg-red-600/20",
       },
-    },
-    {
-      name: "ETHEREUM",
-      colorClasses: {
+      ETHEREUM: {
         container: "border-gray-500",
         headerText: "text-gray-500",
         rowText: "text-gray-300",
@@ -460,8 +437,32 @@ export default function Leaderboard() {
         glowBg: "bg-gray-500/10",
         glowBgHover: "bg-gray-500/20",
       },
-    },
-  ];
+      ZETACHAIN: {
+        container: "border-green-500",
+        headerText: "text-green-500",
+        rowText: "text-green-300",
+        headerBorder: "border-green-500/40",
+        rowBorder: "border-green-500/20",
+        hoverBg: "hover:bg-green-500/10",
+        glowBg: "bg-green-500/10",
+        glowBgHover: "bg-green-500/20",
+      },
+    };
+
+    // Return color scheme for the chain, or default to gray if not found
+    return colorSchemes[chainName] || colorSchemes.ETHEREUM;
+  };
+
+  // Generate chains array dynamically from CHAIN_NAME_TO_ID
+  const chains = Object.keys(CHAIN_NAME_TO_ID).map((chainName) => {
+    // Format display name (BSC -> BNB CHAIN for display)
+    const displayName = chainName === "BSC" ? "BNB CHAIN" : chainName;
+
+    return {
+      name: displayName,
+      colorClasses: getChainColorClasses(chainName),
+    };
+  });
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 relative overflow-hidden">

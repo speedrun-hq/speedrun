@@ -21,6 +21,7 @@ Speedrun is an intent settlement protocol designed for **blazing fast cross-chai
 While ZetaChain’s architecture offers **trustlessness, composability, and robust safety guarantees**, it may introduce latency compared to centralized bridges. Speedrun introduces an intent-based execution model, turning that latency into a market-driven opportunity.
 
 By allowing **third-party fulfillers** to complete user intents immediately and rely on ZetaChain for finality, Speedrun ensures both **speed** and **security**, without compromise.
+
 ## Features
 
 - 🔥 **Fast**: Use intent model to complete transactions directly on the target

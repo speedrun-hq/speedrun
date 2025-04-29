@@ -15,7 +15,7 @@
   --ifm-color-primary-lightest: #94ecb7;
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
-  
+
   /* Smaller heading sizes */
   --ifm-h1-font-size: 1.5rem;
   --ifm-h2-font-size: 1.2rem;
@@ -32,7 +32,7 @@ body {
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
-[data-theme='dark'] {
+[data-theme="dark"] {
   --ifm-color-primary: #4ade80; /* Tailwind text-green-400 */
   --ifm-color-primary-dark: #31d86c;
   --ifm-color-primary-darker: #25d562;
@@ -123,14 +123,16 @@ h3 {
 }
 
 /* Arcade font */
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
 
 .arcade-text {
-  font-family: 'Press Start 2P', cursive;
+  font-family: "Press Start 2P", cursive;
 }
 
-h1, h2, h3 {
-  font-family: 'Press Start 2P', cursive;
+h1,
+h2,
+h3 {
+  font-family: "Press Start 2P", cursive;
 }
 
 /* Neon animation effect */
@@ -139,17 +141,24 @@ h1, h2, h3 {
 }
 
 @keyframes neon-pulse {
-  0%, 100% {
-    text-shadow: 0 0 7px #4ade80, 0 0 10px #4ade80, 0 0 21px #4ade80;
+  0%,
+  100% {
+    text-shadow:
+      0 0 7px #4ade80,
+      0 0 10px #4ade80,
+      0 0 21px #4ade80;
   }
   50% {
-    text-shadow: 0 0 10px #4ade80, 0 0 15px #4ade80, 0 0 30px #4ade80;
+    text-shadow:
+      0 0 10px #4ade80,
+      0 0 15px #4ade80,
+      0 0 30px #4ade80;
   }
 }
 
 /* Custom footer style - Force black background */
-html[data-theme='dark'] .footer,
-html[data-theme='dark'] footer {
+html[data-theme="dark"] .footer,
+html[data-theme="dark"] footer {
   background-color: #000000 !important;
   color: #4ade80 !important;
   padding: 16px;
@@ -157,7 +166,7 @@ html[data-theme='dark'] footer {
 }
 
 .footer__copyright {
-  font-family: 'Press Start 2P', cursive;
+  font-family: "Press Start 2P", cursive;
   color: #4ade80 !important;
   font-size: 14px;
   text-align: center;
@@ -209,7 +218,7 @@ html[data-theme='dark'] footer {
 }
 
 .network-label {
-  font-family: 'Press Start 2P', cursive;
+  font-family: "Press Start 2P", cursive;
   color: #4ade80;
   font-size: 0.8rem;
   min-width: 120px;
@@ -252,7 +261,7 @@ html[data-theme='dark'] footer {
 }
 
 .term {
-  font-family: 'Press Start 2P', cursive;
+  font-family: "Press Start 2P", cursive;
   color: #4ade80;
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
@@ -273,28 +282,28 @@ html[data-theme='dark'] footer {
     align-items: flex-start;
     padding: 1rem 0.5rem;
   }
-  
+
   .network-label {
     margin-bottom: 0.5rem;
     margin-right: 0;
   }
-  
+
   .address-block {
     width: auto;
     margin-right: 0;
     margin-bottom: 0.5rem;
   }
-  
+
   .footer__copyright {
     flex-direction: column;
     gap: 10px;
   }
-  
+
   .footer-separator {
     display: none;
   }
-  
-  .footer-left, 
+
+  .footer-left,
   .footer-right {
     text-align: center;
   }
@@ -304,14 +313,16 @@ html[data-theme='dark'] footer {
 .navbar__title {
   color: #4ade80 !important;
   font-weight: bold;
-  font-family: 'Press Start 2P', cursive;
+  font-family: "Press Start 2P", cursive;
   text-transform: uppercase;
   letter-spacing: 1px;
   font-size: 1rem;
   image-rendering: pixelated;
   -webkit-font-smoothing: none;
   padding: 0.25rem 0.5rem;
-  text-shadow: 0 0 5px rgba(74, 222, 128, 0.5), 0 0 10px rgba(74, 222, 128, 0.3);
+  text-shadow:
+    0 0 5px rgba(74, 222, 128, 0.5),
+    0 0 10px rgba(74, 222, 128, 0.3);
   position: relative;
   display: inline-block;
   z-index: 1;
@@ -357,11 +368,16 @@ html[data-theme='dark'] footer {
 
 /* Animated pixel effect for the title */
 @keyframes pixel-flicker {
-  0%, 100% { 
-    text-shadow: 0 0 5px rgba(74, 222, 128, 0.5), 0 0 10px rgba(74, 222, 128, 0.3);
+  0%,
+  100% {
+    text-shadow:
+      0 0 5px rgba(74, 222, 128, 0.5),
+      0 0 10px rgba(74, 222, 128, 0.3);
   }
-  50% { 
-    text-shadow: 0 0 7px rgba(74, 222, 128, 0.7), 0 0 12px rgba(74, 222, 128, 0.5);
+  50% {
+    text-shadow:
+      0 0 7px rgba(74, 222, 128, 0.7),
+      0 0 12px rgba(74, 222, 128, 0.5);
   }
 }
 
