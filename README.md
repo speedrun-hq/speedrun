@@ -23,20 +23,23 @@ Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infra
 ### Core Components
 
 1. **Smart Contracts**
+
    - Intent-based transfers witht routing on ZetaChain
    - Smart contracts for each supported VMs
 
 1. **Web Interface (React)**
+
    - Transfer initiation form
    - Real-time status tracking
    - Transaction history
 
-2. **Backend API**
+1. **Backend API**
+
    - Intent registration
    - Fulfillment tracking
    - CCTX monitoring
 
-3. **Fulfiller Tooling**
+1. **Fulfiller Tooling**
    - Intent scanning
    - Fulfillment execution
    - Fee calculation
@@ -44,6 +47,7 @@ Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infra
 ### Workflow
 
 1. **Transfer Creation**
+
    - User specifies:
      - Source Chain
      - Destination Chain
@@ -53,6 +57,7 @@ Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infra
    - System creates CCTX and registers Intent ID
 
 2. **Fulfillment Process**
+
    - Fulfillers monitor intents
    - Early execution on destination chain
    - Partial fulfillment support
@@ -71,7 +76,6 @@ Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infra
 - Go (v1.20 or higher)
 - Access to ZetaChain network
 
-
 ## Fee Structure
 
 - **Intent Fee**: Set by the platform (configurable)
@@ -84,4 +88,3 @@ Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infra
 - Market-based fee determination
 - Additional chain support (Solana, Sui)
 - Advanced automation features
-

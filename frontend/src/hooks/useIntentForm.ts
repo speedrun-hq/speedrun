@@ -209,7 +209,7 @@ export function useIntentForm() {
         const tokenAddress =
           TOKENS[sourceChainId][formState.selectedToken].address;
 
-        // First, set the form state to indicate we're approving USDC
+        // First, set the form state to indicate we're approving the token
         setFormState((prev) => ({
           ...prev,
           isSubmitting: true,

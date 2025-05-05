@@ -171,7 +171,7 @@ export const TOKENS: Record<number, TokenConfig> = {
       name: "USD Coin",
     },
     USDT: {
-      address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
+      address: "0xde3a24028580884448a5397872046a019649b084",
       decimals: 6,
       symbol: "USDT",
       name: "Tether USD",
@@ -402,7 +402,10 @@ export const getCustomChains = (alchemyId: string): Chain[] => {
         ],
       },
       public: {
-        http: ["https://zetachain-mainnet.g.allthatnode.com/archive/evm"],
+        http: [
+          process.env.NEXT_PUBLIC_ZETACHAIN_RPC_URL ||
+            "https://zetachain-mainnet.g.allthatnode.com/archive/evm",
+        ],
       },
     },
     blockExplorers: {

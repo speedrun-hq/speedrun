@@ -6,6 +6,7 @@ export const Intent = {
     [8453]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_BASE as `0x${string}`, // Base
     [42161]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_ARBITRUM as `0x${string}`, // Arbitrum
     [43114]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_AVALANCHE as `0x${string}`, // Avalanche
+    [7000]: process.env.NEXT_PUBLIC_INTENT_CONTRACT_ZETACHAIN as `0x${string}`, // ZetaChain
   },
   abi: [
     {
