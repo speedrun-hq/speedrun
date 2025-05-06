@@ -1,0 +1,59 @@
+{
+  "name": "@speedrun/widget",
+  "version": "0.1.0",
+  "description": "Cross-chain token transfer widget for DeFi applications",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "test": "jest",
+    "lint": "eslint 'src/**/*.{js,ts,tsx}'",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "wagmi": "^1.0.0"
+  },
+  "dependencies": {
+    "@ethersproject/providers": "^5.7.0",
+    "@ethersproject/units": "^5.7.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^24.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "rollup": "^3.0.0",
+    "rollup-plugin-peer-deps-external": "^2.2.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "speedrun",
+    "widget",
+    "defi",
+    "cross-chain",
+    "intent",
+    "transfer",
+    "blockchain",
+    "ethereum",
+    "web3"
+  ],
+  "author": "Speedrun Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/speedrun-hq/speedrun"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+} 
