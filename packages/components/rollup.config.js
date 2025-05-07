@@ -20,18 +20,11 @@ export default {
     },
   ],
   plugins: [
-    // Automatically externalize peer dependencies
     peerDepsExternal(),
-    
-    // Resolve node_modules
     resolve({
       browser: true,
     }),
-    
-    // Convert CommonJS modules to ES6
     commonjs(),
-    
-    // Compile TypeScript
     typescript({
       tsconfig: './tsconfig.json',
       declaration: true,

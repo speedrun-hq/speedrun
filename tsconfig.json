@@ -4,7 +4,7 @@
     "module": "esnext",
     "lib": ["dom", "esnext"],
     "importHelpers": true,
-    "declaration": false,
+    "declaration": true,
     "sourceMap": true,
     "rootDir": "./src",
     "outDir": "./dist",
@@ -29,15 +29,13 @@
     "paths": {
       "@speedrun/components": ["../packages/components/src"],
       "@speedrun/utils": ["../packages/utils/src"]
-    },
-    "isolatedModules": true
+    }
   },
   "include": ["src/**/*"],
   "exclude": [
     "node_modules",
     "dist",
     "**/__tests__/**",
-    "**/__mocks__/**",
-    "../packages/**/*"
+    "**/__mocks__/**"
   ]
 } 

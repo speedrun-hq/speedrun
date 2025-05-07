@@ -1,0 +1,38 @@
+{
+  "name": "@speedrun/hooks",
+  "version": "0.1.0",
+  "description": "Shared React hooks for Speedrun",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "lint": "eslint 'src/**/*.{js,ts,tsx}'",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "wagmi": "^1.0.0"
+  },
+  "dependencies": {
+    "@speedrun/utils": "^0.1.0",
+    "@speedrun/components": "^0.1.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^24.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "@types/react": "^18.0.0",
+    "eslint": "^8.0.0",
+    "rimraf": "^5.0.0",
+    "rollup": "^3.0.0",
+    "rollup-plugin-peer-deps-external": "^2.2.0",
+    "typescript": "^5.0.0"
+  },
+  "author": "Speedrun Team",
+  "license": "MIT"
+} 

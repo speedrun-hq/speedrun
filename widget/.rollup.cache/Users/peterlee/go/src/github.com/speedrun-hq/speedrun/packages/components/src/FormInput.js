@@ -1,0 +1,6 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+export function FormInput({ label, value, onChange, placeholder, disabled = false, error, type = "text", max, min, step, className = "", labelClassName = "block text-[hsl(var(--yellow))] mb-2 font-mono", }) {
+    return (_jsxs("div", { className: "space-y-2 relative z-10", children: [label && _jsx("label", { className: labelClassName, children: label }), _jsx("input", { type: type, value: value, onChange: (e) => onChange(e.target.value), placeholder: placeholder, disabled: disabled, max: max, min: min, step: step, className: `w-full px-4 py-2 bg-black border-2 border-[hsl(var(--yellow))] rounded-lg text-[#00ff00] arcade-text text-xs normal-case focus:outline-none focus:border-[hsl(var(--yellow)/0.8)] disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-[hsl(var(--yellow)/0.5)] pointer-events-auto ${className}`, style: { textTransform: "none" } }), error && _jsx("p", { className: "text-red-500 text-xs arcade-text", children: error })] }));
+}
+export default FormInput;
+//# sourceMappingURL=FormInput.js.map

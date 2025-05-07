@@ -1,18 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-// Imports need to be updated to reference the main app
-import { useIntentForm } from "../../frontend/src/hooks/useIntentForm";
-import { ChainSelector } from "../../frontend/src/components/ChainSelector";
-import { TokenSelector } from "../../frontend/src/components/TokenSelector";
-import { FormInput } from "../../frontend/src/components/FormInput";
-import { getChainId, getChainName } from "../../frontend/src/utils/chain";
+// Use our standalone widget hook instead of the frontend hook
+import { useWidgetIntent } from "./hooks/useWidgetIntent";
+// But we can now use the shared components and utils
+import { ChainSelector, TokenSelector, FormInput } from "@speedrun/components";
+import { getChainId, getChainName, ChainName, TokenSymbol } from "@speedrun/utils";
 import { useAccount } from "wagmi";
 
 export interface SpeedrunWidgetProps {
-  defaultSourceChain?: string;
-  defaultDestinationChain?: string;
-  defaultToken?: string;
+  defaultSourceChain?: ChainName;
+  defaultDestinationChain?: ChainName;
+  defaultToken?: TokenSymbol;
   defaultAmount?: string;
   defaultRecipient?: string;
   defaultTip?: string;
@@ -26,17 +25,17 @@ export interface SpeedrunWidgetProps {
   };
 }
 
-export function SpeedrunWidget({
-  defaultSourceChain = "BASE",
-  defaultDestinationChain = "ARBITRUM",
-  defaultToken = "USDC",
+export const SpeedrunWidget: React.FC<SpeedrunWidgetProps> = ({
+  defaultSourceChain = "BASE" as ChainName,
+  defaultDestinationChain = "ARBITRUM" as ChainName,
+  defaultToken = "USDC" as TokenSymbol,
   defaultAmount = "",
   defaultRecipient = "",
   defaultTip = "",
   onSuccess,
   onError,
   customStyles = {},
-}: SpeedrunWidgetProps) {
+}) => {
   const { address } = useAccount();
   const [compact, setCompact] = useState(false);
 
@@ -56,7 +55,12 @@ export function SpeedrunWidget({
     updateRecipient,
     updateTip,
     resetForm,
-  } = useIntentForm();
+  } = useWidgetIntent({
+    defaultSourceChain,
+    defaultDestinationChain,
+    defaultToken,
+    defaultAmount,
+  });
 
   // Apply default values on initial render
   useEffect(() => {
@@ -73,7 +77,7 @@ export function SpeedrunWidget({
     if (isConnected && address && !formState.recipient) {
       updateRecipient(address);
     }
-  }, [isConnected, address, formState.recipient]);
+  }, [isConnected, address, formState.recipient, updateRecipient]);
 
   // Call onSuccess callback when intent is created
   useEffect(() => {
