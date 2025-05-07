@@ -171,7 +171,7 @@ export const TOKENS: Record<number, TokenConfig> = {
       name: "USD Coin",
     },
     USDT: {
-      address: "0xde3a24028580884448a5397872046a019649b084",
+      address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
       decimals: 6,
       symbol: "USDT",
       name: "Tether USD",
