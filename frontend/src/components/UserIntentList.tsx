@@ -23,6 +23,7 @@ function UserIntentList() {
   const [receivedTotalPages, setReceivedTotalPages] = useState(1);
   const [sentTotalCount, setSentTotalCount] = useState(0);
   const [receivedTotalCount, setReceivedTotalCount] = useState(0);
+  const [pageInput, setPageInput] = useState("");
 
   useEffect(() => {
     const fetchUserIntents = async () => {
@@ -86,6 +87,22 @@ function UserIntentList() {
     setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev));
   };
 
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === "" || /^\d+$/.test(value)) {
+      setPageInput(value);
+    }
+  };
+
+  const handlePageInputSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pageNum = parseInt(pageInput);
+    if (pageNum >= 1 && pageNum <= totalPages) {
+      setCurrentPage(pageNum);
+      setPageInput("");
+    }
+  };
+
   if (!isConnected || !address) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -112,62 +129,79 @@ function UserIntentList() {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <div className="flex justify-center mb-6 space-x-4">
-        <button
-          onClick={() => setViewMode("sent")}
-          className={`arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 ${viewMode === "sent" ? "bg-primary-500 text-black" : ""}`}
-        >
-          SENT
-        </button>
-        <button
-          onClick={() => setViewMode("received")}
-          className={`arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 ${viewMode === "received" ? "bg-primary-500 text-black" : ""}`}
-        >
-          RECEIVED
-        </button>
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex space-x-4">
+          <button
+            onClick={() => setViewMode("sent")}
+            className={`arcade-btn-sm ${
+              viewMode === "sent"
+                ? "bg-yellow-500 text-black"
+                : "border-yellow-500 text-yellow-500"
+            }`}
+          >
+            SENT
+          </button>
+          <button
+            onClick={() => setViewMode("received")}
+            className={`arcade-btn-sm ${
+              viewMode === "received"
+                ? "bg-yellow-500 text-black"
+                : "border-yellow-500 text-yellow-500"
+            }`}
+          >
+            RECEIVED
+          </button>
+        </div>
+        <div className="flex items-center space-x-4">
+          <form onSubmit={handlePageInputSubmit} className="flex items-center">
+            <input
+              type="text"
+              value={pageInput}
+              onChange={handlePageInputChange}
+              placeholder={`1-${totalPages}`}
+              className="w-20 px-2 py-1 bg-black border-2 border-yellow-500 rounded text-yellow-500 arcade-text text-xs focus:outline-none focus:border-yellow-400"
+            />
+            <button
+              type="submit"
+              className="ml-2 arcade-btn-sm border-yellow-500 text-yellow-500"
+            >
+              GO
+            </button>
+          </form>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handlePrevPage}
+              disabled={currentPage === 1}
+              className="arcade-btn-sm border-yellow-500 text-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ←
+            </button>
+            <span className="arcade-text text-yellow-500 text-xs">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={handleNextPage}
+              disabled={currentPage === totalPages}
+              className="arcade-btn-sm border-yellow-500 text-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              →
+            </button>
+          </div>
+        </div>
       </div>
 
-      {currentIntents.length === 0 ? (
-        <p className="arcade-text text-gray-500 text-center">
-          NO {viewMode.toUpperCase()} INTENTS FOUND
-        </p>
-      ) : (
-        <div className="arcade-container">
-          {currentIntents.map((intent, index) => (
-            <IntentTile
-              key={intent.id}
-              intent={intent}
-              index={index}
-              offset={(currentPage - 1) * ITEMS_PER_PAGE}
-              label="INTENT"
-              showSender={viewMode === "received"}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center space-x-4 mt-6">
-          <button
-            onClick={handlePrevPage}
-            disabled={currentPage === 1}
-            className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            PREV
-          </button>
-          <span className="arcade-text text-green-400">
-            {currentPage} / {totalPages}
-          </span>
-          <button
-            onClick={handleNextPage}
-            disabled={currentPage >= totalPages}
-            className="arcade-btn-sm border-green-400 text-green-400 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            NEXT
-          </button>
-        </div>
-      )}
+      <div className="space-y-4">
+        {currentIntents.map((intent, index) => (
+          <IntentTile
+            key={intent.id}
+            intent={intent}
+            index={totalCount - ((currentPage - 1) * ITEMS_PER_PAGE + index)}
+            offset={0}
+            showSender={viewMode === "received"}
+            label={viewMode === "sent" ? "SENT" : "RECEIVED"}
+          />
+        ))}
+      </div>
     </div>
   );
 }
