@@ -21,7 +21,7 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Developers",
-      items: ["initiate-intent", "handle-intent"],
+      items: ["initiate-intent", "contract-call-intent"],
     },
     {
       type: "category",
