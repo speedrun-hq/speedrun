@@ -2,7 +2,7 @@
 
 ## Overview
 
-The following function should be called on the intent contract to initiate a new intent:
+The following function should be called on the intent contract to initiate a new intent for token transfer:
 
 ```solidity
 function initiate(

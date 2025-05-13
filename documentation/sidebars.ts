@@ -16,11 +16,12 @@ const sidebars: SidebarsConfig = {
   // By default, Docusaurus generates a sidebar from the docs folder structure
   tutorialSidebar: [
     "intro",
+    "quickstart",
     "architecture",
     {
       type: "category",
       label: "Developers",
-      items: ["initiate-intent", "handle-intent"],
+      items: ["initiate-intent", "contract-call-intent"],
     },
     {
       type: "category",
