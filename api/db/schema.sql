@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS intents (
     sender VARCHAR(42) NOT NULL,
     intent_fee VARCHAR(78) NOT NULL,
     status VARCHAR(20) NOT NULL,
+    is_call BOOLEAN NOT NULL DEFAULT FALSE,
+    call_data TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -20,6 +22,8 @@ CREATE TABLE IF NOT EXISTS fulfillments (
     amount VARCHAR(78) NOT NULL,
     receiver VARCHAR(42) NOT NULL,
     tx_hash VARCHAR(66) NOT NULL,
+    is_call BOOLEAN NOT NULL DEFAULT FALSE,
+    call_data TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -35,6 +39,8 @@ CREATE TABLE IF NOT EXISTS settlements (
     actual_amount VARCHAR(78) NOT NULL,
     paid_tip VARCHAR(78) NOT NULL,
     tx_hash VARCHAR(66) NOT NULL,
+    is_call BOOLEAN NOT NULL DEFAULT FALSE,
+    call_data TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -179,3 +185,34 @@ GROUP BY
     sender, source_chain
 ORDER BY
     total_volume DESC;
+
+-- Migration for adding is_call and call_data columns
+DO $$
+BEGIN
+    -- Check if columns exist in intents table
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'intents' AND column_name = 'is_call') THEN
+        ALTER TABLE intents ADD COLUMN is_call BOOLEAN NOT NULL DEFAULT FALSE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'intents' AND column_name = 'call_data') THEN
+        ALTER TABLE intents ADD COLUMN call_data TEXT;
+    END IF;
+
+    -- Check if columns exist in fulfillments table
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'fulfillments' AND column_name = 'is_call') THEN
+        ALTER TABLE fulfillments ADD COLUMN is_call BOOLEAN NOT NULL DEFAULT FALSE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'fulfillments' AND column_name = 'call_data') THEN
+        ALTER TABLE fulfillments ADD COLUMN call_data TEXT;
+    END IF;
+
+    -- Check if columns exist in settlements table
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'settlements' AND column_name = 'is_call') THEN
+        ALTER TABLE settlements ADD COLUMN is_call BOOLEAN NOT NULL DEFAULT FALSE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'settlements' AND column_name = 'call_data') THEN
+        ALTER TABLE settlements ADD COLUMN call_data TEXT;
+    END IF;
+END $$;

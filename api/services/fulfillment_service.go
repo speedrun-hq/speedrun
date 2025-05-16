@@ -23,11 +23,17 @@ const (
 	// IntentFulfilledEventName is the name of the intent fulfilled event
 	IntentFulfilledEventName = "IntentFulfilled"
 
+	// IntentFulfilledWithCallEventName is the name of the intent fulfilled with call event
+	IntentFulfilledWithCallEventName = "IntentFulfilledWithCall"
+
 	// IntentFulfilledRequiredTopics is the minimum number of topics required in a log
 	IntentFulfilledRequiredTopics = 3
 
 	// IntentFulfilledRequiredFields is the number of fields expected in the event data
 	IntentFulfilledRequiredFields = 3
+
+	// IntentFulfilledWithCallRequiredFields is the number of fields expected in the event data for call intents
+	IntentFulfilledWithCallRequiredFields = 4
 )
 
 // FulfillmentService handles monitoring and processing of fulfillment events
@@ -64,7 +70,10 @@ func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
-			{s.abi.Events[IntentFulfilledEventName].ID},
+			{
+				s.abi.Events[IntentFulfilledEventName].ID,
+				s.abi.Events[IntentFulfilledWithCallEventName].ID,
+			},
 		},
 	}
 
@@ -157,11 +166,14 @@ func (s *FulfillmentService) handleSubscriptionError(ctx context.Context, oldSub
 			return ctx.Err()
 		}
 
-		// Create a new query
+		// Create a new query with both event types
 		query := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
 			Topics: [][]common.Hash{
-				{s.abi.Events[IntentFulfilledEventName].ID},
+				{
+					s.abi.Events[IntentFulfilledEventName].ID,
+					s.abi.Events[IntentFulfilledWithCallEventName].ID,
+				},
 			},
 		}
 
@@ -280,33 +292,77 @@ func (s *FulfillmentService) processLog(ctx context.Context, vLog types.Log) err
 }
 
 func (s *FulfillmentService) validateLog(vLog types.Log) error {
+	// Check if the log has the minimum required topics
 	if len(vLog.Topics) < IntentFulfilledRequiredTopics {
 		return fmt.Errorf("invalid log: expected at least %d topics, got %d", IntentFulfilledRequiredTopics, len(vLog.Topics))
 	}
+
+	// Check if the event signature matches one of our expected event types
+	eventSig := vLog.Topics[0]
+	if eventSig != s.abi.Events[IntentFulfilledEventName].ID &&
+		eventSig != s.abi.Events[IntentFulfilledWithCallEventName].ID {
+		return fmt.Errorf("invalid event signature: %s", eventSig.Hex())
+	}
+
 	return nil
 }
 
 func (s *FulfillmentService) extractEventData(vLog types.Log) (*models.IntentFulfilledEvent, error) {
-	amount := new(big.Int).SetBytes(vLog.Data)
+	// Determine if this is a standard fulfillment or call fulfillment
+	isCallFulfillment := vLog.Topics[0] == s.abi.Events[IntentFulfilledWithCallEventName].ID
+
+	// Extract common data
+	event := &models.IntentFulfilledEvent{
+		IntentID:    vLog.Topics[1].Hex(),
+		BlockNumber: vLog.BlockNumber,
+		TxHash:      vLog.TxHash.Hex(),
+		IsCall:      isCallFulfillment,
+	}
 
 	// Format addresses properly by extracting the standard Ethereum address from padded topics
 	assetAddr := vLog.Topics[2].Hex()
 	if len(assetAddr) > 42 && strings.HasPrefix(assetAddr, "0x") {
 		assetAddr = "0x" + assetAddr[len(assetAddr)-40:]
 	}
+	event.Asset = assetAddr
 
 	receiverAddr := vLog.Topics[3].Hex()
 	if len(receiverAddr) > 42 && strings.HasPrefix(receiverAddr, "0x") {
 		receiverAddr = "0x" + receiverAddr[len(receiverAddr)-40:]
 	}
+	event.Receiver = receiverAddr
 
-	event := &models.IntentFulfilledEvent{
-		IntentID:    vLog.Topics[1].Hex(),
-		Asset:       assetAddr,
-		Amount:      amount,
-		Receiver:    receiverAddr,
-		BlockNumber: vLog.BlockNumber,
-		TxHash:      vLog.TxHash.Hex(),
+	// Unpack data fields
+	var err error
+	if isCallFulfillment {
+		// Unpack data for call fulfillment which should include amount and call data
+		var unpacked []interface{}
+		unpacked, err = s.abi.Unpack(IntentFulfilledWithCallEventName, vLog.Data)
+		if err == nil && len(unpacked) >= IntentFulfilledWithCallRequiredFields {
+			// Extract amount
+			if amount, ok := unpacked[0].(*big.Int); ok && amount != nil {
+				event.Amount = amount
+			} else {
+				err = fmt.Errorf("invalid amount in event data")
+			}
+
+			// Extract call data
+			if callData, ok := unpacked[1].([]byte); ok {
+				event.Data = callData
+			} else {
+				log.Printf("Warning: Invalid call data in fulfillment event: %v", unpacked[1])
+			}
+		} else if err == nil {
+			err = fmt.Errorf("insufficient data fields: expected %d, got %d",
+				IntentFulfilledWithCallRequiredFields, len(unpacked))
+		}
+	} else {
+		// Standard fulfillment just has the amount in the data
+		event.Amount = new(big.Int).SetBytes(vLog.Data)
+	}
+
+	if err != nil {
+		log.Printf("Warning: Error processing fulfillment event data: %v", err)
 	}
 
 	return event, nil
@@ -417,6 +473,124 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 		TxHash:    txHash,
 		CreatedAt: timestamp,
 		UpdatedAt: timestamp,
+		IsCall:    intent.IsCall,
+		CallData:  intent.CallData,
+	}
+
+	// Convert padded blockchain addresses to standard Ethereum addresses
+	if len(fulfillment.Asset) > 42 && strings.HasPrefix(fulfillment.Asset, "0x") {
+		// Extract last 40 chars and add 0x prefix
+		fulfillment.Asset = "0x" + fulfillment.Asset[len(fulfillment.Asset)-40:]
+	}
+
+	if len(fulfillment.Receiver) > 42 && strings.HasPrefix(fulfillment.Receiver, "0x") {
+		// Extract last 40 chars and add 0x prefix
+		fulfillment.Receiver = "0x" + fulfillment.Receiver[len(fulfillment.Receiver)-40:]
+	}
+
+	// Save fulfillment
+	if err := s.db.CreateFulfillment(ctx, fulfillment); err != nil {
+		return fmt.Errorf("failed to create fulfillment: %v", err)
+	}
+
+	// Update intent status
+	if err := s.db.UpdateIntentStatus(ctx, intentID, models.IntentStatusFulfilled); err != nil {
+		return fmt.Errorf("failed to update intent status: %v", err)
+	}
+
+	return nil
+}
+
+// CreateCallFulfillment creates a new fulfillment for an intent with call
+func (s *FulfillmentService) CreateCallFulfillment(ctx context.Context, intentID, txHash string, callData string) error {
+	// Validate intent exists
+	intent, err := s.db.GetIntent(ctx, intentID)
+	if err != nil {
+		return fmt.Errorf("failed to get intent: %v", err)
+	}
+	if intent == nil {
+		return fmt.Errorf("intent not found: %s", intentID)
+	}
+
+	// Verify this is a call intent
+	if !intent.IsCall {
+		return fmt.Errorf("intent is not a call intent: %s", intentID)
+	}
+
+	// For API-created fulfillments, try to get the block timestamp from the transaction
+	// This provides more accurate timestamps even for API-created fulfillments
+	var timestamp time.Time
+
+	// Use the destination chain client if possible, as fulfillments happen on the destination chain
+	var client *ethclient.Client
+	if s.clientResolver != nil && intent.DestinationChain != 0 {
+		destClient, err := s.clientResolver.GetClient(intent.DestinationChain)
+		if err == nil {
+			client = destClient
+		} else {
+			log.Printf("Warning: Failed to get destination chain client for manual fulfillment: %v, using default client", err)
+			client = s.client
+		}
+	} else {
+		client = s.client
+	}
+
+	// If the destination chain doesn't match our service chain and we're using the default client,
+	// log a warning about potentially incorrect timestamps
+	if intent.DestinationChain != s.chainID && client == s.client && txHash != "" {
+		log.Printf("Warning: Manual fulfillment using client for chain %d to fetch timestamp for transaction on chain %d",
+			s.chainID, intent.DestinationChain)
+	}
+
+	if txHash != "" && strings.HasPrefix(txHash, "0x") {
+		txHashObj := common.HexToHash(txHash)
+		_, isPending, err := client.TransactionByHash(ctx, txHashObj)
+		if err == nil && !isPending {
+			// If we can get the transaction, try to get its receipt to find the block number
+			receipt, err := client.TransactionReceipt(ctx, txHashObj)
+			if err == nil {
+				// If we have the receipt, get the block to find the timestamp
+				block, err := client.BlockByNumber(ctx, big.NewInt(int64(receipt.BlockNumber.Uint64())))
+				if err == nil {
+					timestamp = time.Unix(int64(block.Time()), 0)
+					log.Printf("Using blockchain timestamp for manual fulfillment of intent %s: %s (block #%d, tx: %s)",
+						intentID, timestamp.Format(time.RFC3339), receipt.BlockNumber.Uint64(), txHash)
+				} else {
+					log.Printf("Warning: Failed to get block for timestamp in manual fulfillment of intent %s (tx: %s): %v, using current time",
+						intentID, txHash, err)
+					timestamp = time.Now()
+				}
+			} else {
+				log.Printf("Warning: Failed to get transaction receipt in manual fulfillment of intent %s (tx: %s): %v, using current time",
+					intentID, txHash, err)
+				timestamp = time.Now()
+			}
+		} else {
+			if err != nil {
+				log.Printf("Warning: Failed to get transaction in manual fulfillment of intent %s (tx: %s): %v, using current time",
+					intentID, txHash, err)
+			} else if isPending {
+				log.Printf("Warning: Transaction is still pending in manual fulfillment of intent %s (tx: %s), using current time",
+					intentID, txHash)
+			}
+			timestamp = time.Now()
+		}
+	} else {
+		// No valid txHash, use current time
+		log.Printf("Warning: No valid transaction hash provided for manual fulfillment of intent %s, using current time", intentID)
+		timestamp = time.Now()
+	}
+
+	fulfillment := &models.Fulfillment{
+		ID:        intentID,
+		Asset:     intent.Token,
+		Amount:    intent.Amount,
+		Receiver:  intent.Recipient,
+		TxHash:    txHash,
+		CreatedAt: timestamp,
+		UpdatedAt: timestamp,
+		IsCall:    true,
+		CallData:  callData,
 	}
 
 	// Convert padded blockchain addresses to standard Ethereum addresses

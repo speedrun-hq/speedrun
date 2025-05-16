@@ -202,3 +202,20 @@ func (m *MockDB) InitDB(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
 }
+
+// SQLResultMock is a mock implementation of sql.Result for testing
+type SQLResultMock struct {
+	mock.Mock
+}
+
+// LastInsertId mocks the sql.Result LastInsertId method
+func (m *SQLResultMock) LastInsertId() (int64, error) {
+	args := m.Called()
+	return args.Get(0).(int64), args.Error(1)
+}
+
+// RowsAffected mocks the sql.Result RowsAffected method
+func (m *SQLResultMock) RowsAffected() (int64, error) {
+	args := m.Called()
+	return args.Get(0).(int64), args.Error(1)
+}
