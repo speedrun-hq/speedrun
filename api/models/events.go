@@ -24,6 +24,8 @@ type IntentInitiatedEvent struct {
 	BlockNumber uint64   `json:"blockNumber"`
 	TxHash      string   `json:"txHash"`
 	Sender      string   `json:"sender"` // Sender address that initiated the intent
+	IsCall      bool     `json:"isCall"` // Whether this is a call intent
+	Data        []byte   `json:"data"`   // Call data if this is a call intent
 }
 
 // IntentFulfilledEvent represents the event emitted when an intent is fulfilled
@@ -34,6 +36,8 @@ type IntentFulfilledEvent struct {
 	Receiver    string
 	BlockNumber uint64
 	TxHash      string
+	IsCall      bool   // Whether this is a call intent
+	Data        []byte // Call data if this is a call intent
 }
 
 type IntentSettledEvent struct {
@@ -47,6 +51,8 @@ type IntentSettledEvent struct {
 	PaidTip      *big.Int
 	BlockNumber  uint64
 	TxHash       string
+	IsCall       bool   // Whether this is a call intent
+	Data         []byte // Call data if this is a call intent
 }
 
 // fetchBlockTimestamp is a helper function to get a block timestamp with fallback methods
@@ -124,7 +130,8 @@ func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context
 		timestamp = time.Now()
 	}
 
-	return &Intent{
+	// Create intent with call data if this is a call intent
+	intent := &Intent{
 		ID:               e.IntentID,
 		SourceChain:      e.ChainID,
 		DestinationChain: e.TargetChain,
@@ -136,7 +143,15 @@ func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context
 		Status:           IntentStatusPending,
 		CreatedAt:        timestamp,
 		UpdatedAt:        timestamp,
-	}, nil
+		IsCall:           e.IsCall,
+	}
+
+	// Set call data if present
+	if e.IsCall && len(e.Data) > 0 {
+		intent.CallData = common.Bytes2Hex(e.Data)
+	}
+
+	return intent, nil
 }
 
 // FromIntent converts an Intent to an IntentInitiatedEvent
@@ -148,7 +163,8 @@ func FromIntent(intent *Intent) *IntentInitiatedEvent {
 	tip := new(big.Int)
 	tip.SetString(intent.IntentFee, 10)
 
-	return &IntentInitiatedEvent{
+	// Create event with basic fields
+	event := &IntentInitiatedEvent{
 		IntentID:    intent.ID,
 		Asset:       intent.Token,
 		Amount:      amount,
@@ -156,7 +172,15 @@ func FromIntent(intent *Intent) *IntentInitiatedEvent {
 		Receiver:    common.FromHex(intent.Recipient),
 		Tip:         tip,
 		ChainID:     intent.SourceChain,
+		IsCall:      intent.IsCall,
 	}
+
+	// Add call data if this is a call intent
+	if intent.IsCall && intent.CallData != "" {
+		event.Data = common.FromHex(intent.CallData)
+	}
+
+	return event
 }
 
 // ToFulfillment converts an IntentFulfilledEvent to a Fulfillment
@@ -192,7 +216,8 @@ func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client, ctx ...co
 		timestamp = time.Now()
 	}
 
-	return &Fulfillment{
+	// Create fulfillment with call information
+	fulfillment := &Fulfillment{
 		ID:          e.IntentID,
 		Asset:       e.Asset,
 		Amount:      amount,
@@ -201,21 +226,38 @@ func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client, ctx ...co
 		TxHash:      e.TxHash,
 		CreatedAt:   timestamp,
 		UpdatedAt:   timestamp,
-	}, nil
+		IsCall:      e.IsCall,
+	}
+
+	// Set call data if present
+	if e.IsCall && len(e.Data) > 0 {
+		fulfillment.CallData = common.Bytes2Hex(e.Data)
+	}
+
+	return fulfillment, nil
 }
 
 func FromFulfillment(fulfillment *Fulfillment) *IntentFulfilledEvent {
 	amount := new(big.Int)
 	amount.SetString(fulfillment.Amount, 10)
 
-	return &IntentFulfilledEvent{
+	// Create event with basic fields
+	event := &IntentFulfilledEvent{
 		IntentID:    fulfillment.ID,
 		Asset:       fulfillment.Asset,
 		Amount:      amount,
 		Receiver:    fulfillment.Receiver,
 		BlockNumber: fulfillment.BlockNumber,
 		TxHash:      fulfillment.TxHash,
+		IsCall:      fulfillment.IsCall,
 	}
+
+	// Add call data if this is a call intent
+	if fulfillment.IsCall && fulfillment.CallData != "" {
+		event.Data = common.FromHex(fulfillment.CallData)
+	}
+
+	return event
 }
 
 // ToSettlement converts an IntentSettledEvent to a Settlement
@@ -249,7 +291,8 @@ func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client, ctx ...conte
 		timestamp = time.Now()
 	}
 
-	return &Settlement{
+	// Create settlement with call information
+	settlement := &Settlement{
 		ID:           e.IntentID,
 		Asset:        e.Asset,
 		Amount:       e.Amount.String(),
@@ -262,7 +305,15 @@ func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client, ctx ...conte
 		TxHash:       e.TxHash,
 		CreatedAt:    timestamp,
 		UpdatedAt:    timestamp,
-	}, nil
+		IsCall:       e.IsCall,
+	}
+
+	// Set call data if present
+	if e.IsCall && len(e.Data) > 0 {
+		settlement.CallData = common.Bytes2Hex(e.Data)
+	}
+
+	return settlement, nil
 }
 
 func FromSettlement(settlement *Settlement) *IntentSettledEvent {
@@ -272,15 +323,27 @@ func FromSettlement(settlement *Settlement) *IntentSettledEvent {
 	paidTip := new(big.Int)
 	paidTip.SetString(settlement.PaidTip, 10)
 
-	return &IntentSettledEvent{
+	actualAmount := new(big.Int)
+	actualAmount.SetString(settlement.ActualAmount, 10)
+
+	// Create event with basic fields
+	event := &IntentSettledEvent{
 		IntentID:     settlement.ID,
 		Asset:        settlement.Asset,
 		Amount:       amount,
 		Receiver:     settlement.Receiver,
 		Fulfilled:    settlement.Fulfilled,
 		Fulfiller:    settlement.Fulfiller,
-		ActualAmount: amount,
+		ActualAmount: actualAmount,
 		PaidTip:      paidTip,
 		TxHash:       settlement.TxHash,
+		IsCall:       settlement.IsCall,
 	}
+
+	// Add call data if this is a call intent
+	if settlement.IsCall && settlement.CallData != "" {
+		event.Data = common.FromHex(settlement.CallData)
+	}
+
+	return event
 }

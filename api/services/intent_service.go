@@ -27,15 +27,20 @@ const (
 	// IntentInitiatedEventName is the name of the intent initiated event
 	IntentInitiatedEventName = "IntentInitiated"
 
+	// IntentInitiatedWithCallEventName is the name of the intent initiated with call event
+	IntentInitiatedWithCallEventName = "IntentInitiatedWithCall"
+
 	// IntentInitiatedRequiredTopics is the minimum number of topics required in a log
 	IntentInitiatedRequiredTopics = 3
 
 	// IntentInitiatedRequiredFields is the number of fields expected in the event data
 	IntentInitiatedRequiredFields = 5
+
+	// IntentInitiatedWithCallRequiredFields is the number of fields expected in the event data for call intents
+	IntentInitiatedWithCallRequiredFields = 7
 )
 
-// IntentService handles monitoring and processing of intent events from the blockchain.
-// It subscribes to intent events, processes them, and stores them in the database.
+// IntentService handles monitoring and processing of intent events
 type IntentService struct {
 	client           *ethclient.Client
 	clientResolver   ClientResolver
@@ -46,26 +51,26 @@ type IntentService struct {
 	activeGoroutines int32      // Counter for active goroutines
 	errChannel       chan error // Channel for collecting errors from goroutines
 	mu               sync.Mutex // Mutex for thread-safe operations
-	ctx              context.Context
 }
 
-// NewIntentService creates a new intent service
+// NewIntentService creates a new IntentService instance
 func NewIntentService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentInitiatedEventABI string, chainID uint64) (*IntentService, error) {
+	// Parse the contract ABI
 	parsedABI, err := abi.JSON(strings.NewReader(intentInitiatedEventABI))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse ABI: %v", err)
+		return nil, fmt.Errorf("failed to parse contract ABI: %v", err)
 	}
 
+	errChan := make(chan error, 10) // Buffer for up to 10 errors to avoid blocking
+
 	return &IntentService{
-		client:           client,
-		clientResolver:   clientResolver,
-		db:               db,
-		abi:              parsedABI,
-		chainID:          chainID,
-		subs:             make(map[string]ethereum.Subscription),
-		activeGoroutines: 0,
-		errChannel:       make(chan error, 100), // Buffer to prevent blocking
-		ctx:              context.Background(),
+		client:         client,
+		clientResolver: clientResolver,
+		db:             db,
+		abi:            parsedABI,
+		chainID:        chainID,
+		subs:           make(map[string]ethereum.Subscription),
+		errChannel:     errChan,
 	}, nil
 }
 
@@ -84,10 +89,12 @@ func (s *IntentService) ActiveGoroutines() int32 {
 // Returns:
 //   - error: Any error that occurred during setup
 func (s *IntentService) StartListening(ctx context.Context, contractAddress common.Address) error {
-	// Check if the client is a websocket client, which is necessary for subscriptions
-	clientType := reflect.TypeOf(s.client.Client()).String()
-	log.Printf("INFO: Intent service using client type: %s", clientType)
-	if !strings.Contains(strings.ToLower(clientType), "websocket") {
+	// Check if the client is using a websocket connection, which is needed for subscriptions
+	clientType := reflect.TypeOf(s.client).String()
+	isWebsocket := strings.Contains(strings.ToLower(clientType), "websocket")
+	log.Printf("INFO: Intent service using client type: %s, is websocket: %v", clientType, isWebsocket)
+
+	if !isWebsocket {
 		log.Printf("WARNING: Intent service may not receive real-time events because client type is %s, not websocket", clientType)
 	}
 
@@ -105,7 +112,10 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
-			{s.abi.Events[IntentInitiatedEventName].ID},
+			{
+				s.abi.Events[IntentInitiatedEventName].ID,
+				s.abi.Events[IntentInitiatedWithCallEventName].ID,
+			},
 		},
 	}
 
@@ -279,7 +289,10 @@ func (s *IntentService) handleSubscriptionError(ctx context.Context, oldSub ethe
 		query := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
 			Topics: [][]common.Hash{
-				{s.abi.Events[IntentInitiatedEventName].ID},
+				{
+					s.abi.Events[IntentInitiatedEventName].ID,
+					s.abi.Events[IntentInitiatedWithCallEventName].ID,
+				},
 			},
 		}
 
@@ -348,7 +361,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 
 	// Important: Use the correct chain client for intent events
 	// Intent events happen on the source chain, so we need to use the source chain client
-	var client *ethclient.Client
+	var client *ethclient.Client = s.client
 	if s.clientResolver != nil {
 		// Try to get the source chain client
 		sourceClient, err := s.clientResolver.GetClient(event.ChainID)
@@ -356,10 +369,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 			client = sourceClient
 		} else {
 			log.Printf("Warning: Failed to get source chain client: %v, using default client", err)
-			client = s.client
 		}
-	} else {
-		client = s.client
 	}
 
 	// Set a timeout for intent conversion
@@ -421,9 +431,14 @@ func (s *IntentService) validateLog(vLog types.Log) error {
 	// Log the first topic which should be the event signature
 	if len(vLog.Topics) > 0 {
 		expectedSig := s.abi.Events[IntentInitiatedEventName].ID.Hex()
+		expectedCallSig := s.abi.Events[IntentInitiatedWithCallEventName].ID.Hex()
 		actualSig := vLog.Topics[0].Hex()
-		log.Printf("DEBUG: Event signature check - Expected: %s, Got: %s, Match: %v",
-			expectedSig, actualSig, expectedSig == actualSig)
+
+		isStandard := expectedSig == actualSig
+		isCall := expectedCallSig == actualSig
+
+		log.Printf("DEBUG: Event signature check - Expected Standard: %s, Expected Call: %s, Got: %s, Match Standard: %v, Match Call: %v",
+			expectedSig, expectedCallSig, actualSig, isStandard, isCall)
 	}
 
 	if len(vLog.Topics) < IntentInitiatedRequiredTopics {
@@ -432,13 +447,15 @@ func (s *IntentService) validateLog(vLog types.Log) error {
 		return fmt.Errorf("invalid log: expected at least %d topics, got %d", IntentInitiatedRequiredTopics, len(vLog.Topics))
 	}
 
-	// Validate event signature
-	expectedSig := s.abi.Events[IntentInitiatedEventName].ID
-	if vLog.Topics[0] != expectedSig {
-		log.Printf("ERROR: Invalid event signature - Expected: %s, Got: %s",
-			expectedSig.Hex(), vLog.Topics[0].Hex())
-		return fmt.Errorf("invalid event signature: expected %s, got %s",
-			expectedSig.Hex(), vLog.Topics[0].Hex())
+	// Validate event signature - now check for both event types
+	expectedStandardSig := s.abi.Events[IntentInitiatedEventName].ID
+	expectedCallSig := s.abi.Events[IntentInitiatedWithCallEventName].ID
+
+	if vLog.Topics[0] != expectedStandardSig && vLog.Topics[0] != expectedCallSig {
+		log.Printf("ERROR: Invalid event signature - Expected Standard: %s, Expected Call: %s, Got: %s",
+			expectedStandardSig.Hex(), expectedCallSig.Hex(), vLog.Topics[0].Hex())
+		return fmt.Errorf("invalid event signature: expected %s or %s, got %s",
+			expectedStandardSig.Hex(), expectedCallSig.Hex(), vLog.Topics[0].Hex())
 	}
 
 	log.Printf("DEBUG: Log validation passed - BlockNum=%d, TxHash=%s",
@@ -477,10 +494,24 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 		return nil, fmt.Errorf("event data is empty")
 	}
 
-	log.Printf("DEBUG: Unpacking event data (%d bytes) using ABI for %s",
-		len(vLog.Data), IntentInitiatedEventName)
+	// Determine if this is a standard intent or a call intent based on the event signature
+	var eventName string
+	if vLog.Topics[0] == s.abi.Events[IntentInitiatedEventName].ID {
+		eventName = IntentInitiatedEventName
+		log.Printf("DEBUG: Processing standard intent event")
+	} else if vLog.Topics[0] == s.abi.Events[IntentInitiatedWithCallEventName].ID {
+		eventName = IntentInitiatedWithCallEventName
+		log.Printf("DEBUG: Processing intent with call event")
+		event.IsCall = true
+	} else {
+		log.Printf("ERROR: Unknown event signature: %s", vLog.Topics[0].Hex())
+		return nil, fmt.Errorf("unknown event signature: %s", vLog.Topics[0].Hex())
+	}
 
-	unpacked, err := s.abi.Unpack(IntentInitiatedEventName, vLog.Data)
+	log.Printf("DEBUG: Unpacking event data (%d bytes) using ABI for %s",
+		len(vLog.Data), eventName)
+
+	unpacked, err := s.abi.Unpack(eventName, vLog.Data)
 	if err != nil {
 		log.Printf("ERROR: Failed to unpack event data: %v", err)
 		return nil, fmt.Errorf("failed to unpack event data: %v", err)
@@ -488,10 +519,16 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 
 	log.Printf("DEBUG: Unpacked %d fields from event data", len(unpacked))
 
-	if len(unpacked) < IntentInitiatedRequiredFields {
+	// Check minimum field requirements based on event type
+	requiredFields := IntentInitiatedRequiredFields
+	if event.IsCall {
+		requiredFields = IntentInitiatedWithCallRequiredFields
+	}
+
+	if len(unpacked) < requiredFields {
 		log.Printf("ERROR: Invalid event data: expected %d fields, got %d",
-			IntentInitiatedRequiredFields, len(unpacked))
-		return nil, fmt.Errorf("invalid event data: expected %d fields, got %d", IntentInitiatedRequiredFields, len(unpacked))
+			requiredFields, len(unpacked))
+		return nil, fmt.Errorf("invalid event data: expected %d fields, got %d", requiredFields, len(unpacked))
 	}
 
 	if err := s.validateEventFields(unpacked, event); err != nil {
@@ -540,6 +577,9 @@ func (s *IntentService) validateEventFields(unpacked []interface{}, event *model
 		}
 	}
 
+	// Determine if this is a standard intent or a call intent based on the unpacked data length
+	isCallIntent := len(unpacked) >= IntentInitiatedWithCallRequiredFields
+
 	event.Amount, ok = unpacked[0].(*big.Int)
 	if !ok || event.Amount == nil {
 		log.Printf("ERROR: Invalid amount in event data: %v", unpacked[0])
@@ -575,6 +615,22 @@ func (s *IntentService) validateEventFields(unpacked []interface{}, event *model
 		return fmt.Errorf("invalid salt in event data")
 	}
 	log.Printf("DEBUG: Extracted salt: %s", event.Salt.String())
+
+	// If this is a call intent, extract the data field
+	if isCallIntent {
+		event.IsCall = true
+
+		if len(unpacked) > 5 {
+			event.Data, ok = unpacked[5].([]byte)
+			if !ok {
+				log.Printf("ERROR: Invalid data in event data: %v", unpacked[5])
+				return fmt.Errorf("invalid data in event data")
+			}
+			log.Printf("DEBUG: Extracted call data: %x (byte length: %d)", event.Data, len(event.Data))
+		}
+	} else {
+		event.IsCall = false
+	}
 
 	log.Printf("DEBUG: All event fields validated successfully")
 	return nil
@@ -690,6 +746,73 @@ func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain
 		Status:           models.IntentStatusPending,
 		CreatedAt:        now,
 		UpdatedAt:        now,
+	}
+
+	if err := s.db.CreateIntent(ctx, intent); err != nil {
+		return nil, err
+	}
+
+	return intent, nil
+}
+
+// CreateCallIntent creates a new intent with call data
+func (s *IntentService) CreateCallIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string, callData string, timestamp ...time.Time) (*models.Intent, error) {
+	// Validate chain IDs
+	if err := utils.ValidateChain(sourceChain); err != nil {
+		return nil, fmt.Errorf("invalid source chain: %v", err)
+	}
+	if err := utils.ValidateChain(destinationChain); err != nil {
+		return nil, fmt.Errorf("invalid destination chain: %v", err)
+	}
+
+	// Validate token address
+	if err := utils.ValidateAddress(token); err != nil {
+		return nil, fmt.Errorf("invalid token address: %v", err)
+	}
+
+	// Validate amount
+	if err := utils.ValidateAmount(amount); err != nil {
+		return nil, fmt.Errorf("invalid amount: %v", err)
+	}
+
+	// Validate recipient address
+	if err := utils.ValidateAddress(recipient); err != nil {
+		return nil, fmt.Errorf("invalid recipient address: %v", err)
+	}
+
+	// Validate sender address
+	if err := utils.ValidateAddress(sender); err != nil {
+		return nil, fmt.Errorf("invalid sender address: %v", err)
+	}
+
+	// Validate intent fee
+	if err := utils.ValidateAmount(intentFee); err != nil {
+		return nil, fmt.Errorf("invalid intent fee: %v", err)
+	}
+
+	// For API-created intents, we use the current time
+	// For blockchain events, the block timestamp should be used and passed as a parameter
+	var now time.Time
+	if len(timestamp) > 0 && !timestamp[0].IsZero() {
+		now = timestamp[0]
+	} else {
+		now = time.Now()
+	}
+
+	intent := &models.Intent{
+		ID:               id,
+		SourceChain:      sourceChain,
+		DestinationChain: destinationChain,
+		Token:            token,
+		Amount:           amount,
+		Recipient:        recipient,
+		Sender:           sender,
+		IntentFee:        intentFee,
+		Status:           models.IntentStatusPending,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		IsCall:           true,
+		CallData:         callData,
 	}
 
 	if err := s.db.CreateIntent(ctx, intent); err != nil {

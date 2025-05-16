@@ -814,59 +814,58 @@ func (s *EventCatchupService) UpdateSettlementProgress(chainID, blockNumber uint
 	s.settlementProgress[chainID] = blockNumber
 }
 
-// Simplify the bloom filter check to avoid compatibility issues
-func hasEventsInBlockRange(ctx context.Context, client *ethclient.Client, contractAddress common.Address, eventSig common.Hash, startBlock, endBlock uint64) (bool, error) {
-	// Only worth doing this check for large ranges (>100 blocks)
-	if endBlock-startBlock <= 100 {
-		return true, nil // Small range, just process it normally
+// hasEventsInBlockRange needs to check for both standard and call event signatures
+func hasEventsInBlockRange(ctx context.Context, client *ethclient.Client, contractAddress common.Address, eventSigs []common.Hash, startBlock, endBlock uint64) (bool, error) {
+	// Skip if range is too small
+	if endBlock <= startBlock {
+		return false, nil
 	}
 
-	// Create an efficient bloom filter check
-	scanCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	// Sample a few blocks to check if they have events
+	// The strategy is to check blocks at regular intervals in the range
+	sampleCount := 3
+	if endBlock-startBlock <= uint64(sampleCount) {
+		sampleCount = 1 // If range is small, just check one block
+	}
+
+	step := (endBlock - startBlock) / uint64(sampleCount)
+	if step == 0 {
+		step = 1
+	}
+
+	// Use a timeout for each sample block check
+	scanCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	// We'll just fetch logs for a few blocks in the range to see if there are any matching events
-	// This is much faster than scanning the entire range
-	sampleSize := 3
-	sampleBlocks := make([]uint64, 0, sampleSize)
-
-	// Select a few blocks across the range
-	range_size := endBlock - startBlock
-	if range_size > 2 {
-		// Start, middle, and end blocks
-		sampleBlocks = append(sampleBlocks, startBlock+1)
-		sampleBlocks = append(sampleBlocks, startBlock+(range_size/2))
-		sampleBlocks = append(sampleBlocks, endBlock-1)
-	} else {
-		// Just sample a couple blocks if range is small
-		sampleBlocks = append(sampleBlocks, startBlock+1)
-		if startBlock+1 < endBlock {
-			sampleBlocks = append(sampleBlocks, endBlock)
-		}
-	}
-
-	// For each sample block, check if there are any logs
-	for _, blockNum := range sampleBlocks {
-		// Create a query for just this block
-		query := ethereum.FilterQuery{
-			FromBlock: big.NewInt(int64(blockNum)),
-			ToBlock:   big.NewInt(int64(blockNum)),
-			Addresses: []common.Address{contractAddress},
-			Topics: [][]common.Hash{
-				{eventSig},
-			},
+	for i := uint64(0); i < uint64(sampleCount); i++ {
+		blockNum := startBlock + (i * step)
+		if blockNum > endBlock {
+			blockNum = endBlock
 		}
 
-		// Check for logs in this block
-		logs, err := client.FilterLogs(scanCtx, query)
-		if err != nil {
-			log.Printf("WARNING: Failed to check sample block %d for events: %v, will process full range", blockNum, err)
-			return true, nil // Error getting logs, so process the range to be safe
-		}
+		// For each event signature, check if there are any logs
+		for _, eventSig := range eventSigs {
+			// Create a query for just this block
+			query := ethereum.FilterQuery{
+				FromBlock: big.NewInt(int64(blockNum)),
+				ToBlock:   big.NewInt(int64(blockNum)),
+				Addresses: []common.Address{contractAddress},
+				Topics: [][]common.Hash{
+					{eventSig},
+				},
+			}
 
-		// If we found any logs in the sample block, there might be more in the range
-		if len(logs) > 0 {
-			return true, nil
+			// Check for logs in this block
+			logs, err := client.FilterLogs(scanCtx, query)
+			if err != nil {
+				log.Printf("WARNING: Failed to check sample block %d for events: %v, will process full range", blockNum, err)
+				return true, nil // Error getting logs, so process the range to be safe
+			}
+
+			// If we found any logs in the sample block, there might be more in the range
+			if len(logs) > 0 {
+				return true, nil
+			}
 		}
 	}
 
@@ -887,6 +886,12 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 		maxBlockRange = DefaultMaxBlockRange
 	}
 
+	// Prepare event signatures for bloom filtering
+	eventSigs := []common.Hash{
+		intentService.abi.Events[IntentInitiatedEventName].ID,
+		intentService.abi.Events[IntentInitiatedWithCallEventName].ID,
+	}
+
 	// Process in chunks to avoid RPC provider limitations
 	for chunkStart := fromBlock; chunkStart < toBlock; chunkStart += maxBlockRange {
 		// Check for context cancellation
@@ -903,7 +908,7 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 		// This can dramatically speed up scanning large empty ranges
 		if intentService.chainID == 1 { // Ethereum mainnet
 			hasEvents, err := hasEventsInBlockRange(ctx, intentService.client, contractAddress,
-				intentService.abi.Events[IntentInitiatedEventName].ID, chunkStart+1, chunkEnd)
+				eventSigs, chunkStart+1, chunkEnd)
 			if err != nil {
 				log.Printf("[%s] Error in bloom check: %v, will process range", opName, err)
 			} else if !hasEvents {
@@ -935,7 +940,10 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 				ToBlock:   big.NewInt(int64(chunkEnd)),
 				Addresses: []common.Address{contractAddress},
 				Topics: [][]common.Hash{
-					{intentService.abi.Events[IntentInitiatedEventName].ID},
+					{
+						intentService.abi.Events[IntentInitiatedEventName].ID,
+						intentService.abi.Events[IntentInitiatedWithCallEventName].ID,
+					},
 				},
 			}
 
@@ -1094,7 +1102,10 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 				ToBlock:   big.NewInt(int64(chunkEnd)),
 				Addresses: []common.Address{contractAddress},
 				Topics: [][]common.Hash{
-					{fulfillmentService.abi.Events[IntentFulfilledEventName].ID},
+					{
+						fulfillmentService.abi.Events[IntentFulfilledEventName].ID,
+						fulfillmentService.abi.Events[IntentFulfilledWithCallEventName].ID,
+					},
 				},
 			}
 
@@ -1252,7 +1263,10 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 				ToBlock:   big.NewInt(int64(chunkEnd)),
 				Addresses: []common.Address{contractAddress},
 				Topics: [][]common.Hash{
-					{settlementService.abi.Events[IntentSettledEventName].ID},
+					{
+						settlementService.abi.Events[IntentSettledEventName].ID,
+						settlementService.abi.Events[IntentSettledWithCallEventName].ID,
+					},
 				},
 			}
 

@@ -3,12 +3,11 @@ package mocks
 import (
 	"context"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/stretchr/testify/mock"
 )
 
-// MockIntentService is a mock implementation of the IntentService
+// MockIntentService is a mock implementation of the IntentServiceInterface
 type MockIntentService struct {
 	mock.Mock
 }
@@ -51,18 +50,4 @@ func (m *MockIntentService) CreateIntent(ctx context.Context, id string, sourceC
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.Intent), args.Error(1)
-}
-
-func (m *MockIntentService) StartListening(ctx context.Context, contractAddress common.Address) error {
-	args := m.Called(ctx, contractAddress)
-	return args.Error(0)
-}
-
-func (m *MockIntentService) UnsubscribeAll() {
-	m.Called()
-}
-
-func (m *MockIntentService) ActiveGoroutines() int32 {
-	args := m.Called()
-	return int32(args.Int(0))
 }

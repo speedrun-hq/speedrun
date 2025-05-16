@@ -35,6 +35,8 @@ type Intent struct {
 	Status           IntentStatus `json:"status"`
 	CreatedAt        time.Time    `json:"created_at"`
 	UpdatedAt        time.Time    `json:"updated_at"`
+	IsCall           bool         `json:"is_call"`
+	CallData         string       `json:"call_data,omitempty"`
 }
 
 // IntentStatus represents the possible states of an intent
@@ -100,6 +102,8 @@ type Fulfillment struct {
 	TxHash      string    `json:"tx_hash"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	IsCall      bool      `json:"is_call"`
+	CallData    string    `json:"call_data,omitempty"`
 }
 
 // Settlement represents a settlement of an intent
@@ -116,4 +120,6 @@ type Settlement struct {
 	TxHash       string    `json:"tx_hash"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	IsCall       bool      `json:"is_call"`
+	CallData     string    `json:"call_data,omitempty"`
 }
