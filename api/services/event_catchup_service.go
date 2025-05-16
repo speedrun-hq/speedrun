@@ -171,7 +171,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	}
 
 	// Start live subscriptions for all services
-	if err := s.startLiveSubscriptions(ctx, cfg); err != nil {
+	if err := s.StartLiveEventListeners(ctx, cfg); err != nil {
 		catchupErrors = append(catchupErrors, fmt.Errorf("failed to start live subscriptions: %v", err))
 		log.Printf("WARNING: Failed to start some live subscriptions: %v", err)
 	}
@@ -545,9 +545,9 @@ func (s *EventCatchupService) runSettlementCatchup(ctx context.Context, cfg *con
 	return nil
 }
 
-// startLiveSubscriptions starts the live event listeners for all services
-func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *config.Config) error {
-	// Start intent listeners
+// StartLiveEventListeners starts the live event listeners for all services
+func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *config.Config) error {
+	// Start intent listeners with block tracking
 	log.Printf("Starting live intent event listeners")
 	for chainID, intentService := range s.intentServices {
 		chainID := chainID // Create a copy of the loop variable for the closure
@@ -577,6 +577,21 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 			}
 		}
 		s.mu.Unlock()
+
+		// Special handling for ZetaChain - use polling instead of subscription
+		if chainID == 7000 {
+			// Store the initial block to start polling from
+			s.mu.Lock()
+			s.intentProgress[chainID] = fromBlock
+			s.mu.Unlock()
+
+			log.Printf("Setting up polling-based event monitoring for ZetaChain (chain ID %d) starting from block %d",
+				chainID, fromBlock)
+
+			// Start polling goroutine
+			go s.pollZetachainEvents(ctx, intentService, contractAddress, cfg.ChainConfigs[chainID].BlockInterval)
+			continue
+		}
 
 		intentQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
@@ -659,6 +674,21 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 		}
 		s.mu.Unlock()
 
+		// Special handling for ZetaChain - use polling instead of subscription
+		if chainID == 7000 {
+			// Store the initial block to start polling from
+			s.mu.Lock()
+			s.fulfillmentProgress[chainID] = fromBlock
+			s.mu.Unlock()
+
+			log.Printf("Setting up polling-based fulfillment monitoring for ZetaChain (chain ID %d) starting from block %d",
+				chainID, fromBlock)
+
+			// Start polling goroutine
+			go s.pollZetachainFulfillmentEvents(ctx, fulfillmentService, contractAddress, cfg.ChainConfigs[chainID].BlockInterval)
+			continue
+		}
+
 		fulfillmentQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
 			Topics: [][]common.Hash{
@@ -737,6 +767,21 @@ func (s *EventCatchupService) startLiveSubscriptions(ctx context.Context, cfg *c
 			}
 		}
 		s.mu.Unlock()
+
+		// Special handling for ZetaChain - use polling instead of subscription
+		if chainID == 7000 {
+			// Store the initial block to start polling from
+			s.mu.Lock()
+			s.settlementProgress[chainID] = fromBlock
+			s.mu.Unlock()
+
+			log.Printf("Setting up polling-based settlement monitoring for ZetaChain (chain ID %d) starting from block %d",
+				chainID, fromBlock)
+
+			// Start polling goroutine
+			go s.pollZetachainSettlementEvents(ctx, settlementService, contractAddress, cfg.ChainConfigs[chainID].BlockInterval)
+			continue
+		}
 
 		settlementQuery := ethereum.FilterQuery{
 			Addresses: []common.Address{contractAddress},
@@ -1382,6 +1427,226 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 	return nil
 }
 
+// pollZetachainEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
+func (s *EventCatchupService) pollZetachainEvents(ctx context.Context, intentService *IntentService, contractAddress common.Address, blockInterval int64) {
+	// Use the generic polling function
+	s.pollChainEvents(ctx, "intent", 7000, intentService.client, contractAddress,
+		[]common.Hash{intentService.abi.Events[IntentInitiatedEventName].ID, intentService.abi.Events[IntentInitiatedWithCallEventName].ID},
+		intentService.processLog,
+		func(blockNum uint64) { s.UpdateIntentProgress(7000, blockNum) },
+		blockInterval)
+}
+
+// pollZetachainFulfillmentEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
+func (s *EventCatchupService) pollZetachainFulfillmentEvents(ctx context.Context, fulfillmentService *FulfillmentService, contractAddress common.Address, blockInterval int64) {
+	// Use the generic polling function
+	s.pollChainEvents(ctx, "fulfillment", 7000, fulfillmentService.client, contractAddress,
+		[]common.Hash{fulfillmentService.abi.Events[IntentFulfilledEventName].ID, fulfillmentService.abi.Events[IntentFulfilledWithCallEventName].ID},
+		fulfillmentService.processLog,
+		func(blockNum uint64) { s.UpdateFulfillmentProgress(7000, blockNum) },
+		blockInterval)
+}
+
+// pollZetachainSettlementEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
+func (s *EventCatchupService) pollZetachainSettlementEvents(ctx context.Context, settlementService *SettlementService, contractAddress common.Address, blockInterval int64) {
+	// Use the generic polling function
+	s.pollChainEvents(ctx, "settlement", 7000, settlementService.client, contractAddress,
+		[]common.Hash{settlementService.abi.Events[IntentSettledEventName].ID, settlementService.abi.Events[IntentSettledWithCallEventName].ID},
+		settlementService.processLog,
+		func(blockNum uint64) { s.UpdateSettlementProgress(7000, blockNum) },
+		blockInterval)
+}
+
+// pollChainEvents is a generic function to poll for blockchain events
+// It handles all the common logic for different event types
+func (s *EventCatchupService) pollChainEvents(
+	ctx context.Context,
+	eventType string,
+	chainID uint64,
+	client *ethclient.Client,
+	contractAddress common.Address,
+	eventSignatures []common.Hash,
+	processLogFunc func(context.Context, types.Log) error,
+	updateProgressFunc func(uint64),
+	blockInterval int64,
+) {
+	// Default to checking every 15 seconds if not specified in config
+	interval := time.Duration(blockInterval) * time.Second
+	if interval < 5*time.Second {
+		interval = 15 * time.Second
+	}
+
+	maxRetries := 3
+	baseRetryDelay := 5 * time.Second
+
+	log.Printf("Starting ZetaChain polling for %s events with interval of %v", eventType, interval)
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Track database persistence to avoid doing it every poll
+	lastDbUpdateTime := time.Now()
+	dbUpdateInterval := 5 * time.Minute
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("Context cancelled, stopping ZetaChain %s event polling", eventType)
+			return
+		case <-ticker.C:
+			// Get the last processed block
+			s.mu.Lock()
+			var lastProcessedBlock uint64
+			switch eventType {
+			case "intent":
+				lastProcessedBlock = s.intentProgress[chainID]
+			case "fulfillment":
+				lastProcessedBlock = s.fulfillmentProgress[chainID]
+			case "settlement":
+				lastProcessedBlock = s.settlementProgress[chainID]
+			}
+			s.mu.Unlock()
+
+			// Get current block with retry logic
+			var currentBlock uint64
+			var err error
+			for retry := 0; retry < maxRetries; retry++ {
+				blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				currentBlock, err = client.BlockNumber(blockCtx)
+				cancel()
+
+				if err == nil {
+					break
+				}
+
+				retryDelay := baseRetryDelay * time.Duration(1<<retry)
+				log.Printf("ERROR: Failed to get current block for ZetaChain (attempt %d/%d): %v. Retrying in %v",
+					retry+1, maxRetries, err, retryDelay)
+
+				select {
+				case <-time.After(retryDelay):
+					continue
+				case <-ctx.Done():
+					return
+				}
+			}
+
+			if err != nil {
+				log.Printf("CRITICAL: Failed to get current block for ZetaChain after %d attempts. Skipping this polling cycle.", maxRetries)
+				continue
+			}
+
+			// Skip if no new blocks
+			if currentBlock <= lastProcessedBlock {
+				if time.Since(lastDbUpdateTime) >= dbUpdateInterval {
+					// Even if no new blocks, periodically update the DB to ensure we don't lose progress
+					dbUpdateCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					if err := s.db.UpdateLastProcessedBlock(dbUpdateCtx, chainID, lastProcessedBlock); err != nil {
+						log.Printf("WARNING: Failed to persist %s progress to DB: %v", eventType, err)
+					} else {
+						log.Printf("Persisted %s progress to DB: chain %d at block %d", eventType, chainID, lastProcessedBlock)
+					}
+					cancel()
+					lastDbUpdateTime = time.Now()
+				}
+				continue
+			}
+
+			// Limit the number of blocks we process at once to avoid timeouts
+			endBlock := lastProcessedBlock + 5000
+			if endBlock > currentBlock {
+				endBlock = currentBlock
+			}
+
+			log.Printf("Polling ZetaChain for %s events from blocks %d to %d", eventType, lastProcessedBlock+1, endBlock)
+
+			// Create query for the block range
+			query := ethereum.FilterQuery{
+				FromBlock: big.NewInt(int64(lastProcessedBlock + 1)),
+				ToBlock:   big.NewInt(int64(endBlock)),
+				Addresses: []common.Address{contractAddress},
+				Topics: [][]common.Hash{
+					eventSignatures,
+				},
+			}
+
+			// Filter logs with retry logic
+			var logs []types.Log
+			for retry := 0; retry < maxRetries; retry++ {
+				filterCtx, filterCancel := context.WithTimeout(ctx, FilterLogsTimeout)
+				logs, err = client.FilterLogs(filterCtx, query)
+				filterCancel()
+
+				if err == nil {
+					break
+				}
+
+				retryDelay := baseRetryDelay * time.Duration(1<<retry)
+				log.Printf("ERROR: Failed to filter logs for ZetaChain %s events (attempt %d/%d): %v. Retrying in %v",
+					eventType, retry+1, maxRetries, err, retryDelay)
+
+				select {
+				case <-time.After(retryDelay):
+					continue
+				case <-ctx.Done():
+					return
+				}
+			}
+
+			if err != nil {
+				log.Printf("CRITICAL: Failed to filter logs for ZetaChain %s events after %d attempts. Skipping this block range.",
+					eventType, maxRetries)
+				continue
+			}
+
+			// Process logs if any found
+			processedCount := 0
+			errorCount := 0
+			if len(logs) > 0 {
+				log.Printf("Found %d new %s events in ZetaChain blocks %d to %d",
+					len(logs), eventType, lastProcessedBlock+1, endBlock)
+
+				// Process the logs with individual timeouts
+				for _, logEntry := range logs {
+					processCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+					err := processLogFunc(processCtx, logEntry)
+					cancel()
+
+					if err != nil {
+						errorCount++
+						if strings.Contains(err.Error(), "duplicate key") {
+							// This is expected for duplicates, just log at debug level
+							log.Printf("DEBUG: Skipping duplicate %s event in tx: %s", eventType, logEntry.TxHash.Hex())
+						} else {
+							log.Printf("ERROR: Failed to process ZetaChain %s log: %v", eventType, err)
+						}
+					} else {
+						processedCount++
+					}
+				}
+				log.Printf("Successfully processed %d/%d %s events (errors: %d)",
+					processedCount, len(logs), eventType, errorCount)
+			} else {
+				log.Printf("No new %s events found in ZetaChain blocks %d to %d",
+					eventType, lastProcessedBlock+1, endBlock)
+			}
+
+			// Update the last processed block
+			updateProgressFunc(endBlock)
+
+			// Persist progress to the database
+			dbUpdateCtx, dbUpdateCancel := context.WithTimeout(ctx, 10*time.Second)
+			if err := s.db.UpdateLastProcessedBlock(dbUpdateCtx, chainID, endBlock); err != nil {
+				log.Printf("WARNING: Failed to persist %s progress to DB: %v", eventType, err)
+			} else {
+				log.Printf("Persisted %s progress to DB: chain %d at block %d", eventType, chainID, endBlock)
+				lastDbUpdateTime = time.Now()
+			}
+			dbUpdateCancel()
+		}
+	}
+}
+
 // StartSubscriptionSupervisor starts a background goroutine that periodically checks
 // if services are still running and restarts them if needed
 func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, cfg *config.Config) {
@@ -1395,8 +1660,11 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 	reconnectTicker := time.NewTicker(2 * time.Hour)
 	defer reconnectTicker.Stop()
 
-	// Track last full reconnection time
+	// Track last full reconnect time
 	lastFullReconnect := time.Now()
+
+	// ZetaChain ID constant
+	const zetaChainID = uint64(7000)
 
 	for {
 		select {
@@ -1405,6 +1673,12 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 			// Check intent services
 			for chainID, intentService := range s.intentServices {
+				// Skip health check for ZetaChain as it's using polling
+				if chainID == zetaChainID {
+					log.Printf("ZetaChain intent service using polling mechanism - skipping subscription check")
+					continue
+				}
+
 				activeGoroutines := intentService.ActiveGoroutines()
 				log.Printf("Intent service for chain %d: %d active goroutines", chainID, activeGoroutines)
 
@@ -1426,6 +1700,12 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 			// Check fulfillment services
 			for chainID, fulfillmentService := range s.fulfillmentServices {
+				// Skip health check for ZetaChain as it's using polling
+				if chainID == zetaChainID {
+					log.Printf("ZetaChain fulfillment service using polling mechanism - skipping subscription check")
+					continue
+				}
+
 				count := fulfillmentService.GetSubscriptionCount()
 				log.Printf("Fulfillment service for chain %d: %d active subscriptions", chainID, count)
 
@@ -1447,6 +1727,12 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 			// Check settlement services
 			for chainID, settlementService := range s.settlementServices {
+				// Skip health check for ZetaChain as it's using polling
+				if chainID == zetaChainID {
+					log.Printf("ZetaChain settlement service using polling mechanism - skipping subscription check")
+					continue
+				}
+
 				count := settlementService.GetSubscriptionCount()
 				log.Printf("Settlement service for chain %d: %d active subscriptions", chainID, count)
 
@@ -1466,14 +1752,34 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 				}
 			}
 
+			// Check ZetaChain health by getting block number
+			if client, ok := s.intentServices[zetaChainID]; ok && client != nil {
+				log.Printf("Checking ZetaChain polling health...")
+				blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				_, err := client.client.BlockNumber(blockCtx)
+				cancel()
+
+				if err != nil {
+					log.Printf("WARNING: ZetaChain polling health check failed: %v", err)
+				} else {
+					log.Printf("ZetaChain polling health check passed")
+				}
+			}
+
 		case <-reconnectTicker.C:
 			// Perform a complete refresh of all WebSocket connections every 2 hours
 			timeSinceLastReconnect := time.Since(lastFullReconnect)
 			log.Printf("Performing scheduled full reconnection of all services (last reconnect: %v ago)", timeSinceLastReconnect)
 			lastFullReconnect = time.Now()
 
-			// Force reconnect all intent services
+			// Force reconnect all intent services (except ZetaChain)
 			for chainID, intentService := range s.intentServices {
+				// Skip ZetaChain as it's using polling
+				if chainID == zetaChainID {
+					log.Printf("Skipping ZetaChain intent service reconnection (using polling)")
+					continue
+				}
+
 				log.Printf("Scheduled reconnect: Restarting intent service for chain %d", chainID)
 				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
@@ -1491,8 +1797,14 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 				cancel()
 			}
 
-			// Force reconnect all fulfillment services
+			// Force reconnect all fulfillment services (except ZetaChain)
 			for chainID, fulfillmentService := range s.fulfillmentServices {
+				// Skip ZetaChain as it's using polling
+				if chainID == zetaChainID {
+					log.Printf("Skipping ZetaChain fulfillment service reconnection (using polling)")
+					continue
+				}
+
 				log.Printf("Scheduled reconnect: Restarting fulfillment service for chain %d", chainID)
 				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
@@ -1510,8 +1822,14 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 				cancel()
 			}
 
-			// Force reconnect all settlement services
+			// Force reconnect all settlement services (except ZetaChain)
 			for chainID, settlementService := range s.settlementServices {
+				// Skip ZetaChain as it's using polling
+				if chainID == zetaChainID {
+					log.Printf("Skipping ZetaChain settlement service reconnection (using polling)")
+					continue
+				}
+
 				log.Printf("Scheduled reconnect: Restarting settlement service for chain %d", chainID)
 				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
