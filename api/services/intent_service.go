@@ -343,7 +343,24 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		}
 	}()
 
+	// Log the beginning of processing
+	log.Printf("PROCESSING EVENT: Chain %d, Block %d, TxHash %s, Topics: %d",
+		s.chainID, vLog.BlockNumber, vLog.TxHash.Hex(), len(vLog.Topics))
+
+	// Print topics for debugging
+	if len(vLog.Topics) > 0 {
+		log.Printf("EVENT TOPIC[0]: %s", vLog.Topics[0].Hex())
+
+		// Check if this matches any of our known event signatures
+		if vLog.Topics[0] == s.abi.Events[IntentInitiatedEventName].ID {
+			log.Printf("DETECTED: Standard IntentInitiated event")
+		} else if vLog.Topics[0] == s.abi.Events[IntentInitiatedWithCallEventName].ID {
+			log.Printf("DETECTED: IntentInitiatedWithCall event")
+		}
+	}
+
 	if err := s.validateLog(vLog); err != nil {
+		log.Printf("LOG VALIDATION FAILED: %v", err)
 		return err
 	}
 
@@ -353,7 +370,17 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	extractCancel()
 
 	if err != nil {
+		log.Printf("EVENT DATA EXTRACTION FAILED: %v", err)
 		return err
+	}
+
+	// Log successful extraction
+	if event.IsCall {
+		log.Printf("EXTRACTED INTENT WITH CALL: ID=%s, Asset=%s, Amount=%s, DataLength=%d",
+			event.IntentID, event.Asset, event.Amount.String(), len(event.Data))
+	} else {
+		log.Printf("EXTRACTED STANDARD INTENT: ID=%s, Asset=%s, Amount=%s",
+			event.IntentID, event.Asset, event.Amount.String())
 	}
 
 	// Use the target chain from the event data
@@ -373,12 +400,12 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	}
 
 	// Set a timeout for intent conversion
-	_, intentCancel := context.WithTimeout(ctx, 5*time.Second)
-	intent, err := event.ToIntent(client)
+	intentCtx, intentCancel := context.WithTimeout(ctx, 5*time.Second)
+	intent, err := event.ToIntent(client, intentCtx)
 	intentCancel()
 
 	if err != nil {
-		log.Printf("Warning: Failed to get block timestamp: %v", err)
+		log.Printf("INTENT CONVERSION FAILED: %v", err)
 		// Continue with what we have
 	}
 
@@ -394,12 +421,20 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	dbCancel()
 
 	if err != nil && !strings.Contains(err.Error(), "not found") {
+		log.Printf("DATABASE ERROR (GetIntent): %v", err)
 		return fmt.Errorf("failed to check for existing intent: %v", err)
 	}
 
 	// Skip if intent already exists
 	if existingIntent != nil {
+		log.Printf("SKIPPING DUPLICATE INTENT: %s (already exists in database)", intent.ID)
 		return nil
+	}
+
+	// Log before database insertion
+	if intent.IsCall {
+		log.Printf("STORING INTENT WITH CALL: ID=%s, CallData length=%d",
+			intent.ID, len(intent.CallData)/2) // Divide by 2 because it's hex encoded (2 chars per byte)
 	}
 
 	// Create the intent with a timeout
@@ -410,12 +445,14 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	if err != nil {
 		// Skip if intent already exists
 		if strings.Contains(err.Error(), "duplicate key") {
+			log.Printf("SKIPPING DUPLICATE INTENT: %s (database constraint)", intent.ID)
 			return nil
 		}
+		log.Printf("DATABASE ERROR (CreateIntent): %v", err)
 		return fmt.Errorf("failed to store intent in database: %v", err)
 	}
 
-	log.Printf("Successfully processed and stored intent: %s", intent.ID)
+	log.Printf("SUCCESSFULLY PROCESSED: Intent %s stored in database", intent.ID)
 	return nil
 }
 
@@ -474,9 +511,11 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	}
 
 	// Parse indexed parameters from topics
-	if len(vLog.Topics) < 3 {
-		log.Printf("ERROR: Invalid log: expected at least 3 topics, got %d", len(vLog.Topics))
-		return nil, fmt.Errorf("invalid log: expected at least 3 topics, got %d", len(vLog.Topics))
+	if len(vLog.Topics) < IntentInitiatedRequiredTopics {
+		log.Printf("ERROR: Invalid log: expected at least %d topics, got %d",
+			IntentInitiatedRequiredTopics, len(vLog.Topics))
+		return nil, fmt.Errorf("invalid log: expected at least %d topics, got %d",
+			IntentInitiatedRequiredTopics, len(vLog.Topics))
 	}
 
 	// Topic[0] is the event signature
@@ -496,20 +535,32 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 
 	// Determine if this is a standard intent or a call intent based on the event signature
 	var eventName string
+	isCallIntent := false
+
 	if vLog.Topics[0] == s.abi.Events[IntentInitiatedEventName].ID {
 		eventName = IntentInitiatedEventName
-		log.Printf("DEBUG: Processing standard intent event")
+		log.Printf("DEBUG: Processing standard intent event (signature: %s)", vLog.Topics[0].Hex())
 	} else if vLog.Topics[0] == s.abi.Events[IntentInitiatedWithCallEventName].ID {
 		eventName = IntentInitiatedWithCallEventName
-		log.Printf("DEBUG: Processing intent with call event")
+		log.Printf("DEBUG: Processing intent with call event (signature: %s)", vLog.Topics[0].Hex())
+		isCallIntent = true
 		event.IsCall = true
 	} else {
-		log.Printf("ERROR: Unknown event signature: %s", vLog.Topics[0].Hex())
+		log.Printf("ERROR: Unknown event signature: %s, expected either %s or %s",
+			vLog.Topics[0].Hex(),
+			s.abi.Events[IntentInitiatedEventName].ID.Hex(),
+			s.abi.Events[IntentInitiatedWithCallEventName].ID.Hex())
 		return nil, fmt.Errorf("unknown event signature: %s", vLog.Topics[0].Hex())
 	}
 
 	log.Printf("DEBUG: Unpacking event data (%d bytes) using ABI for %s",
 		len(vLog.Data), eventName)
+
+	// Log the hex data for debugging extremely large data payloads
+	if len(vLog.Data) > 1000 {
+		log.Printf("LARGE DATA FIELD: Event data is %d bytes, first 100 bytes: 0x%s...",
+			len(vLog.Data), common.Bytes2Hex(vLog.Data[:100]))
+	}
 
 	unpacked, err := s.abi.Unpack(eventName, vLog.Data)
 	if err != nil {
@@ -517,48 +568,124 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 		return nil, fmt.Errorf("failed to unpack event data: %v", err)
 	}
 
+	// Log the unpacked data structure
 	log.Printf("DEBUG: Unpacked %d fields from event data", len(unpacked))
 
-	// Check minimum field requirements based on event type
-	requiredFields := IntentInitiatedRequiredFields
-	if event.IsCall {
-		requiredFields = IntentInitiatedWithCallRequiredFields
+	// Validate the number of fields
+	expectedFields := IntentInitiatedRequiredFields
+	if isCallIntent {
+		expectedFields = IntentInitiatedWithCallRequiredFields
 	}
 
-	if len(unpacked) < requiredFields {
-		log.Printf("ERROR: Invalid event data: expected %d fields, got %d",
-			requiredFields, len(unpacked))
-		return nil, fmt.Errorf("invalid event data: expected %d fields, got %d", requiredFields, len(unpacked))
+	if len(unpacked) < expectedFields {
+		log.Printf("ERROR: Invalid event data: expected at least %d fields, got %d",
+			expectedFields, len(unpacked))
+		return nil, fmt.Errorf("invalid event data: expected at least %d fields, got %d",
+			expectedFields, len(unpacked))
 	}
 
-	if err := s.validateEventFields(unpacked, event); err != nil {
-		log.Printf("ERROR: Failed to validate event fields: %v", err)
-		return nil, err
+	// Parse amount
+	var ok bool
+	event.Amount, ok = unpacked[0].(*big.Int)
+	if !ok {
+		log.Printf("ERROR: Invalid amount in event data: %v (type: %T)",
+			unpacked[0], unpacked[0])
+		return nil, fmt.Errorf("invalid amount in event data")
+	}
+	log.Printf("DEBUG: Extracted amount: %s", event.Amount.String())
+
+	// Parse targetChain
+	targetChain, ok := unpacked[1].(*big.Int)
+	if !ok {
+		log.Printf("ERROR: Invalid targetChain in event data: %v (type: %T)",
+			unpacked[1], unpacked[1])
+		return nil, fmt.Errorf("invalid targetChain in event data")
+	}
+	event.TargetChain = targetChain.Uint64()
+	log.Printf("DEBUG: Extracted targetChain: %d", event.TargetChain)
+
+	// Parse receiver
+	event.Receiver, ok = unpacked[2].([]byte)
+	if !ok {
+		log.Printf("ERROR: Invalid receiver in event data: %v (type: %T)",
+			unpacked[2], unpacked[2])
+		return nil, fmt.Errorf("invalid receiver in event data")
 	}
 
-	// Get the sender address from the transaction - add timeout
-	txCtx, txCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer txCancel()
+	// Log the receiver in hex format for debugging
+	if len(event.Receiver) > 0 {
+		receiverHex := common.Bytes2Hex(event.Receiver)
+		log.Printf("DEBUG: Extracted receiver (bytes): 0x%s (length: %d)",
+			receiverHex, len(event.Receiver))
 
-	log.Printf("DEBUG: Fetching transaction %s to extract sender", vLog.TxHash.Hex())
-	tx, _, err := s.client.TransactionByHash(txCtx, vLog.TxHash)
-	if err != nil {
-		log.Printf("ERROR: Failed to get transaction: %v", err)
-		return nil, fmt.Errorf("failed to get transaction: %v", err)
+		// Try to convert to address for additional validation
+		if len(event.Receiver) == 20 {
+			addr := common.BytesToAddress(event.Receiver)
+			log.Printf("DEBUG: Receiver as address: %s", addr.Hex())
+		}
+	} else {
+		log.Printf("WARNING: Receiver is empty")
 	}
 
-	// Get the sender address from the transaction
-	signer := types.LatestSignerForChainID(big.NewInt(int64(s.chainID)))
-	sender, err := signer.Sender(tx)
-	if err != nil {
-		log.Printf("ERROR: Failed to get sender address: %v", err)
-		return nil, fmt.Errorf("failed to get sender address: %v", err)
+	// Parse tip
+	event.Tip, ok = unpacked[3].(*big.Int)
+	if !ok {
+		log.Printf("ERROR: Invalid tip in event data: %v (type: %T)",
+			unpacked[3], unpacked[3])
+		return nil, fmt.Errorf("invalid tip in event data")
+	}
+	log.Printf("DEBUG: Extracted tip: %s", event.Tip.String())
+
+	// Parse salt
+	event.Salt, ok = unpacked[4].(*big.Int)
+	if !ok {
+		log.Printf("ERROR: Invalid salt in event data: %v (type: %T)",
+			unpacked[4], unpacked[4])
+		return nil, fmt.Errorf("invalid salt in event data")
+	}
+	log.Printf("DEBUG: Extracted salt: %s", event.Salt.String())
+
+	// If this is a call intent, extract the data field
+	if isCallIntent {
+		event.IsCall = true
+
+		if len(unpacked) > 5 {
+			event.Data, ok = unpacked[5].([]byte)
+			if !ok {
+				log.Printf("ERROR: Invalid data in event data: %v (type: %T)",
+					unpacked[5], unpacked[5])
+				return nil, fmt.Errorf("invalid data in event data: unexpected type %T", unpacked[5])
+			}
+
+			// Log detailed info about the data field
+			dataLength := len(event.Data)
+			if dataLength > 0 {
+				// Show sample of data for debugging
+				previewLength := 100
+				if dataLength < previewLength {
+					previewLength = dataLength
+				}
+
+				dataHex := common.Bytes2Hex(event.Data[:previewLength])
+				log.Printf("DEBUG: Extracted call data: 0x%s... (byte length: %d)",
+					dataHex, dataLength)
+
+				// If data is extremely large, add another warning
+				if dataLength > 1000 {
+					log.Printf("WARNING: Very large call data (%d bytes) - might exceed database limits", dataLength)
+				}
+			} else {
+				log.Printf("DEBUG: Call data is empty (length: 0)")
+			}
+		} else {
+			log.Printf("ERROR: Missing data field for call intent, expected at least 6 fields, got %d", len(unpacked))
+			return nil, fmt.Errorf("missing data field for call intent")
+		}
+	} else {
+		event.IsCall = false
 	}
 
-	event.Sender = sender.Hex()
-	log.Printf("DEBUG: Extracted sender: %s", event.Sender)
-
-	log.Printf("DEBUG: Successfully extracted all event data for intent %s", event.IntentID)
+	log.Printf("DEBUG: All event fields validated successfully")
 	return event, nil
 }
 
