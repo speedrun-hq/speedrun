@@ -33,31 +33,55 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 		// Check if this is a WebSocket URL or HTTP URL
 		isWebSocket := strings.HasPrefix(chainConfig.RPCURL, "wss://") || strings.HasPrefix(chainConfig.RPCURL, "ws://")
 
-		log.Printf("Creating client for chain %d with RPC URL %s (WebSocket: %v)",
-			chainID, maskRPCURL(chainConfig.RPCURL), isWebSocket)
+		// Force HTTP for Zetachain regardless of URL type
+		if chainID == 7000 { // ZetaChain
+			if isWebSocket {
+				log.Printf("NOTE: For ZetaChain (ID: %d), forcing HTTP connection instead of WebSocket", chainID)
+				// Convert WebSocket URL to HTTP if necessary
+				httpURL := chainConfig.RPCURL
+				httpURL = strings.Replace(httpURL, "wss://", "https://", 1)
+				httpURL = strings.Replace(httpURL, "ws://", "http://", 1)
 
-		if isWebSocket {
-			// Use WebSocket connection for subscriptions
-			rpcClient, err := rpc.DialWebsocket(context.Background(), chainConfig.RPCURL, "")
-			if err != nil {
-				return nil, fmt.Errorf("failed to create WebSocket RPC client for chain %d: %v", chainID, err)
-			}
-			client = ethclient.NewClient(rpcClient)
-			log.Printf("Successfully created WebSocket client for chain %d", chainID)
-
-			// Verify that the websocket connection supports subscriptions
-			if err := verifyWebsocketSubscription(client, chainID); err != nil {
-				log.Printf("WARNING: WebSocket connection for chain %d failed subscription test: %v", chainID, err)
-				log.Printf("CRITICAL: Check your RPC provider. Some 'WebSocket' endpoints do not properly support subscriptions!")
+				client, err = ethclient.Dial(httpURL)
+				if err != nil {
+					return nil, fmt.Errorf("failed to connect to ZetaChain with HTTP: %v", err)
+				}
+				log.Printf("Successfully connected to ZetaChain using HTTP")
 			} else {
-				log.Printf("SUCCESS: WebSocket connection for chain %d verified - subscriptions are working", chainID)
+				// Already HTTP URL
+				client, err = ethclient.Dial(chainConfig.RPCURL)
+				if err != nil {
+					return nil, fmt.Errorf("failed to connect to ZetaChain: %v", err)
+				}
 			}
 		} else {
-			// For HTTP connections, emit a warning that subscriptions might not work
-			log.Printf("WARNING: Using HTTP RPC URL for chain %d. Real-time subscriptions may not work. Consider using a WebSocket URL instead.", chainID)
-			client, err = ethclient.Dial(chainConfig.RPCURL)
-			if err != nil {
-				return nil, fmt.Errorf("failed to connect to chain %d: %v", chainID, err)
+			// For other chains, use normal logic
+			log.Printf("Creating client for chain %d with RPC URL %s (WebSocket: %v)",
+				chainID, maskRPCURL(chainConfig.RPCURL), isWebSocket)
+
+			if isWebSocket {
+				// Use WebSocket connection for subscriptions
+				rpcClient, err := rpc.DialWebsocket(context.Background(), chainConfig.RPCURL, "")
+				if err != nil {
+					return nil, fmt.Errorf("failed to create WebSocket RPC client for chain %d: %v", chainID, err)
+				}
+				client = ethclient.NewClient(rpcClient)
+				log.Printf("Successfully created WebSocket client for chain %d", chainID)
+
+				// Verify that the websocket connection supports subscriptions
+				if err := verifyWebsocketSubscription(client, chainID); err != nil {
+					log.Printf("WARNING: WebSocket connection for chain %d failed subscription test: %v", chainID, err)
+					log.Printf("CRITICAL: Check your RPC provider. Some 'WebSocket' endpoints do not properly support subscriptions!")
+				} else {
+					log.Printf("SUCCESS: WebSocket connection for chain %d verified - subscriptions are working", chainID)
+				}
+			} else {
+				// For HTTP connections, emit a warning that subscriptions might not work
+				log.Printf("WARNING: Using HTTP RPC URL for chain %d. Real-time subscriptions may not work. Consider using a WebSocket URL instead.", chainID)
+				client, err = ethclient.Dial(chainConfig.RPCURL)
+				if err != nil {
+					return nil, fmt.Errorf("failed to connect to chain %d: %v", chainID, err)
+				}
 			}
 		}
 
