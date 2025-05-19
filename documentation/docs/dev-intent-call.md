@@ -1,4 +1,4 @@
-# Initiate an Intent for Smart Contract Calls
+# Intents for Contract Calls
 
 ## Overview
 
