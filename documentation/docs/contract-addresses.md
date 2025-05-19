@@ -24,3 +24,16 @@ _Core infrastructure contracts on ZetaChain network_
 | --- | --- | --- |
 | <img src="/img/zeta.png" alt="ZetaChain" width="40" height="40" style={{verticalAlign: "middle"}} /> ZetaChain Router | `0xcd74f36bad8f842641e67ec390be092a243297d6` | [View on Blockscout](https://zetachain.blockscout.com/address/0xcd74f36bad8f842641e67ec390be092a243297d6) |
 | <img src="/img/zeta.png" alt="ZetaChain" width="40" height="40" style={{verticalAlign: "middle"}} /> Algebra Swap Module | `0x5d71aa0a455b7a714faf6fdf87829f98cbfe5bae` | [View on Blockscout](https://zetachain.blockscout.com/address/0x5d71aa0a455b7a714faf6fdf87829f98cbfe5bae) |
+
+### Module Contracts
+
+_Specialized module contracts for cross-chain operations_
+
+#### Aerodrome
+
+_Modules for swapping tokens on Aerodrome DEX on Base_
+
+| Contract | Address | Explorer |
+| --- | --- | --- |
+| <img src="/img/base.png" alt="Base" width="40" height="40" style={{verticalAlign: "middle"}} /> Base Module | `0x30e13787a90De8Ab4831c35e1d2c64783144ab7a` | [View on BaseScan](https://basescan.org/address/0x30e13787a90De8Ab4831c35e1d2c64783144ab7a) |
+| <img src="/img/arb.png" alt="Arbitrum" width="40" height="40" style={{verticalAlign: "middle"}} /> Arbitrum Initiator | `0xbAFeFC473e886557A7Bc8a283EdF4Cf47a3E17f9` | [View on Arbiscan](https://arbiscan.io/address/0xbAFeFC473e886557A7Bc8a283EdF4Cf47a3E17f9) |

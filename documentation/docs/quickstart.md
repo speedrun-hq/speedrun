@@ -80,7 +80,7 @@ The transfer will be completed in seconds, with ZetaChain providing security gua
 - Read the [Architecture Overview](./architecture.md) to understand how Speedrun works
 - Check out the [API Reference](./api-reference.md) for detailed endpoint documentation
 - Review the [Smart Contracts](./contract-addresses.md) to access contract addresses
-- Follow the [Developer Guide](./initiate-intent.md) to learn more about how to build applications powered by intents
+- Follow the [Developer Guide](./dev-intent-transfer.md) to learn more about how to build applications powered by intents
 - Follow the [Fulfiller Guide](./fulfill-intents.md) to learn more about how to fulfill intents and get rewards
 
 ## Common Issues

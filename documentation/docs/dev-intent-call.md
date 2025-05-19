@@ -1,4 +1,4 @@
-# Intents for Smart Contract Calls
+# Intents for Contract Calls
 
 ## Overview
 
@@ -14,31 +14,9 @@ Speedrun not only supports simple token transfers but also intents for custom sm
 
 ## Implement an Intent Target Contract
 
-To support smart contract call intents, the developer must implement the `IntentTarget` interface containing the following functions:
-
-The following interface must
+To support smart contract call intents, the developer must implement the `IntentTarget` interface:
 
 ```solidity
-// Implemented by contract and called during fulfill
-// Contains logic during intent execution
-function onFulfill(
-  bytes32 intentId,
-  address asset,
-  uint256 amount,
-  bytes data
-) external;
-
-// Implemented by contract and called during settlement
-// Can contain specific logic, like custom rewarding on the contract for the fulfiller
-function onSettle(
-  bytes32 intentId,
-  address asset,
-  uint256 amount,
-  bytes data,
-  bytes32 fulfillmentIndex
-) external;
-
-
 /**
  * @title IntentTarget
  * @dev Interface for contracts that want to support intent calls
@@ -67,7 +45,9 @@ interface IntentTarget {
      * @param data Custom data for execution
      * @param fulfillmentIndex The fulfillment index for this intent
      * @param isFulfilled Whether the intent was fulfilled before settlement
-     * Can contain specific logic, like custom rewarding on the contract for the fulfiller, sometimes will just be empty
+     * @param tipAmount Tip amount for this intent, can be used to redistribute if not fulfilled
+     * // Will generally implement logic to determine where to refund the tip if the intent was not fulfilled
+     * // Can also contain specific logic, like custom rewarding on the contract for the fulfiller
      */
     function onSettle(
         bytes32 intentId,
@@ -75,7 +55,8 @@ interface IntentTarget {
         uint256 amount,
         bytes calldata data,
         bytes32 fulfillmentIndex,
-        bool isFulfilled
+        bool isFulfilled,
+        uint256 tipAmount
     ) external;
 }
 
@@ -108,6 +89,7 @@ contract CrossChainSwapper {
     }
 
     // Called by the protocol during intent fulfillment
+    // It performs a Uniswap v2 swap
     function onFulfill(
         bytes32 intentId,
         address asset,
@@ -158,15 +140,26 @@ contract CrossChainSwapper {
     }
 
     // onSettle implementation
+    // if the intent was not fulfilled: it decodes the swap receiver and sends the tip to this address
     function onSettle(
         bytes32 intentId,
         address asset,
         uint256 amount,
         bytes calldata data,
         bytes32 fulfillmentIndex,
-        bool isFulfilled
+        bool isFulfilled,
+        uint256 tipAmount
     ) external {
-        // Empty implementation
+        if (!isFulfilled) {
+            (
+                address[] memory path,
+                uint256 minAmountOut,
+                uint256 deadline,
+                address receiver
+            ) = decodeSwapParams(data);
+
+            IERC20(asset).transfer(receiver, tipAmount);
+        }
     }
 }
 ```
@@ -178,6 +171,7 @@ In this example:
 3. The `decodeSwapParams` function extracts all the parameters including the receiver from the encoded bytes
 4. The contract then performs the swap using Uniswap V2's router
 5. The swapped tokens are sent to the receiver address specified in the data
+6. During settlement, if the swap was not fulfilled, the tip is refunded to the swap receiver
 
 ## Initiate a Contract Call Intent
 

@@ -21,7 +21,18 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Developers",
-      items: ["initiate-intent", "contract-call-intent"],
+      items: [
+        "dev-intent-transfer", 
+        "dev-intent-call",
+        {
+          type: "category",
+          label: "Modules",
+          items: [
+            "mod-introduction",
+            "mod-aerodrome"
+          ],
+        }
+      ],
     },
     {
       type: "category",

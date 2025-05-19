@@ -1,11 +1,11 @@
-# Initiate an Intent
+# Intents for Token Transfers
 
 ## Overview
 
 The following function should be called on the intent contract to initiate a new intent for token transfer:
 
 ```solidity
-function initiate(
+function initiateTransfer(
   address asset,
   uint256 amount,
   uint256 targetChain,
@@ -30,7 +30,7 @@ Transferring 1000 USDC from Arbitrum to Base.
 
 ```solidity
 interface IIntent {
-  function initiate(
+  function initiateTransfer(
     address asset,
     uint256 amount,
     uint256 targetChain,
@@ -44,7 +44,7 @@ contract IntentCreator {
   function createIntent() external {
     address arbitrumIntent = 0xD6B0E2a8D115cCA2823c5F80F8416644F3970dD2;
 
-    IIntent(arbitrumIntent).initiate(
+    IIntent(arbitrumIntent).initiateTransfer(
       0xaf88d065e77c8cc2239327c5edb3a432268e5831,   // USDC on Arbitrum
       1_000e6,                                      // Amount: 1000 tokens
       8453,                                         // Destination chain ID (here: Base)

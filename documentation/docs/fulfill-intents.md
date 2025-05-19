@@ -8,9 +8,10 @@ To fulfill intents on Speedrun, fulfillers need to detect intents on the source 
 
 ### Detecting Intents
 
-Intents can be detected by parsing events from the intent contract on the connected source chain. When a user initiates an intent, the following event is emitted:
+Intents can be detected by parsing events from the intent contract on the connected source chain. When a user initiates an intent, the following events are emitted:
 
 ```solidity
+// For token transfers
 event IntentInitiated(
     bytes32 indexed intentId,
     address indexed asset,
@@ -19,6 +20,18 @@ event IntentInitiated(
     bytes receiver,
     uint256 tip,
     uint256 salt
+);
+
+// For smart contract calls
+event IntentInitiatedWithCall(
+    bytes32 indexed intentId,
+    address indexed asset,
+    uint256 amount,
+    uint256 targetChain,
+    bytes receiver,
+    uint256 tip,
+    uint256 salt,
+    bytes data
 );
 ```
 
@@ -29,15 +42,23 @@ By monitoring these events, fulfillers can identify new intents that need to be 
 Once an intent is detected, fulfillers must call the `fulfill` function on the connected target chain:
 
 ```solidity
-function fulfill(
+// Fulfills an intent by transferring tokens to the receiver
+function fulfillTransfer(
     bytes32 intentId,
     address asset,
     uint256 amount,
     address receiver
-)
-```
+);
 
-This function transfers the specified tokens to the receiver on the target chain, completing the cross-chain operation.
+// Fulfills an intent by transferring tokens to the receiver and calling onFulfill hook
+function fulfillCall(
+    bytes32 intentId,
+    address asset,
+    uint256 amount,
+    address receiver,
+    bytes calldata data
+);
+```
 
 ## More Advanced and Optimized Fulfillment
 
