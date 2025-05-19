@@ -60,8 +60,6 @@ function fulfillCall(
 );
 ```
 
-This function transfers the specified tokens to the receiver on the target chain, completing the cross-chain operation.
-
 ## More Advanced and Optimized Fulfillment
 
 While the above represents the general fulfillment flow, Speedrun provides additional tools to simplify the process:
