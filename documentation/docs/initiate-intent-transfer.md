@@ -1,4 +1,4 @@
-# Initiate an Intent
+# Initiate an Intent for Tokens Transfer
 
 ## Overview
 
