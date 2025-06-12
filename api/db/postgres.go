@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"log"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -148,11 +147,9 @@ func (p *PostgresDB) CreateIntent(ctx context.Context, intent *models.Intent) er
 	// For blockchain events, these should already be set to the block timestamp
 	// This is a fallback for API-created intents or testing
 	if intent.CreatedAt.IsZero() {
-		log.Printf("Warning: Intent %s has no created_at timestamp, falling back to current time", intent.ID)
 		intent.CreatedAt = time.Now()
 	}
 	if intent.UpdatedAt.IsZero() {
-		log.Printf("Warning: Intent %s has no updated_at timestamp, falling back to current time", intent.ID)
 		intent.UpdatedAt = time.Now()
 	}
 
@@ -239,11 +236,9 @@ func (p *PostgresDB) CreateFulfillment(ctx context.Context, fulfillment *models.
 	// For blockchain events, these should already be set to the block timestamp
 	// This is a fallback for API-created fulfillments or testing
 	if fulfillment.CreatedAt.IsZero() {
-		log.Printf("Warning: Fulfillment for intent %s has no created_at timestamp, falling back to current time", fulfillment.ID)
 		fulfillment.CreatedAt = time.Now()
 	}
 	if fulfillment.UpdatedAt.IsZero() {
-		log.Printf("Warning: Fulfillment for intent %s has no updated_at timestamp, falling back to current time", fulfillment.ID)
 		fulfillment.UpdatedAt = time.Now()
 	}
 
@@ -411,11 +406,9 @@ func (p *PostgresDB) CreateSettlement(ctx context.Context, settlement *models.Se
 	// For blockchain events, these should already be set to the block timestamp
 	// This is a fallback for API-created settlements or testing
 	if settlement.CreatedAt.IsZero() {
-		log.Printf("Warning: Settlement for intent %s has no created_at timestamp, falling back to current time", settlement.ID)
 		settlement.CreatedAt = time.Now()
 	}
 	if settlement.UpdatedAt.IsZero() {
-		log.Printf("Warning: Settlement for intent %s has no updated_at timestamp, falling back to current time", settlement.ID)
 		settlement.UpdatedAt = time.Now()
 	}
 

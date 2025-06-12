@@ -4,27 +4,102 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/gin-gonic/gin"
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/handlers"
+	"github.com/speedrun-hq/speedrun/api/logger"
 	"github.com/speedrun-hq/speedrun/api/services"
 )
 
-// HealthCheck handler
-func HealthCheck(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+func main() {
+	// Create logger
+	lg := logger.NewStdLogger(true, logger.DebugLevel)
+
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Initialize database
+	lg.Notice("Initializing database connection...")
+	database, err := db.NewPostgresDB(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer database.Close()
+	lg.Notice("Database connection established successfully")
+
+	// Initialize Ethereum clients
+	clients, err := createEthereumClients(cfg, lg)
+	if err != nil {
+		log.Fatalf("Failed to initialize Ethereum clients: %v", err)
+	}
+
+	// Create services for all chains
+	intentServices, fulfillmentServices, settlementServices, err := createServices(clients, database, cfg, lg)
+	if err != nil {
+		log.Fatalf("Failed to create services: %v", err)
+	}
+
+	// Start event listeners for each chain
+	ctx := context.Background()
+
+	// Create event catchup service for this chain
+	eventCatchupService := services.NewEventCatchupService(
+		intentServices,
+		fulfillmentServices,
+		settlementServices,
+		database,
+		lg,
+	)
+	err = eventCatchupService.StartListening(ctx)
+	if err != nil {
+		lg.Error("Failed to start event catchup service error: %v", err)
+	}
+
+	// Start subscription supervisor to monitor and restart services if needed
+	go eventCatchupService.StartSubscriptionSupervisor(ctx, cfg)
+	lg.Info("Started subscription supervisor to monitor service health")
+
+	// Perform a simple diagnostic check on clients
+	lg.Info("Performing basic diagnostic checks on clients...")
+	for chainID, client := range clients {
+		// Test getting the latest block number as a diagnostic
+		ctxTest, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		blockNum, err := client.BlockNumber(ctxTest)
+		if err != nil {
+			lg.Error("Client for chain %d failed basic diagnosis: %v", chainID, err)
+		} else {
+			lg.Notice("Client for chain %d is functioning - current block: %d", chainID, blockNum)
+		}
+		cancel()
+	}
+
+	// Get the first chain's services for the HTTP server
+	firstChainID := uint64(0)
+	for chainID := range intentServices {
+		firstChainID = chainID
+		break
+	}
+	intentService := intentServices[firstChainID]
+	fulfillmentService := fulfillmentServices[firstChainID]
+
+	// Create and start the server
+	server := handlers.NewServer(fulfillmentService, intentService, database, lg)
+	if err := server.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
 
 // createEthereumClients creates and returns a map of Ethereum clients for each chain
-func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, error) {
+func createEthereumClients(cfg *config.Config, logger logger.Logger) (map[uint64]*ethclient.Client, error) {
 	clients := make(map[uint64]*ethclient.Client)
 	for chainID, chainConfig := range cfg.ChainConfigs {
 		var client *ethclient.Client
@@ -34,9 +109,10 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 		isWebSocket := strings.HasPrefix(chainConfig.RPCURL, "wss://") || strings.HasPrefix(chainConfig.RPCURL, "ws://")
 
 		// Force HTTP for Zetachain regardless of URL type
+		// TDOO: support testnet
 		if chainID == 7000 { // ZetaChain
 			if isWebSocket {
-				log.Printf("NOTE: For ZetaChain (ID: %d), forcing HTTP connection instead of WebSocket", chainID)
+				logger.Info("NOTE: For ZetaChain (ID: %d), forcing HTTP connection instead of WebSocket", chainID)
 				// Convert WebSocket URL to HTTP if necessary
 				httpURL := chainConfig.RPCURL
 				httpURL = strings.Replace(httpURL, "wss://", "https://", 1)
@@ -46,7 +122,7 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 				if err != nil {
 					return nil, fmt.Errorf("failed to connect to ZetaChain with HTTP: %v", err)
 				}
-				log.Printf("Successfully connected to ZetaChain using HTTP")
+				logger.Info("Successfully connected to ZetaChain using HTTP")
 			} else {
 				// Already HTTP URL
 				client, err = ethclient.Dial(chainConfig.RPCURL)
@@ -56,7 +132,7 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 			}
 		} else {
 			// For other chains, use normal logic
-			log.Printf("Creating client for chain %d with RPC URL %s (WebSocket: %v)",
+			logger.Info("Creating client for chain %d with RPC URL %s (WebSocket: %v)",
 				chainID, maskRPCURL(chainConfig.RPCURL), isWebSocket)
 
 			if isWebSocket {
@@ -66,18 +142,19 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 					return nil, fmt.Errorf("failed to create WebSocket RPC client for chain %d: %v", chainID, err)
 				}
 				client = ethclient.NewClient(rpcClient)
-				log.Printf("Successfully created WebSocket client for chain %d", chainID)
+				logger.Info("Successfully created WebSocket client for chain %d", chainID)
 
 				// Verify that the websocket connection supports subscriptions
-				if err := verifyWebsocketSubscription(client, chainID); err != nil {
-					log.Printf("WARNING: WebSocket connection for chain %d failed subscription test: %v", chainID, err)
-					log.Printf("CRITICAL: Check your RPC provider. Some 'WebSocket' endpoints do not properly support subscriptions!")
+				if err := verifyWebsocketSubscription(client, chainID, logger); err != nil {
+					// TODO: consider failing here
+					logger.Error("WebSocket connection for chain %d failed subscription test: %v", chainID, err)
+					logger.Error("CRITICAL: Check your RPC provider. Some 'WebSocket' endpoints do not properly support subscriptions!")
 				} else {
-					log.Printf("SUCCESS: WebSocket connection for chain %d verified - subscriptions are working", chainID)
+					logger.Debug("SUCCESS: WebSocket connection for chain %d verified - subscriptions are working", chainID)
 				}
 			} else {
 				// For HTTP connections, emit a warning that subscriptions might not work
-				log.Printf("WARNING: Using HTTP RPC URL for chain %d. Real-time subscriptions may not work. Consider using a WebSocket URL instead.", chainID)
+				logger.Info("WARNING: Using HTTP RPC URL for chain %d. Real-time subscriptions may not work. Consider using a WebSocket URL instead.", chainID)
 				client, err = ethclient.Dial(chainConfig.RPCURL)
 				if err != nil {
 					return nil, fmt.Errorf("failed to connect to chain %d: %v", chainID, err)
@@ -91,9 +168,9 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 		cancel()
 
 		if err != nil {
-			log.Printf("WARNING: Could not get block number for chain %d: %v", chainID, err)
+			logger.Error("WARNING: Could not get block number for chain %d: %v", chainID, err)
 		} else {
-			log.Printf("Client for chain %d connected successfully. Current block: %d", chainID, blockNumber)
+			logger.Info("Client for chain %d connected successfully. Current block: %d", chainID, blockNumber)
 		}
 
 		clients[chainID] = client
@@ -102,7 +179,7 @@ func createEthereumClients(cfg *config.Config) (map[uint64]*ethclient.Client, er
 }
 
 // verifyWebsocketSubscription tests if a client supports subscriptions by attempting to subscribe to new heads
-func verifyWebsocketSubscription(client *ethclient.Client, chainID uint64) error {
+func verifyWebsocketSubscription(client *ethclient.Client, chainID uint64, logger logger.Logger) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -125,14 +202,14 @@ func verifyWebsocketSubscription(client *ethclient.Client, chainID uint64) error
 	go func() {
 		select {
 		case header := <-headers:
-			log.Printf("Received new block header for chain %d: number=%d, hash=%s",
-				chainID, header.Number.Uint64(), header.Hash().Hex())
+			logger.DebugWithChain(chainID, "Received new block header: number=%d, hash=%s",
+				header.Number.Uint64(), header.Hash().Hex())
 			received <- true
 		case err := <-sub.Err():
-			log.Printf("Subscription error for chain %d: %v", chainID, err)
+			logger.DebugWithChain(chainID, "Subscription error: %v", err)
 			received <- false
 		case <-timeout:
-			log.Printf("Timed out waiting for header from chain %d", chainID)
+			logger.DebugWithChain(chainID, "Timed out waiting for header")
 			received <- false
 		}
 	}()
@@ -171,7 +248,17 @@ func maskRPCURL(url string) string {
 }
 
 // createServices creates and returns the intent and fulfillment services for each chain
-func createServices(clients map[uint64]*ethclient.Client, db db.Database, cfg *config.Config) (map[uint64]*services.IntentService, map[uint64]*services.FulfillmentService, map[uint64]*services.SettlementService, error) {
+func createServices(
+	clients map[uint64]*ethclient.Client,
+	db db.Database,
+	cfg *config.Config,
+	logger logger.Logger,
+) (
+	map[uint64]*services.IntentService,
+	map[uint64]*services.FulfillmentService,
+	map[uint64]*services.SettlementService,
+	error,
+) {
 	intentServices := make(map[uint64]*services.IntentService)
 	fulfillmentServices := make(map[uint64]*services.FulfillmentService)
 	settlementServices := make(map[uint64]*services.SettlementService)
@@ -181,21 +268,42 @@ func createServices(clients map[uint64]*ethclient.Client, db db.Database, cfg *c
 
 	for chainID, client := range clients {
 		// Create intent service
-		intentService, err := services.NewIntentService(client, clientResolver, db, cfg.IntentInitiatedEventABI, chainID)
+		intentService, err := services.NewIntentService(
+			client,
+			clientResolver,
+			db,
+			cfg.IntentInitiatedEventABI,
+			chainID,
+			logger,
+		)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to create intent service for chain %d: %v", chainID, err)
 		}
 		intentServices[chainID] = intentService
 
 		// Create fulfillment service
-		fulfillmentService, err := services.NewFulfillmentService(client, clientResolver, db, cfg.IntentFulfilledEventABI, chainID)
+		fulfillmentService, err := services.NewFulfillmentService(
+			client,
+			clientResolver,
+			db,
+			cfg.IntentFulfilledEventABI,
+			chainID,
+			logger,
+		)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to create fulfillment service for chain %d: %v", chainID, err)
 		}
 		fulfillmentServices[chainID] = fulfillmentService
 
 		// Create settlement service
-		settlementService, err := services.NewSettlementService(client, clientResolver, db, cfg.IntentSettledEventABI, chainID)
+		settlementService, err := services.NewSettlementService(
+			client,
+			clientResolver,
+			db,
+			cfg.IntentSettledEventABI,
+			chainID,
+			logger,
+		)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to create settlement service for chain %d: %v", chainID, err)
 		}
@@ -203,81 +311,4 @@ func createServices(clients map[uint64]*ethclient.Client, db db.Database, cfg *c
 	}
 
 	return intentServices, fulfillmentServices, settlementServices, nil
-}
-
-func main() {
-	// Load configuration
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	// Initialize database
-	log.Println("Initializing database connection...")
-	database, err := db.NewPostgresDB(cfg.DatabaseURL)
-	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
-	}
-	defer database.Close()
-	log.Println("Database connection established successfully")
-
-	// Initialize Ethereum clients
-	clients, err := createEthereumClients(cfg)
-	if err != nil {
-		log.Fatalf("Failed to initialize Ethereum clients: %v", err)
-	}
-
-	// Create services for all chains
-	intentServices, fulfillmentServices, settlementServices, err := createServices(clients, database, cfg)
-	if err != nil {
-		log.Fatalf("Failed to create services: %v", err)
-	}
-
-	// Start event listeners for each chain
-	ctx := context.Background()
-
-	// Create event catchup service for this chain
-	eventCatchupService := services.NewEventCatchupService(
-		intentServices,
-		fulfillmentServices,
-		settlementServices,
-		database,
-	)
-	err = eventCatchupService.StartListening(ctx)
-	if err != nil {
-		log.Printf("Failed to catchup on events: %v", err)
-	}
-
-	// Start subscription supervisor to monitor and restart services if needed
-	go eventCatchupService.StartSubscriptionSupervisor(ctx, cfg)
-	log.Println("Started subscription supervisor to monitor service health")
-
-	// Perform a simple diagnostic check on clients
-	log.Println("Performing basic diagnostic checks on clients...")
-	for chainID, client := range clients {
-		// Test getting the latest block number as a diagnostic
-		ctxTest, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		blockNum, err := client.BlockNumber(ctxTest)
-		if err != nil {
-			log.Printf("ERROR: Client for chain %d failed basic diagnosis: %v", chainID, err)
-		} else {
-			log.Printf("SUCCESS: Client for chain %d is functioning - current block: %d", chainID, blockNum)
-		}
-		cancel()
-	}
-
-	// Get the first chain's services for the HTTP server
-	firstChainID := uint64(0)
-	for chainID := range intentServices {
-		firstChainID = chainID
-		break
-	}
-	intentService := intentServices[firstChainID]
-	fulfillmentService := fulfillmentServices[firstChainID]
-
-	// Create and start the server
-	server := handlers.NewServer(fulfillmentService, intentService, database)
-	if err := server.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
 }
