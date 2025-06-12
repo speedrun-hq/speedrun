@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
+	"github.com/speedrun-hq/speedrun/api/logger"
 	"math/big"
 	"strings"
 	"sync"
@@ -29,9 +29,6 @@ const (
 	// IntentFulfilledRequiredTopics is the minimum number of topics required in a log
 	IntentFulfilledRequiredTopics = 3
 
-	// IntentFulfilledRequiredFields is the number of fields expected in the event data
-	IntentFulfilledRequiredFields = 3
-
 	// IntentFulfilledWithCallRequiredFields is the number of fields expected in the event data for call intents
 	IntentFulfilledWithCallRequiredFields = 4
 )
@@ -45,10 +42,18 @@ type FulfillmentService struct {
 	chainID        uint64
 	subs           map[string]ethereum.Subscription
 	mu             sync.Mutex
+	logger         logger.Logger
 }
 
 // NewFulfillmentService creates a new FulfillmentService instance
-func NewFulfillmentService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentFulfilledEventABI string, chainID uint64) (*FulfillmentService, error) {
+func NewFulfillmentService(
+	client *ethclient.Client,
+	clientResolver ClientResolver,
+	db db.Database,
+	intentFulfilledEventABI string,
+	chainID uint64,
+	logger logger.Logger,
+) (*FulfillmentService, error) {
 	// Parse the contract ABI
 	parsedABI, err := abi.JSON(strings.NewReader(intentFulfilledEventABI))
 	if err != nil {
@@ -62,6 +67,7 @@ func NewFulfillmentService(client *ethclient.Client, clientResolver ClientResolv
 		abi:            parsedABI,
 		chainID:        chainID,
 		subs:           make(map[string]ethereum.Subscription),
+		logger:         logger,
 	}, nil
 }
 
@@ -89,8 +95,8 @@ func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress
 	s.subs[subID] = sub
 	s.mu.Unlock()
 
-	log.Printf("INFO: Successfully subscribed to fulfillment events for contract %s on chain %d",
-		contractAddress.Hex(), s.chainID)
+	s.logger.InfoWithChain(s.chainID, "Successfully subscribed to fulfillment events for contract %s",
+		contractAddress.Hex())
 
 	go s.processEventLogs(ctx, sub, logs, subID)
 	return nil
@@ -108,10 +114,10 @@ func (s *FulfillmentService) processEventLogs(ctx context.Context, sub ethereum.
 		s.mu.Lock()
 		delete(s.subs, subID)
 		s.mu.Unlock()
-		log.Printf("Ended fulfillment event log processing for chain %d, subscription %s", s.chainID, subID)
+		s.logger.DebugWithChain(s.chainID, "Ended fulfillment event log processing, subscription %s", subID)
 	}()
 
-	log.Printf("Starting fulfillment event log processing for chain %d, subscription %s", s.chainID, subID)
+	s.logger.NoticeWithChain(s.chainID, "Starting fulfillment event log processing, subscription %s", subID)
 
 	// Add a ticker for debugging to periodically log subscription status
 	debugTicker := time.NewTicker(30 * time.Second)
@@ -121,38 +127,43 @@ func (s *FulfillmentService) processEventLogs(ctx context.Context, sub ethereum.
 		select {
 		case err := <-sub.Err():
 			if err != nil {
-				log.Printf("ERROR: Fulfillment subscription %s on chain %d error: %v", subID, s.chainID, err)
+				s.logger.ErrorWithChain(s.chainID, "Fulfillment subscription %s error: %v", subID, err)
 				// Try to resubscribe
 				if err := s.handleSubscriptionError(ctx, sub, logs, subID, contractAddress); err != nil {
-					log.Printf("CRITICAL: Failed to resubscribe fulfillment service for chain %d: %v", s.chainID, err)
+					s.logger.ErrorWithChain(s.chainID, "CRITICAL: Failed to resubscribe fulfillment service: %v", err)
 					return
 				}
 			}
 		case vLog, ok := <-logs:
 			if !ok {
-				log.Printf("ERROR: Fulfillment log channel closed unexpectedly for %s on chain %d", subID, s.chainID)
+				s.logger.ErrorWithChain(s.chainID, "Fulfillment log channel closed unexpectedly for %s", subID)
 				return
 			}
 
-			log.Printf("FULFILLMENT EVENT RECEIVED: Chain %d, Block %d, TxHash %s",
-				s.chainID, vLog.BlockNumber, vLog.TxHash.Hex())
+			s.logger.InfoWithChain(s.chainID, "FULFILLMENT EVENT RECEIVED: Block %d, TxHash %s", vLog.BlockNumber, vLog.TxHash.Hex())
 
 			if err := s.processLog(ctx, vLog); err != nil {
-				log.Printf("Error processing fulfillment log: %v", err)
+				s.logger.ErrorWithChain(s.chainID, "Error processing fulfillment log: %v", err)
 				continue
 			}
 		case <-debugTicker.C:
 			// Extra debugging info
-			log.Printf("DEBUG: Fulfillment subscription %s on chain %d still active", subID, s.chainID)
+			s.logger.DebugWithChain(s.chainID, "Fulfillment subscription %s still active", subID)
 		case <-ctx.Done():
-			log.Printf("Context cancelled, stopping fulfillment event processing for chain %d", s.chainID)
+			s.logger.DebugWithChain(s.chainID, "Context cancelled, stopping fulfillment event processing")
 			return
 		}
 	}
 }
 
 // handleSubscriptionError attempts to recover from a subscription error by resubscribing.
-func (s *FulfillmentService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log, subID string, contractAddress common.Address) error {
+func (s *FulfillmentService) handleSubscriptionError(
+	ctx context.Context,
+	oldSub ethereum.Subscription,
+	logs chan types.Log,
+	subID string,
+	contractAddress common.Address,
+) error {
 	oldSub.Unsubscribe()
 	s.mu.Lock()
 	delete(s.subs, subID)
@@ -184,7 +195,7 @@ func (s *FulfillmentService) handleSubscriptionError(ctx context.Context, oldSub
 			s.mu.Lock()
 			s.subs[subID] = newSub
 			s.mu.Unlock()
-			log.Printf("Successfully resubscribed to fulfillment events for chain %d", s.chainID)
+			s.logger.Debug("Successfully resubscribed to fulfillment events")
 			return nil
 		}
 
@@ -193,7 +204,7 @@ func (s *FulfillmentService) handleSubscriptionError(ctx context.Context, oldSub
 		if backoffTime > 30*time.Second {
 			backoffTime = 30 * time.Second
 		}
-		log.Printf("Resubscription attempt %d/%d failed: %v. Retrying in %v",
+		s.logger.Debug("Resubscription attempt %d/%d failed: %v. Retrying in %v",
 			attempt+1, maxRetries, err, backoffTime)
 
 		select {
@@ -233,7 +244,7 @@ func (s *FulfillmentService) processLog(ctx context.Context, vLog types.Log) err
 		if err == nil {
 			client = destClient
 		} else {
-			log.Printf("Warning: Failed to get destination chain client: %v, using default client", err)
+			s.logger.Info("Warning: Failed to get destination chain client: %v, using default client", err)
 			client = s.client
 		}
 	} else {
@@ -242,13 +253,13 @@ func (s *FulfillmentService) processLog(ctx context.Context, vLog types.Log) err
 
 	fulfillment, err := event.ToFulfillment(client)
 	if err != nil {
-		log.Printf("Warning: Failed to get block timestamp: %v", err)
+		s.logger.Info("Warning: Failed to get block timestamp: %v", err)
 		// Continue with what we have
 	}
 
 	// Add a warning log if the chain IDs don't match and we're using the default client
 	if intent.DestinationChain != s.chainID && client == s.client {
-		log.Printf("Warning: Using client for chain %d to fetch timestamp for fulfillment event on chain %d",
+		s.logger.Debug("Warning: Using client for chain %d to fetch timestamp for fulfillment event on chain %d",
 			s.chainID, intent.DestinationChain)
 	}
 
@@ -277,7 +288,7 @@ func (s *FulfillmentService) processLog(ctx context.Context, vLog types.Log) err
 	// Save fulfillment directly to database, preserving the block timestamp
 	if err := s.db.CreateFulfillment(ctx, fulfillment); err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
-			log.Printf("Skipping duplicate fulfillment: %s", event.IntentID)
+			s.logger.Debug("Skipping duplicate fulfillment: %s", event.IntentID)
 			return nil
 		}
 		return fmt.Errorf("failed to create fulfillment: %v", err)
@@ -350,7 +361,7 @@ func (s *FulfillmentService) extractEventData(vLog types.Log) (*models.IntentFul
 			if callData, ok := unpacked[1].([]byte); ok {
 				event.Data = callData
 			} else {
-				log.Printf("Warning: Invalid call data in fulfillment event: %v", unpacked[1])
+				s.logger.Info("Warning: Invalid call data in fulfillment event: %v", unpacked[1])
 			}
 		} else if err == nil {
 			err = fmt.Errorf("insufficient data fields: expected %d, got %d",
@@ -362,7 +373,7 @@ func (s *FulfillmentService) extractEventData(vLog types.Log) (*models.IntentFul
 	}
 
 	if err != nil {
-		log.Printf("Warning: Error processing fulfillment event data: %v", err)
+		s.logger.Info("Warning: Error processing fulfillment event data: %v", err)
 	}
 
 	return event, nil
@@ -412,7 +423,7 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 		if err == nil {
 			client = destClient
 		} else {
-			log.Printf("Warning: Failed to get destination chain client for manual fulfillment: %v, using default client", err)
+			s.logger.Info("Warning: Failed to get destination chain client for manual fulfillment: %v, using default client", err)
 			client = s.client
 		}
 	} else {
@@ -422,7 +433,7 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 	// If the destination chain doesn't match our service chain and we're using the default client,
 	// log a warning about potentially incorrect timestamps
 	if intent.DestinationChain != s.chainID && client == s.client && txHash != "" {
-		log.Printf("Warning: Manual fulfillment using client for chain %d to fetch timestamp for transaction on chain %d",
+		s.logger.Info("Warning: Manual fulfillment using client for chain %d to fetch timestamp for transaction on chain %d",
 			s.chainID, intent.DestinationChain)
 	}
 
@@ -437,31 +448,31 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 				block, err := client.BlockByNumber(ctx, big.NewInt(int64(receipt.BlockNumber.Uint64())))
 				if err == nil {
 					timestamp = time.Unix(int64(block.Time()), 0)
-					log.Printf("Using blockchain timestamp for manual fulfillment of intent %s: %s (block #%d, tx: %s)",
+					s.logger.Debug("Using blockchain timestamp for manual fulfillment of intent %s: %s (block #%d, tx: %s)",
 						intentID, timestamp.Format(time.RFC3339), receipt.BlockNumber.Uint64(), txHash)
 				} else {
-					log.Printf("Warning: Failed to get block for timestamp in manual fulfillment of intent %s (tx: %s): %v, using current time",
+					s.logger.Info("Warning: Failed to get block for timestamp in manual fulfillment of intent %s (tx: %s): %v, using current time",
 						intentID, txHash, err)
 					timestamp = time.Now()
 				}
 			} else {
-				log.Printf("Warning: Failed to get transaction receipt in manual fulfillment of intent %s (tx: %s): %v, using current time",
+				s.logger.Info("Warning: Failed to get transaction receipt in manual fulfillment of intent %s (tx: %s): %v, using current time",
 					intentID, txHash, err)
 				timestamp = time.Now()
 			}
 		} else {
 			if err != nil {
-				log.Printf("Warning: Failed to get transaction in manual fulfillment of intent %s (tx: %s): %v, using current time",
+				s.logger.Info("Warning: Failed to get transaction in manual fulfillment of intent %s (tx: %s): %v, using current time",
 					intentID, txHash, err)
 			} else if isPending {
-				log.Printf("Warning: Transaction is still pending in manual fulfillment of intent %s (tx: %s), using current time",
+				s.logger.Info("Warning: Transaction is still pending in manual fulfillment of intent %s (tx: %s), using current time",
 					intentID, txHash)
 			}
 			timestamp = time.Now()
 		}
 	} else {
 		// No valid txHash, use current time
-		log.Printf("Warning: No valid transaction hash provided for manual fulfillment of intent %s, using current time", intentID)
+		s.logger.Info("Warning: No valid transaction hash provided for manual fulfillment of intent %s, using current time", intentID)
 		timestamp = time.Now()
 	}
 
@@ -528,7 +539,7 @@ func (s *FulfillmentService) CreateCallFulfillment(ctx context.Context, intentID
 		if err == nil {
 			client = destClient
 		} else {
-			log.Printf("Warning: Failed to get destination chain client for manual fulfillment: %v, using default client", err)
+			s.logger.Info("Warning: Failed to get destination chain client for manual fulfillment: %v, using default client", err)
 			client = s.client
 		}
 	} else {
@@ -538,7 +549,7 @@ func (s *FulfillmentService) CreateCallFulfillment(ctx context.Context, intentID
 	// If the destination chain doesn't match our service chain and we're using the default client,
 	// log a warning about potentially incorrect timestamps
 	if intent.DestinationChain != s.chainID && client == s.client && txHash != "" {
-		log.Printf("Warning: Manual fulfillment using client for chain %d to fetch timestamp for transaction on chain %d",
+		s.logger.Info("Warning: Manual fulfillment using client for chain %d to fetch timestamp for transaction on chain %d",
 			s.chainID, intent.DestinationChain)
 	}
 
@@ -553,31 +564,31 @@ func (s *FulfillmentService) CreateCallFulfillment(ctx context.Context, intentID
 				block, err := client.BlockByNumber(ctx, big.NewInt(int64(receipt.BlockNumber.Uint64())))
 				if err == nil {
 					timestamp = time.Unix(int64(block.Time()), 0)
-					log.Printf("Using blockchain timestamp for manual fulfillment of intent %s: %s (block #%d, tx: %s)",
+					s.logger.Debug("Using blockchain timestamp for manual fulfillment of intent %s: %s (block #%d, tx: %s)",
 						intentID, timestamp.Format(time.RFC3339), receipt.BlockNumber.Uint64(), txHash)
 				} else {
-					log.Printf("Warning: Failed to get block for timestamp in manual fulfillment of intent %s (tx: %s): %v, using current time",
+					s.logger.Info("Warning: Failed to get block for timestamp in manual fulfillment of intent %s (tx: %s): %v, using current time",
 						intentID, txHash, err)
 					timestamp = time.Now()
 				}
 			} else {
-				log.Printf("Warning: Failed to get transaction receipt in manual fulfillment of intent %s (tx: %s): %v, using current time",
+				s.logger.Info("Warning: Failed to get transaction receipt in manual fulfillment of intent %s (tx: %s): %v, using current time",
 					intentID, txHash, err)
 				timestamp = time.Now()
 			}
 		} else {
 			if err != nil {
-				log.Printf("Warning: Failed to get transaction in manual fulfillment of intent %s (tx: %s): %v, using current time",
+				s.logger.Info("Warning: Failed to get transaction in manual fulfillment of intent %s (tx: %s): %v, using current time",
 					intentID, txHash, err)
 			} else if isPending {
-				log.Printf("Warning: Transaction is still pending in manual fulfillment of intent %s (tx: %s), using current time",
+				s.logger.Info("Warning: Transaction is still pending in manual fulfillment of intent %s (tx: %s), using current time",
 					intentID, txHash)
 			}
 			timestamp = time.Now()
 		}
 	} else {
 		// No valid txHash, use current time
-		log.Printf("Warning: No valid transaction hash provided for manual fulfillment of intent %s, using current time", intentID)
+		s.logger.Info("Warning: No valid transaction hash provided for manual fulfillment of intent %s, using current time", intentID)
 		timestamp = time.Now()
 	}
 
@@ -629,12 +640,12 @@ func (s *FulfillmentService) UnsubscribeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	log.Printf("Unsubscribing from all fulfillment subscriptions for chain %d (%d active subscriptions)",
+	s.logger.Debug("Unsubscribing from all fulfillment subscriptions for chain %d (%d active subscriptions)",
 		s.chainID, len(s.subs))
 
 	for id, sub := range s.subs {
 		sub.Unsubscribe()
-		log.Printf("Unsubscribed from fulfillment subscription %s on chain %d", id, s.chainID)
+		s.logger.Debug("Unsubscribed from fulfillment subscription %s on chain %d", id, s.chainID)
 		delete(s.subs, id)
 	}
 }

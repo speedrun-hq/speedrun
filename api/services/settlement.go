@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
+	"github.com/speedrun-hq/speedrun/api/logger"
 	"math/big"
 	"strings"
 	"sync"
@@ -45,10 +45,18 @@ type SettlementService struct {
 	chainID        uint64
 	subs           map[string]ethereum.Subscription
 	mu             sync.Mutex
+	logger         logger.Logger
 }
 
 // NewSettlementService creates a new SettlementService instance
-func NewSettlementService(client *ethclient.Client, clientResolver ClientResolver, db db.Database, intentSettledEventABI string, chainID uint64) (*SettlementService, error) {
+func NewSettlementService(
+	client *ethclient.Client,
+	clientResolver ClientResolver,
+	db db.Database,
+	intentSettledEventABI string,
+	chainID uint64,
+	logger logger.Logger,
+) (*SettlementService, error) {
 	// Parse the contract ABI
 	parsedABI, err := abi.JSON(strings.NewReader(intentSettledEventABI))
 	if err != nil {
@@ -62,6 +70,7 @@ func NewSettlementService(client *ethclient.Client, clientResolver ClientResolve
 		abi:            parsedABI,
 		chainID:        chainID,
 		subs:           make(map[string]ethereum.Subscription),
+		logger:         logger,
 	}, nil
 }
 
@@ -88,8 +97,8 @@ func (s *SettlementService) StartListening(ctx context.Context, contractAddress 
 	s.subs[subID] = sub
 	s.mu.Unlock()
 
-	log.Printf("INFO: Successfully subscribed to settlement events for contract %s on chain %d",
-		contractAddress.Hex(), s.chainID)
+	s.logger.InfoWithChain(s.chainID, "Successfully subscribed to settlement events for contract %s",
+		contractAddress.Hex())
 
 	go s.processEventLogs(ctx, sub, logs, subID, contractAddress)
 	return nil
@@ -102,10 +111,10 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 		s.mu.Lock()
 		delete(s.subs, subID)
 		s.mu.Unlock()
-		log.Printf("Ended settlement event log processing for chain %d, subscription %s", s.chainID, subID)
+		s.logger.InfoWithChain(s.chainID, "Ended settlement event log processing, subscription %s", subID)
 	}()
 
-	log.Printf("Starting settlement event log processing for chain %d, subscription %s", s.chainID, subID)
+	s.logger.NoticeWithChain(s.chainID, "Starting settlement event log processing, subscription %s", subID)
 
 	// Add a ticker for debugging to periodically log subscription status
 	debugTicker := time.NewTicker(30 * time.Second)
@@ -115,11 +124,11 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 		select {
 		case err := <-sub.Err():
 			if err != nil {
-				log.Printf("ERROR: Settlement subscription %s on chain %d error: %v", subID, s.chainID, err)
+				s.logger.ErrorWithChain(s.chainID, "Settlement subscription %s error: %v", subID, err)
 				// Try to resubscribe
 				newSub, err := s.handleSubscriptionError(ctx, sub, logs, subID, contractAddress)
 				if err != nil {
-					log.Printf("CRITICAL: Failed to resubscribe settlement service for chain %d: %v", s.chainID, err)
+					s.logger.ErrorWithChain(s.chainID, "CRITICAL: Failed to resubscribe settlement service: %v", err)
 					return
 				}
 				// Update the subscription and continue the loop
@@ -127,28 +136,33 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 			}
 		case vLog, ok := <-logs:
 			if !ok {
-				log.Printf("ERROR: Settlement log channel closed unexpectedly for %s on chain %d", subID, s.chainID)
+				s.logger.ErrorWithChain(s.chainID, "ERROR: Settlement log channel closed unexpectedly for %s", subID)
 				return
 			}
 
-			log.Printf("SETTLEMENT EVENT RECEIVED: Chain %d, Block %d, TxHash %s",
-				s.chainID, vLog.BlockNumber, vLog.TxHash.Hex())
+			s.logger.InfoWithChain(s.chainID, "SETTLEMENT EVENT RECEIVED: Block %d, TxHash %s", vLog.BlockNumber, vLog.TxHash.Hex())
 
 			if err := s.processLog(ctx, vLog); err != nil {
-				log.Printf("Error processing settlement log: %v", err)
+				s.logger.Error("Error processing settlement log: %v", err)
 				continue
 			}
 		case <-debugTicker.C:
 			// Extra debugging info
-			log.Printf("DEBUG: Settlement subscription %s on chain %d still active", subID, s.chainID)
+			s.logger.DebugWithChain(s.chainID, "Settlement subscription %s still active", subID)
 		case <-ctx.Done():
-			log.Printf("Context cancelled, stopping settlement event processing for chain %d", s.chainID)
+			s.logger.DebugWithChain(s.chainID, "Context cancelled, stopping settlement event processing")
 			return
 		}
 	}
 }
 
-func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log, subID string, contractAddress common.Address) (ethereum.Subscription, error) {
+func (s *SettlementService) handleSubscriptionError(
+	ctx context.Context,
+	oldSub ethereum.Subscription,
+	logs chan types.Log,
+	subID string,
+	contractAddress common.Address,
+) (ethereum.Subscription, error) {
 	oldSub.Unsubscribe()
 	s.mu.Lock()
 	delete(s.subs, subID)
@@ -179,7 +193,7 @@ func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub 
 			s.mu.Lock()
 			s.subs[subID] = newSub
 			s.mu.Unlock()
-			log.Printf("Successfully resubscribed to settlement events for chain %d", s.chainID)
+			s.logger.DebugWithChain(s.chainID, "Successfully resubscribed to settlement events")
 			return newSub, nil
 		}
 
@@ -188,7 +202,7 @@ func (s *SettlementService) handleSubscriptionError(ctx context.Context, oldSub 
 		if backoffTime > 30*time.Second {
 			backoffTime = 30 * time.Second
 		}
-		log.Printf("Settlement service resubscription attempt %d/%d failed: %v. Retrying in %v",
+		s.logger.Debug("Settlement service resubscription attempt %d/%d failed: %v. Retrying in %v",
 			attempt+1, maxRetries, err, backoffTime)
 
 		select {
@@ -227,7 +241,7 @@ func (s *SettlementService) processLog(ctx context.Context, vLog types.Log) erro
 		if err == nil {
 			client = destClient
 		} else {
-			log.Printf("Warning: Failed to get destination chain client: %v, using default client", err)
+			s.logger.Info("Warning: Failed to get destination chain client: %v, using default client", err)
 			client = s.client
 		}
 	} else {
@@ -236,13 +250,13 @@ func (s *SettlementService) processLog(ctx context.Context, vLog types.Log) erro
 
 	settlement, err := event.ToSettlement(client)
 	if err != nil {
-		log.Printf("Warning: Failed to get block timestamp: %v", err)
+		s.logger.Info("Warning: Failed to get block timestamp: %v", err)
 		// Continue with what we have
 	}
 
 	// Add a warning log if the chain IDs don't match and we're using the default client
 	if intent.DestinationChain != s.chainID && client == s.client {
-		log.Printf("Warning: Using client for chain %d to fetch timestamp for settlement event on chain %d",
+		s.logger.Info("Warning: Using client for chain %d to fetch timestamp for settlement event on chain %d",
 			s.chainID, intent.DestinationChain)
 	}
 
@@ -331,14 +345,14 @@ func (s *SettlementService) extractEventData(vLog types.Log) (*models.IntentSett
 		if callData, ok := unpacked[5].([]byte); ok {
 			event.Data = callData
 		} else {
-			log.Printf("Warning: Invalid call data in settlement event: %v", unpacked[5])
+			s.logger.Info("Warning: Invalid call data in settlement event: %v", unpacked[5])
 		}
 	}
 
 	return event, nil
 }
 
-// Get settlement from database
+// GetSettlement get settlement from database
 func (s *SettlementService) GetSettlement(ctx context.Context, id string) (*models.Settlement, error) {
 	settlement, err := s.db.GetSettlement(ctx, id)
 	if err != nil {
@@ -348,7 +362,7 @@ func (s *SettlementService) GetSettlement(ctx context.Context, id string) (*mode
 	return settlement, nil
 }
 
-// List settlements
+// ListSettlements lists all settlements from the database
 func (s *SettlementService) ListSettlements(ctx context.Context) ([]*models.Settlement, error) {
 	settlements, err := s.db.ListSettlements(ctx)
 	if err != nil {
@@ -384,18 +398,29 @@ func (s *SettlementService) UnsubscribeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	log.Printf("Unsubscribing from all settlement subscriptions for chain %d (%d active subscriptions)",
-		s.chainID, len(s.subs))
+	s.logger.DebugWithChain(s.chainID, "Unsubscribing from all settlement subscriptions (%d active subscriptions)", len(s.subs))
 
 	for id, sub := range s.subs {
 		sub.Unsubscribe()
-		log.Printf("Unsubscribed from settlement subscription %s on chain %d", id, s.chainID)
+		s.logger.DebugWithChain(s.chainID, "Unsubscribed from settlement subscription %s", id)
 		delete(s.subs, id)
 	}
 }
 
 // CreateCallSettlement creates a new settlement with call data
-func (s *SettlementService) CreateCallSettlement(ctx context.Context, intentID, asset, amount, receiver string, fulfilled bool, fulfiller, actualAmount, paidTip, txHash string, callData string) error {
+func (s *SettlementService) CreateCallSettlement(
+	ctx context.Context,
+	intentID,
+	asset,
+	amount,
+	receiver string,
+	fulfilled bool,
+	fulfiller,
+	actualAmount,
+	paidTip,
+	txHash,
+	callData string,
+) error {
 	// Validate intent exists
 	intent, err := s.db.GetIntent(ctx, intentID)
 	if err != nil {
@@ -419,7 +444,7 @@ func (s *SettlementService) CreateCallSettlement(ctx context.Context, intentID, 
 			if err == nil {
 				client = destClient
 			} else {
-				log.Printf("Warning: Failed to get destination chain client for manual settlement: %v, using default client", err)
+				s.logger.Info("Warning: Failed to get destination chain client for manual settlement: %v, using default client", err)
 				client = s.client
 			}
 		} else {

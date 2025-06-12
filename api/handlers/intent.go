@@ -42,7 +42,6 @@ func CreateIntent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to read request body: %v", err)})
 		return
 	}
-	fmt.Printf("Raw request body: %s\n", string(rawBody))
 
 	// Reset request body for binding
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(rawBody))
@@ -54,11 +53,8 @@ func CreateIntent(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("Bound request: %+v\n", req)
-
 	// Validate request
 	if err := utils.ValidateIntentRequest(&req); err != nil {
-		fmt.Printf("Validation error: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to validate request: %v", err)})
 		return
 	}
@@ -167,30 +163,6 @@ func GetIntentsBySender(c *gin.Context) {
 
 	// Get intents by sender from the database
 	intents, err := database.ListIntentsBySender(c.Request.Context(), sender)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Convert intents to responses
-	responses := make([]*models.IntentResponse, len(intents))
-	for i, intent := range intents {
-		responses[i] = intent.ToResponse()
-	}
-
-	c.JSON(http.StatusOK, responses)
-}
-
-// GetIntentsByRecipient handles retrieving all intents for a specific recipient
-func GetIntentsByRecipient(c *gin.Context) {
-	recipient := c.Param("recipient")
-	if recipient == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "recipient address is required"})
-		return
-	}
-
-	// Get intents by recipient from the database
-	intents, err := database.ListIntentsByRecipient(c.Request.Context(), recipient)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
