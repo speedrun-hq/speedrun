@@ -1,9 +1,10 @@
 package logger
 
 import (
-	"github.com/fatih/color"
 	"log"
 	"sync"
+
+	"github.com/fatih/color"
 )
 
 // Level represents the severity level of a log message.
@@ -29,7 +30,7 @@ const (
 	Zeta
 )
 
-var chainIDMap = map[int]Chain{
+var chainIDMap = map[uint64]Chain{
 	1:     Eth,
 	56:    Bsc,
 	137:   Pol,
@@ -65,19 +66,19 @@ var colors = map[Chain]color.Attribute{
 type Logger interface {
 	// Info logs an informational message.
 	Info(format string, args ...interface{})
-	InfoWithChain(chainID int, format string, args ...interface{})
+	InfoWithChain(chainID uint64, format string, args ...interface{})
 
 	// Error logs an error message.
 	Error(format string, args ...interface{})
-	ErrorWithChain(chainID int, format string, args ...interface{})
+	ErrorWithChain(chainID uint64, format string, args ...interface{})
 
 	// Debug logs a debug message.
 	Debug(format string, args ...interface{})
-	DebugWithChain(chainID int, format string, args ...interface{})
+	DebugWithChain(chainID uint64, format string, args ...interface{})
 
 	// Notice logs a notice message.
 	Notice(format string, args ...interface{})
-	NoticeWithChain(chainID int, format string, args ...interface{})
+	NoticeWithChain(chainID uint64, format string, args ...interface{})
 }
 
 // EmptyLogger is a simple implementation of the Logger interface that does nothing.
@@ -85,14 +86,14 @@ type EmptyLogger struct{}
 
 var _ Logger = (*EmptyLogger)(nil)
 
-func (l *EmptyLogger) Info(_ string, _ ...interface{})                   {}
-func (l *EmptyLogger) InfoWithChain(_ int, _ string, _ ...interface{})   {}
-func (l *EmptyLogger) Error(_ string, _ ...interface{})                  {}
-func (l *EmptyLogger) ErrorWithChain(_ int, _ string, _ ...interface{})  {}
-func (l *EmptyLogger) Debug(_ string, _ ...interface{})                  {}
-func (l *EmptyLogger) DebugWithChain(_ int, _ string, _ ...interface{})  {}
-func (l *EmptyLogger) Notice(_ string, _ ...interface{})                 {}
-func (l *EmptyLogger) NoticeWithChain(_ int, _ string, _ ...interface{}) {}
+func (l *EmptyLogger) Info(_ string, _ ...interface{})                      {}
+func (l *EmptyLogger) InfoWithChain(_ uint64, _ string, _ ...interface{})   {}
+func (l *EmptyLogger) Error(_ string, _ ...interface{})                     {}
+func (l *EmptyLogger) ErrorWithChain(_ uint64, _ string, _ ...interface{})  {}
+func (l *EmptyLogger) Debug(_ string, _ ...interface{})                     {}
+func (l *EmptyLogger) DebugWithChain(_ uint64, _ string, _ ...interface{})  {}
+func (l *EmptyLogger) Notice(_ string, _ ...interface{})                    {}
+func (l *EmptyLogger) NoticeWithChain(_ uint64, _ string, _ ...interface{}) {}
 
 // StdLogger is a standard implementation of the Logger interface that logs messages to the console.
 type StdLogger struct {
@@ -140,7 +141,7 @@ func (l *StdLogger) Info(format string, args ...interface{}) {
 	}
 }
 
-func (l *StdLogger) InfoWithChain(chainID int, format string, args ...interface{}) {
+func (l *StdLogger) InfoWithChain(chainID uint64, format string, args ...interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -159,7 +160,7 @@ func (l *StdLogger) Error(format string, args ...interface{}) {
 	}
 }
 
-func (l *StdLogger) ErrorWithChain(chainID int, format string, args ...interface{}) {
+func (l *StdLogger) ErrorWithChain(chainID uint64, format string, args ...interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -178,7 +179,7 @@ func (l *StdLogger) Debug(format string, args ...interface{}) {
 	}
 }
 
-func (l *StdLogger) DebugWithChain(chainID int, format string, args ...interface{}) {
+func (l *StdLogger) DebugWithChain(chainID uint64, format string, args ...interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -197,7 +198,7 @@ func (l *StdLogger) Notice(format string, args ...interface{}) {
 	}
 }
 
-func (l *StdLogger) NoticeWithChain(chainID int, format string, args ...interface{}) {
+func (l *StdLogger) NoticeWithChain(chainID uint64, format string, args ...interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 

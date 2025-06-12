@@ -55,37 +55,6 @@ type IntentSettledEvent struct {
 	Data         []byte // Call data if this is a call intent
 }
 
-// fetchBlockTimestamp is a helper function to get a block timestamp with fallback methods
-func fetchBlockTimestamp(ctx context.Context, client *ethclient.Client, blockNumber uint64, entityID string, entityType string) (time.Time, error) {
-	if client == nil {
-		return time.Time{}, fmt.Errorf("no client provided")
-	}
-
-	if blockNumber == 0 {
-		return time.Time{}, fmt.Errorf("no block number provided")
-	}
-
-	// First try: Standard block fetching
-	block, err := client.BlockByNumber(ctx, big.NewInt(int64(blockNumber)))
-	if err == nil {
-		return time.Unix(int64(block.Time()), 0), nil
-	}
-
-	// If we get a "transaction type not supported" error, or any other error, try a fallback
-	log.Printf("Warning: Failed to get block timestamp for %s %s (block #%d): %v, trying fallback method",
-		entityType, entityID, blockNumber, err)
-
-	// Fallback: Use HeaderByNumber which should be more tolerant of different transaction types
-	header, err := client.HeaderByNumber(ctx, big.NewInt(int64(blockNumber)))
-	if err == nil && header != nil {
-		return time.Unix(int64(header.Time), 0), nil
-	}
-
-	// If that still fails, log it and return an error
-	log.Printf("Warning: Fallback method also failed to get block timestamp: %v", err)
-	return time.Time{}, fmt.Errorf("failed to get block timestamp: %v", err)
-}
-
 // ToIntent converts an IntentInitiatedEvent to an Intent
 func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context.Context) (*Intent, error) {
 	// Convert big.Int to string for amount and tip
@@ -154,35 +123,6 @@ func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context
 	return intent, nil
 }
 
-// FromIntent converts an Intent to an IntentInitiatedEvent
-func FromIntent(intent *Intent) *IntentInitiatedEvent {
-	// Convert string to big.Int for amount and tip
-	amount := new(big.Int)
-	amount.SetString(intent.Amount, 10)
-
-	tip := new(big.Int)
-	tip.SetString(intent.IntentFee, 10)
-
-	// Create event with basic fields
-	event := &IntentInitiatedEvent{
-		IntentID:    intent.ID,
-		Asset:       intent.Token,
-		Amount:      amount,
-		TargetChain: intent.DestinationChain,
-		Receiver:    common.FromHex(intent.Recipient),
-		Tip:         tip,
-		ChainID:     intent.SourceChain,
-		IsCall:      intent.IsCall,
-	}
-
-	// Add call data if this is a call intent
-	if intent.IsCall && intent.CallData != "" {
-		event.Data = common.FromHex(intent.CallData)
-	}
-
-	return event
-}
-
 // ToFulfillment converts an IntentFulfilledEvent to a Fulfillment
 func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client, ctx ...context.Context) (*Fulfillment, error) {
 	amount := e.Amount.String()
@@ -235,29 +175,6 @@ func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client, ctx ...co
 	}
 
 	return fulfillment, nil
-}
-
-func FromFulfillment(fulfillment *Fulfillment) *IntentFulfilledEvent {
-	amount := new(big.Int)
-	amount.SetString(fulfillment.Amount, 10)
-
-	// Create event with basic fields
-	event := &IntentFulfilledEvent{
-		IntentID:    fulfillment.ID,
-		Asset:       fulfillment.Asset,
-		Amount:      amount,
-		Receiver:    fulfillment.Receiver,
-		BlockNumber: fulfillment.BlockNumber,
-		TxHash:      fulfillment.TxHash,
-		IsCall:      fulfillment.IsCall,
-	}
-
-	// Add call data if this is a call intent
-	if fulfillment.IsCall && fulfillment.CallData != "" {
-		event.Data = common.FromHex(fulfillment.CallData)
-	}
-
-	return event
 }
 
 // ToSettlement converts an IntentSettledEvent to a Settlement
@@ -316,34 +233,33 @@ func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client, ctx ...conte
 	return settlement, nil
 }
 
-func FromSettlement(settlement *Settlement) *IntentSettledEvent {
-	amount := new(big.Int)
-	amount.SetString(settlement.Amount, 10)
-
-	paidTip := new(big.Int)
-	paidTip.SetString(settlement.PaidTip, 10)
-
-	actualAmount := new(big.Int)
-	actualAmount.SetString(settlement.ActualAmount, 10)
-
-	// Create event with basic fields
-	event := &IntentSettledEvent{
-		IntentID:     settlement.ID,
-		Asset:        settlement.Asset,
-		Amount:       amount,
-		Receiver:     settlement.Receiver,
-		Fulfilled:    settlement.Fulfilled,
-		Fulfiller:    settlement.Fulfiller,
-		ActualAmount: actualAmount,
-		PaidTip:      paidTip,
-		TxHash:       settlement.TxHash,
-		IsCall:       settlement.IsCall,
+// fetchBlockTimestamp is a helper function to get a block timestamp with fallback methods
+func fetchBlockTimestamp(ctx context.Context, client *ethclient.Client, blockNumber uint64, entityID string, entityType string) (time.Time, error) {
+	if client == nil {
+		return time.Time{}, fmt.Errorf("no client provided")
 	}
 
-	// Add call data if this is a call intent
-	if settlement.IsCall && settlement.CallData != "" {
-		event.Data = common.FromHex(settlement.CallData)
+	if blockNumber == 0 {
+		return time.Time{}, fmt.Errorf("no block number provided")
 	}
 
-	return event
+	// First try: Standard block fetching
+	block, err := client.BlockByNumber(ctx, big.NewInt(int64(blockNumber)))
+	if err == nil {
+		return time.Unix(int64(block.Time()), 0), nil
+	}
+
+	// If we get a "transaction type not supported" error, or any other error, try a fallback
+	log.Printf("Warning: Failed to get block timestamp for %s %s (block #%d): %v, trying fallback method",
+		entityType, entityID, blockNumber, err)
+
+	// Fallback: Use HeaderByNumber which should be more tolerant of different transaction types
+	header, err := client.HeaderByNumber(ctx, big.NewInt(int64(blockNumber)))
+	if err == nil && header != nil {
+		return time.Unix(int64(header.Time), 0), nil
+	}
+
+	// If that still fails, log it and return an error
+	log.Printf("Warning: Fallback method also failed to get block timestamp: %v", err)
+	return time.Time{}, fmt.Errorf("failed to get block timestamp: %v", err)
 }

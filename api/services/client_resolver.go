@@ -32,8 +32,3 @@ func (r *SimpleClientResolver) GetClient(chainID uint64) (*ethclient.Client, err
 	}
 	return client, nil
 }
-
-// CreateSimpleClientResolverFromEthClient creates a new resolver with ethclient.Client instances
-func CreateSimpleClientResolverFromEthClient(clients map[uint64]*ethclient.Client) *SimpleClientResolver {
-	return NewSimpleClientResolver(clients)
-}
