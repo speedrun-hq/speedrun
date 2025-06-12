@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"github.com/speedrun-hq/speedrun/api/logger"
 	"math/big"
 	"strings"
 	"testing"
@@ -153,6 +154,7 @@ func TestSettlementService_ProcessLog(t *testing.T) {
 		db:             mockDB,
 		abi:            parsedABI,
 		chainID:        1,
+		logger:         &logger.EmptyLogger{},
 	}
 
 	// Create a log entry with data
