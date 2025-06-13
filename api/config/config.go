@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/pkg/errors"
 )
 
 // ChainConfig represents configuration for a specific chain
@@ -32,183 +33,13 @@ type Config struct {
 	IntentSettledEventABI   string
 }
 
-// IntentInitiatedEventABI is the ABI for the IntentInitiated and IntentInitiatedWithCall events
-const IntentInitiatedEventABI = `[
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "bytes32",
-				"name": "intentId",
-				"type": "bytes32"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "asset",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "targetChain",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "bytes",
-				"name": "receiver",
-				"type": "bytes"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "tip",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "salt",
-				"type": "uint256"
-			}
-		],
-		"name": "IntentInitiated",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "bytes32",
-				"name": "intentId",
-				"type": "bytes32"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "asset",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "targetChain",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "bytes",
-				"name": "receiver",
-				"type": "bytes"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "tip",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "salt",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "bytes",
-				"name": "data",
-				"type": "bytes"
-			}
-		],
-		"name": "IntentInitiatedWithCall",
-		"type": "event"
-	}
-]`
-
-// IntentFulfilledEventABI is the ABI for the IntentFulfilled and IntentFulfilledWithCall events
-const IntentFulfilledEventABI = `[
-	{
-		"anonymous": false,
-		"inputs": [
-			{"indexed": true, "internalType": "bytes32", "name": "intentId", "type": "bytes32"},
-			{"indexed": true, "internalType": "address", "name": "asset", "type": "address"},
-			{"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"},
-			{"indexed": true, "internalType": "address", "name": "receiver", "type": "address"}
-		],
-		"name": "IntentFulfilled",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{"indexed": true, "internalType": "bytes32", "name": "intentId", "type": "bytes32"},
-			{"indexed": true, "internalType": "address", "name": "asset", "type": "address"},
-			{"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"},
-			{"indexed": true, "internalType": "address", "name": "receiver", "type": "address"},
-			{"indexed": false, "internalType": "bytes", "name": "data", "type": "bytes"}
-		],
-		"name": "IntentFulfilledWithCall",
-		"type": "event"
-	}
-]`
-
-// IntentSettledEventABI is the ABI for the IntentSettled and IntentSettledWithCall events
-const IntentSettledEventABI = `[
-	{
-		"anonymous": false,
-		"inputs": [
-			{"indexed": true, "internalType": "bytes32", "name": "intentId", "type": "bytes32"},
-			{"indexed": true, "internalType": "address", "name": "asset", "type": "address"},
-			{"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"},
-			{"indexed": true, "internalType": "address", "name": "receiver", "type": "address"},
-			{"indexed": false, "internalType": "bool", "name": "fulfilled", "type": "bool"},
-			{"indexed": false, "internalType": "address", "name": "fulfiller", "type": "address"},
-			{"indexed": false, "internalType": "uint256", "name": "actualAmount", "type": "uint256"},
-			{"indexed": false, "internalType": "uint256", "name": "paidTip", "type": "uint256"}
-		],
-		"name": "IntentSettled",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{"indexed": true, "internalType": "bytes32", "name": "intentId", "type": "bytes32"},
-			{"indexed": true, "internalType": "address", "name": "asset", "type": "address"},
-			{"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"},
-			{"indexed": true, "internalType": "address", "name": "receiver", "type": "address"},
-			{"indexed": false, "internalType": "bool", "name": "fulfilled", "type": "bool"},
-			{"indexed": false, "internalType": "address", "name": "fulfiller", "type": "address"},
-			{"indexed": false, "internalType": "uint256", "name": "actualAmount", "type": "uint256"},
-			{"indexed": false, "internalType": "uint256", "name": "paidTip", "type": "uint256"},
-			{"indexed": false, "internalType": "bytes", "name": "data", "type": "bytes"}
-		],
-		"name": "IntentSettledWithCall",
-		"type": "event"
-	}
-]`
-
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
 	// Load .env file if it exists
 	_ = godotenv.Load()
 
 	// Get supported chains
-	supportedChainsStr := strings.Split(getEnvOrDefault("SUPPORTED_CHAINS", "42161,8453,137,1,43114,56,7000"), ",")
+	supportedChainsStr := strings.Split(getEnvOrDefault("SUPPORTED_CHAINS", mainnetDefaultChains), ",")
 	supportedChains := make([]uint64, len(supportedChainsStr))
 	for i, chain := range supportedChainsStr {
 		chainID, err := strconv.ParseUint(chain, 10, 64)
@@ -223,29 +54,19 @@ func LoadConfig() (*Config, error) {
 
 	// Load configurations for each chain
 	for _, chainID := range supportedChains {
-		var prefix string
-		switch chainID {
-		case 42161:
-			prefix = "ARBITRUM"
-		case 8453:
-			prefix = "BASE"
-		case 7000:
-			prefix = "ZETACHAIN"
-		case 137:
-			prefix = "POLYGON"
-		case 1:
-			prefix = "ETHEREUM"
-		case 56:
-			prefix = "BSC"
-		case 43114:
-			prefix = "AVALANCHE"
-		default:
-			return nil, fmt.Errorf("unsupported chain ID: %d", chainID)
+		prefix, err := chainNameFromID(chainID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get chain name for chain ID %d", chainID)
+		}
+
+		intentAddr, ok := intentAddressByChain[chainID]
+		if !ok {
+			return nil, fmt.Errorf("no intent address configured for chain ID %d", chainID)
 		}
 
 		chainConfigs[chainID] = &ChainConfig{
 			RPCURL:        getEnvOrDefault(fmt.Sprintf("%s_RPC_URL", prefix), ""),
-			ContractAddr:  getEnvOrDefault(fmt.Sprintf("%s_INTENT_ADDR", prefix), ""),
+			ContractAddr:  intentAddr,
 			ChainID:       chainID,
 			BlockInterval: int64(getEnvIntOrDefault(fmt.Sprintf("%s_BLOCK_INTERVAL", prefix), 1)),
 			MaxRetries:    getEnvIntOrDefault(fmt.Sprintf("%s_MAX_RETRIES", prefix), 3),
@@ -260,9 +81,9 @@ func LoadConfig() (*Config, error) {
 		DatabaseURL:             getEnvOrDefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/speedrun?sslmode=disable"),
 		SupportedChains:         supportedChains,
 		ChainConfigs:            chainConfigs,
-		IntentFulfilledEventABI: getEnvOrDefault("INTENT_FULFILLED_EVENT_ABI", IntentFulfilledEventABI),
-		IntentInitiatedEventABI: getEnvOrDefault("INTENT_INITIATED_EVENT_ABI", IntentInitiatedEventABI),
-		IntentSettledEventABI:   getEnvOrDefault("INTENT_SETTLED_EVENT_ABI", IntentSettledEventABI),
+		IntentFulfilledEventABI: IntentFulfilledEventABI,
+		IntentInitiatedEventABI: IntentInitiatedEventABI,
+		IntentSettledEventABI:   IntentSettledEventABI,
 	}, nil
 }
 
