@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"log"
 	"testing"
 	"time"
 
@@ -22,7 +23,11 @@ func setupTestDB(t *testing.T) (*PostgresDB, sqlmock.Sqlmock) {
 
 func TestCreateIntent(t *testing.T) {
 	postgresDB, mock := setupTestDB(t)
-	defer postgresDB.Close()
+	defer func() {
+		if err := postgresDB.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -67,7 +72,11 @@ func TestCreateIntent(t *testing.T) {
 
 func TestGetIntent(t *testing.T) {
 	postgresDB, mock := setupTestDB(t)
-	defer postgresDB.Close()
+	defer func() {
+		if err := postgresDB.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	intentID := "0x1234567890123456789012345678901234567890123456789012345678901234"
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -118,7 +127,11 @@ func TestGetIntent(t *testing.T) {
 
 func TestUpdateIntentStatus(t *testing.T) {
 	postgresDB, mock := setupTestDB(t)
-	defer postgresDB.Close()
+	defer func() {
+		if err := postgresDB.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	intentID := "0x1234567890123456789012345678901234567890123456789012345678901234"
 	status := models.IntentStatusSettled
@@ -141,7 +154,11 @@ func TestUpdateIntentStatus(t *testing.T) {
 
 func TestCreateSettlement(t *testing.T) {
 	postgresDB, mock := setupTestDB(t)
-	defer postgresDB.Close()
+	defer func() {
+		if err := postgresDB.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -186,7 +203,11 @@ func TestCreateSettlement(t *testing.T) {
 
 func TestGetSettlement(t *testing.T) {
 	postgresDB, mock := setupTestDB(t)
-	defer postgresDB.Close()
+	defer func() {
+		if err := postgresDB.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	intentID := "0x1234567890123456789012345678901234567890123456789012345678901234"
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -237,7 +258,11 @@ func TestGetSettlement(t *testing.T) {
 
 func TestGetLastProcessedBlock(t *testing.T) {
 	postgresDB, mock := setupTestDB(t)
-	defer postgresDB.Close()
+	defer func() {
+		if err := postgresDB.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	chainID := uint64(1)
 	expectedBlockNumber := uint64(12345)
@@ -262,7 +287,11 @@ func TestGetLastProcessedBlock(t *testing.T) {
 
 func TestUpdateLastProcessedBlock(t *testing.T) {
 	postgresDB, mock := setupTestDB(t)
-	defer postgresDB.Close()
+	defer func() {
+		if err := postgresDB.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	chainID := uint64(1)
 	blockNumber := uint64(12345)

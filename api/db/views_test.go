@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"log"
 	"testing"
 	"time"
 
@@ -24,7 +25,11 @@ func TestIntentLifecycleView(t *testing.T) {
 		t.Skip("Skipping view test, could not connect to test database:", err)
 		return
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	// Ping the database to make sure it's available
 	if err := db.Ping(); err != nil {
@@ -120,7 +125,11 @@ func TestIntentLifecycleView(t *testing.T) {
 	// Query the intent_lifecycle_view
 	rows, err := db.Query("SELECT * FROM intent_lifecycle_view WHERE id = $1", intentID)
 	require.NoError(t, err, "Failed to query intent_lifecycle_view")
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("failed to close: %v", err)
+		}
+	}()
 
 	// Verify data
 	require.True(t, rows.Next(), "No rows returned from intent_lifecycle_view")

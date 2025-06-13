@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -269,7 +271,11 @@ func (p *PostgresDB) ListFulfillments(ctx context.Context) ([]*models.Fulfillmen
 	if err != nil {
 		return nil, fmt.Errorf("failed to query fulfillments: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListFulfillments: failed to close: %v", err)
+		}
+	}()
 
 	var fulfillments []*models.Fulfillment
 	for rows.Next() {
@@ -344,7 +350,7 @@ func (p *PostgresDB) GetSettlement(ctx context.Context, id string) (*models.Sett
 		&settlement.CreatedAt,
 		&settlement.UpdatedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("settlement not found: %s", id)
 	}
 	if err != nil {
@@ -365,7 +371,11 @@ func (p *PostgresDB) ListSettlements(ctx context.Context) ([]*models.Settlement,
 	if err != nil {
 		return nil, fmt.Errorf("failed to query settlements: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListSettlements: failed to close: %v", err)
+		}
+	}()
 
 	var settlements []*models.Settlement
 	for rows.Next() {
@@ -443,7 +453,11 @@ func (p *PostgresDB) ListIntents(ctx context.Context) ([]*models.Intent, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to query intents: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntents: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	for rows.Next() {
@@ -482,7 +496,7 @@ func (p *PostgresDB) GetLastProcessedBlock(ctx context.Context, chainID uint64) 
 
 	var blockNumber uint64
 	err := p.db.QueryRowContext(ctx, query, chainID).Scan(&blockNumber)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// If no record exists, create one with a default value of 0
 		err = p.UpdateLastProcessedBlock(ctx, chainID, 0)
 		if err != nil {
@@ -526,7 +540,11 @@ func (p *PostgresDB) ListIntentsBySender(ctx context.Context, sender string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("failed to query intents for sender %s: %v", sender, err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsBySender: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	for rows.Next() {
@@ -568,7 +586,11 @@ func (p *PostgresDB) ListIntentsByRecipient(ctx context.Context, recipient strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to query intents for recipient %s: %v", recipient, err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsByRecipient: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	for rows.Next() {
@@ -638,7 +660,11 @@ func (p *PostgresDB) ListIntentsPaginated(ctx context.Context, page, pageSize in
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsPaginated: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	for rows.Next() {
@@ -688,7 +714,11 @@ func (p *PostgresDB) ListIntentsPaginatedOptimized(ctx context.Context, page, pa
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsPaginatedOptimized: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	var totalCount int
@@ -748,7 +778,11 @@ func (p *PostgresDB) ListIntentsBySenderPaginated(ctx context.Context, sender st
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsBySenderPaginated: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	for rows.Next() {
@@ -788,7 +822,11 @@ func (p *PostgresDB) ListIntentsBySenderPaginatedOptimized(ctx context.Context, 
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsBySenderPaginatedOptimized: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	var totalCount int
@@ -848,7 +886,11 @@ func (p *PostgresDB) ListIntentsByRecipientPaginated(ctx context.Context, recipi
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsByRecipientPaginated: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	for rows.Next() {
@@ -888,7 +930,11 @@ func (p *PostgresDB) ListIntentsByRecipientPaginatedOptimized(ctx context.Contex
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query intents: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsByRecipientPaginatedOptimized: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	var totalCount int
@@ -947,7 +993,11 @@ func (p *PostgresDB) ListFulfillmentsPaginated(ctx context.Context, page, pageSi
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query fulfillments: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListFulfillmentsPaginated: failed to close: %v", err)
+		}
+	}()
 
 	var fulfillments []*models.Fulfillment
 	for rows.Next() {
@@ -998,7 +1048,11 @@ func (p *PostgresDB) ListSettlementsPaginated(ctx context.Context, page, pageSiz
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query settlements: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListSettlementsPaginated: failed to close: %v", err)
+		}
+	}()
 
 	var settlements []*models.Settlement
 	for rows.Next() {
@@ -1038,7 +1092,11 @@ func (p *PostgresDB) ListFulfillmentsPaginatedOptimized(ctx context.Context, pag
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query fulfillments: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListFulfillmentsPaginatedOptimized: failed to close: %v", err)
+		}
+	}()
 
 	var fulfillments []*models.Fulfillment
 	var totalCount int
@@ -1078,7 +1136,11 @@ func (p *PostgresDB) ListSettlementsPaginatedOptimized(ctx context.Context, page
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query settlements: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListSettlementsPaginatedOptimized: failed to close: %v", err)
+		}
+	}()
 
 	var settlements []*models.Settlement
 	var totalCount int
@@ -1248,7 +1310,7 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 // ListIntentsKeysetPaginated retrieves intents using keyset pagination (more efficient for large datasets)
 func (p *PostgresDB) ListIntentsKeysetPaginated(ctx context.Context, lastTimestamp time.Time, lastID string, pageSize int, status string) ([]*models.Intent, bool, error) {
 	whereClause := ""
-	args := []interface{}{}
+	var args []interface{}
 	argIndex := 1
 
 	// Add status filter if provided
@@ -1288,7 +1350,11 @@ func (p *PostgresDB) ListIntentsKeysetPaginated(ctx context.Context, lastTimesta
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to query intents: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("ListIntentsKeysetPaginated: failed to close: %v", err)
+		}
+	}()
 
 	var intents []*models.Intent
 	for rows.Next() {

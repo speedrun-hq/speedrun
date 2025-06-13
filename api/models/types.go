@@ -52,14 +52,8 @@ const (
 	// IntentStatusFulfilled indicates the intent has been fulfilled on the target chain
 	IntentStatusFulfilled IntentStatus = "fulfilled"
 
-	// IntentStatusProcessing indicates the intent is being processed by the gateway
-	IntentStatusProcessing IntentStatus = "processing"
-
 	// IntentStatusSettled indicates the intent has been settled on the target chain
 	IntentStatusSettled IntentStatus = "settled"
-
-	// IntentStatusFailed indicates the intent failed to complete
-	IntentStatusFailed IntentStatus = "failed"
 )
 
 // ToResponse converts an Intent to an IntentResponse

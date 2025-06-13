@@ -33,7 +33,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer database.Close()
+	defer func() {
+		if err := database.Close(); err != nil {
+			lg.Error("failed to close database: %v", err)
+		}
+	}()
+
 	lg.Notice("Database connection established successfully")
 
 	// Initialize Ethereum clients

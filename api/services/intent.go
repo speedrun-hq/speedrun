@@ -503,16 +503,17 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 
 	// Determine if this is a standard intent or a call intent based on the event signature
 	var eventName string
-	if vLog.Topics[0] == s.abi.Events[IntentInitiatedEventName].ID {
+	switch eventTopic := vLog.Topics[0]; eventTopic {
+	case s.abi.Events[IntentInitiatedEventName].ID:
 		eventName = IntentInitiatedEventName
 		s.logger.Debug("Processing standard intent event")
-	} else if vLog.Topics[0] == s.abi.Events[IntentInitiatedWithCallEventName].ID {
+	case s.abi.Events[IntentInitiatedWithCallEventName].ID:
 		eventName = IntentInitiatedWithCallEventName
 		s.logger.Debug("Processing intent with call event")
 		event.IsCall = true
-	} else {
-		s.logger.Error("Unknown event signature: %s", vLog.Topics[0].Hex())
-		return nil, fmt.Errorf("unknown event signature: %s", vLog.Topics[0].Hex())
+	default:
+		s.logger.Error("Unknown event signature: %s", eventTopic.Hex())
+		return nil, fmt.Errorf("unknown event signature: %s", eventTopic.Hex())
 	}
 
 	s.logger.Debug("Unpacking event data (%d bytes) using ABI for %s",
