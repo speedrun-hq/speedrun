@@ -44,26 +44,19 @@ var intentAddressByChain = map[uint64]string{
 // chainNameFromID returns the chain name based on the chain ID
 func chainNameFromID(chainID uint64) (string, error) {
 	switch chainID {
-	case arbitrumMainnetChainID:
-	case arbitrumSepoliaChainID:
+	case arbitrumMainnetChainID, arbitrumSepoliaChainID:
 		return arbitrumName, nil
-	case baseMainnetChainID:
-	case baseSepoliaChainID:
+	case baseMainnetChainID, baseSepoliaChainID:
 		return baseName, nil
-	case zetachainMainnetChainID:
-	case zetachainTestnetChainID:
+	case zetachainMainnetChainID, zetachainTestnetChainID:
 		return zetachainName, nil
-	case polygonMainnetChainID:
-	case polygonAmoyChainID:
+	case polygonMainnetChainID, polygonAmoyChainID:
 		return polygonName, nil
-	case ethereumMainnetChainID:
-	case ethereumSepoliaChainID:
+	case ethereumMainnetChainID, ethereumSepoliaChainID:
 		return ethereumName, nil
-	case bscMainnetChainID:
-	case bscTestnetChainID:
+	case bscMainnetChainID, bscTestnetChainID:
 		return bscName, nil
-	case avalancheMainnetChainID:
-	case avalancheFujiChainID:
+	case avalancheMainnetChainID, avalancheFujiChainID:
 		return avalancheName, nil
 	}
 	return "", fmt.Errorf("unsupported chain ID: %d", chainID)
