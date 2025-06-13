@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"github.com/speedrun-hq/speedrun/api/logger"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/speedrun-hq/speedrun/api/logger"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"

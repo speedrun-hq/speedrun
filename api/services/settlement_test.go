@@ -3,10 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
-	"github.com/speedrun-hq/speedrun/api/logger"
 	"math/big"
 	"strings"
 	"testing"
+
+	"github.com/speedrun-hq/speedrun/api/logger"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/ethereum/go-ethereum/accounts/abi"

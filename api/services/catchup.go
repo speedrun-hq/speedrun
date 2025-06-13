@@ -3,12 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
-	"github.com/speedrun-hq/speedrun/api/logger"
 	"log"
 	"math/big"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/speedrun-hq/speedrun/api/logger"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
