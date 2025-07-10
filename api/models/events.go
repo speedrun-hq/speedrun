@@ -66,7 +66,7 @@ func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context
 	// Validate target chain
 	if e.TargetChain == 0 {
 		// TODO: consider return error here
-		//log.Printf("Warning: Target chain is 0, using source chain as target")
+		// log.Printf("Warning: Target chain is 0, using source chain as target")
 		e.TargetChain = e.ChainID
 	}
 
@@ -75,7 +75,7 @@ func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context
 	if client != nil {
 		if e.BlockNumber == 0 {
 			// TODO: consider return error here
-			//log.Printf("Warning: Intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
+			// log.Printf("Warning: Intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
 			timestamp = time.Now()
 		} else {
 			// Use provided context if available, otherwise use background context
@@ -87,7 +87,7 @@ func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context
 			ts, err := fetchBlockTimestamp(requestCtx, client, e.BlockNumber)
 			if err != nil {
 				// TODO: consider return error here
-				//log.Printf("Warning: Could not fetch timestamp for intent %s (block #%d): %v, using current time instead",
+				// log.Printf("Warning: Could not fetch timestamp for intent %s (block #%d): %v, using current time instead",
 				//	e.IntentID, e.BlockNumber, err)
 				timestamp = time.Now()
 			} else {
@@ -96,7 +96,7 @@ func (e *IntentInitiatedEvent) ToIntent(client *ethclient.Client, ctx ...context
 		}
 	} else {
 		// TODO: consider return error here
-		//log.Printf("Warning: Intent %s has no client to fetch block timestamp, using current time", e.IntentID)
+		// log.Printf("Warning: Intent %s has no client to fetch block timestamp, using current time", e.IntentID)
 		timestamp = time.Now()
 	}
 
@@ -133,7 +133,7 @@ func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client, ctx ...co
 	if client != nil {
 		if e.BlockNumber == 0 {
 			// TODO: consider return error here
-			//log.Printf("Warning: Fulfillment for intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
+			// log.Printf("Warning: Fulfillment for intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
 			timestamp = time.Now()
 		} else {
 			// Use provided context if available, otherwise use background context
@@ -145,7 +145,7 @@ func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client, ctx ...co
 			ts, err := fetchBlockTimestamp(requestCtx, client, e.BlockNumber)
 			if err != nil {
 				// TODO: consider return error here
-				//log.Printf("Warning: Could not fetch timestamp for fulfillment of intent %s (block #%d): %v, using current time instead",
+				// log.Printf("Warning: Could not fetch timestamp for fulfillment of intent %s (block #%d): %v, using current time instead",
 				//	e.IntentID, e.BlockNumber, err)
 				timestamp = time.Now()
 			} else {
@@ -154,7 +154,7 @@ func (e *IntentFulfilledEvent) ToFulfillment(client *ethclient.Client, ctx ...co
 		}
 	} else {
 		// TODO: consider return error here
-		//log.Printf("Warning: Fulfillment for intent %s has no client to fetch block timestamp, using current time", e.IntentID)
+		// log.Printf("Warning: Fulfillment for intent %s has no client to fetch block timestamp, using current time", e.IntentID)
 		timestamp = time.Now()
 	}
 
@@ -186,7 +186,7 @@ func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client, ctx ...conte
 	if client != nil {
 		if e.BlockNumber == 0 {
 			// TODO: consider return error here
-			//log.Printf("Warning: Settlement for intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
+			// log.Printf("Warning: Settlement for intent %s has no block number, cannot fetch blockchain timestamp", e.IntentID)
 			timestamp = time.Now()
 		} else {
 			// Use provided context if available, otherwise use background context
@@ -198,7 +198,7 @@ func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client, ctx ...conte
 			ts, err := fetchBlockTimestamp(requestCtx, client, e.BlockNumber)
 			if err != nil {
 				// TODO: consider return error here
-				//log.Printf("Warning: Could not fetch timestamp for settlement of intent %s (block #%d): %v, using current time instead",
+				// log.Printf("Warning: Could not fetch timestamp for settlement of intent %s (block #%d): %v, using current time instead",
 				//	e.IntentID, e.BlockNumber, err)
 				timestamp = time.Now()
 			} else {
@@ -207,7 +207,7 @@ func (e *IntentSettledEvent) ToSettlement(client *ethclient.Client, ctx ...conte
 		}
 	} else {
 		// TODO: consider return error here
-		//log.Printf("Warning: Settlement for intent %s has no client to fetch block timestamp, using current time", e.IntentID)
+		// log.Printf("Warning: Settlement for intent %s has no client to fetch block timestamp, using current time", e.IntentID)
 		timestamp = time.Now()
 	}
 

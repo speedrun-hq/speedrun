@@ -177,6 +177,18 @@ GET /api/v1/fulfillments?page=1&page_size=10
 GET /health
 ```
 
+### Prometheus Metrics
+```
+GET /metrics
+```
+Standard Prometheus metrics endpoint for monitoring intent service health, event processing, and performance.
+
+### Metrics Summary (JSON)
+```
+GET /api/v1/metrics
+```
+Human-readable JSON endpoint showing detailed metrics for all chains.
+
 ## Event Monitoring
 
 The API automatically monitors the blockchain for intent-related events:
@@ -186,6 +198,17 @@ The API automatically monitors the blockchain for intent-related events:
 - **Settlement**: When a fulfillment is settled
 
 The service processes these events and updates the database accordingly, with automatic catchup for any missed events.
+
+## Monitoring and Metrics
+
+The API exposes comprehensive Prometheus metrics for monitoring intent service health and performance:
+
+- **Service Health**: Monitor service uptime, active goroutines, and subscription health
+- **Event Processing**: Track event processing rates, errors, and duplicate detection  
+- **Connection Monitoring**: Monitor WebSocket reconnections and subscription stability
+- **Performance Metrics**: Track processing latency and resource usage
+
+For detailed information about available metrics, Prometheus configuration, and recommended alerts, see [`PROMETHEUS_METRICS.md`](PROMETHEUS_METRICS.md).
 
 ## Development
 
