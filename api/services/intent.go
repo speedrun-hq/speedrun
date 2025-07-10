@@ -39,6 +39,15 @@ const (
 
 	// IntentInitiatedWithCallRequiredFields is the number of fields expected in the event data for call intents
 	IntentInitiatedWithCallRequiredFields = 7
+
+	// Buffer sizes for channels
+	DefaultErrorChannelBuffer = 100 // Increased from 10 for better handling of multiple chains
+	DefaultLogsChannelBuffer  = 200 // Increased from 100 for high-throughput scenarios
+
+	// Timeout configurations
+	DefaultDBTimeout  = 10 * time.Second // Increased from 5s for complex DB operations
+	DefaultRPCTimeout = 15 * time.Second // For RPC calls that might be slow
+	DefaultLogTimeout = 45 * time.Second // Increased from 30s for slow log processing
 )
 
 // IntentService handles monitoring and processing of intent events
@@ -53,6 +62,20 @@ type IntentService struct {
 	errChannel       chan error // Channel for collecting errors from goroutines
 	mu               sync.Mutex // Mutex for thread-safe operations
 	logger           logger.Logger
+
+	// Metrics tracking
+	eventsProcessed   int64     // Total events processed
+	eventsSkipped     int64     // Total events skipped (duplicates)
+	processingErrors  int64     // Total processing errors
+	lastEventTime     time.Time // Time of last processed event
+	lastHealthCheck   time.Time // Time of last health check
+	reconnectionCount int64     // Number of times reconnected
+	startTime         time.Time // When the service was started
+
+	// ZetaChain polling health tracking
+	isZetaChain      bool      // Whether this is ZetaChain (uses polling instead of subscriptions)
+	lastPollingCheck time.Time // Last time polling health was verified
+	pollingHealthy   bool      // Whether HTTP polling is working
 }
 
 // NewIntentService creates a new IntentService instance
@@ -70,7 +93,10 @@ func NewIntentService(
 		return nil, fmt.Errorf("failed to parse contract ABI: %v", err)
 	}
 
-	errChan := make(chan error, 10) // Buffer for up to 10 errors to avoid blocking
+	errChan := make(chan error, DefaultErrorChannelBuffer) // Buffer for errors to avoid blocking
+
+	// Detect if this is ZetaChain (uses polling instead of subscriptions)
+	isZetaChain := chainID == 7000
 
 	return &IntentService{
 		client:         client,
@@ -81,12 +107,266 @@ func NewIntentService(
 		subs:           make(map[string]ethereum.Subscription),
 		errChannel:     errChan,
 		logger:         logger,
+		startTime:      time.Now(),
+		isZetaChain:    isZetaChain,
+		pollingHealthy: isZetaChain, // ZetaChain starts as healthy (polling assumed working)
 	}, nil
 }
 
 // ActiveGoroutines returns the current count of active goroutines
 func (s *IntentService) ActiveGoroutines() int32 {
 	return atomic.LoadInt32(&s.activeGoroutines)
+}
+
+// IsHealthy checks if the service is healthy and processing events
+func (s *IntentService) IsHealthy() bool {
+	activeGoroutines := atomic.LoadInt32(&s.activeGoroutines)
+	subscriptionCount := s.GetSubscriptionCount()
+
+	// Update last health check time
+	s.mu.Lock()
+	s.lastHealthCheck = time.Now()
+	s.mu.Unlock()
+
+	// Provide a 30-second grace period for newly started services
+	gracePeriod := 30 * time.Second
+	isStartingUp := time.Since(s.startTime) < gracePeriod
+
+	var isHealthy bool
+
+	// ZetaChain uses HTTP polling instead of WebSocket subscriptions
+	if s.isZetaChain {
+		// For ZetaChain, health depends on HTTP client connectivity and polling status
+		// We don't expect subscriptions or the normal goroutines since polling happens in catchup service
+
+		// During startup, be lenient
+		if isStartingUp {
+			s.logger.DebugWithChain(s.chainID, "ZetaChain service starting up (grace period): HTTP polling assumed healthy")
+			isHealthy = true
+		} else {
+			// Check if polling health has been verified recently (within 10 minutes)
+			pollingStale := time.Since(s.lastPollingCheck) > 10*time.Minute
+			isHealthy = s.pollingHealthy && !pollingStale
+
+			if !isHealthy {
+				if pollingStale {
+					s.logger.DebugWithChain(s.chainID, "ZetaChain polling health stale (last check: %v ago)", time.Since(s.lastPollingCheck))
+				} else {
+					s.logger.DebugWithChain(s.chainID, "ZetaChain polling unhealthy")
+				}
+			}
+		}
+	} else {
+		// For other chains, use the normal subscription-based health check
+		// Service is healthy if it has:
+		// 1. At least 3 goroutines (error monitor + health monitor + subscription goroutine)
+		// 2. At least 1 active subscription
+		isHealthy = activeGoroutines >= 3 && subscriptionCount >= 1
+
+		// During startup, be more lenient
+		if isStartingUp {
+			s.logger.DebugWithChain(s.chainID, "Service starting up (grace period): activeGoroutines=%d, subscriptions=%d",
+				activeGoroutines, subscriptionCount)
+			isHealthy = true
+		}
+
+		// Add debug logging when service is unhealthy
+		if !isHealthy {
+			timeSinceStart := time.Since(s.startTime)
+			s.logger.DebugWithChain(s.chainID, "Service unhealthy (running %v): activeGoroutines=%d (need >=3), subscriptions=%d (need >=1)",
+				timeSinceStart, activeGoroutines, subscriptionCount)
+		}
+	}
+
+	return isHealthy
+}
+
+// GetSubscriptionCount returns the number of active subscriptions
+func (s *IntentService) GetSubscriptionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.subs)
+}
+
+// UpdatePollingHealth updates the polling health status for ZetaChain
+func (s *IntentService) UpdatePollingHealth(healthy bool) {
+	if !s.isZetaChain {
+		return // Only applicable to ZetaChain
+	}
+
+	s.mu.Lock()
+	s.pollingHealthy = healthy
+	s.lastPollingCheck = time.Now()
+	s.mu.Unlock()
+
+	if healthy {
+		s.logger.DebugWithChain(s.chainID, "ZetaChain polling health updated: healthy")
+	} else {
+		s.logger.DebugWithChain(s.chainID, "ZetaChain polling health updated: unhealthy")
+	}
+}
+
+// IsZetaChain returns whether this service is for ZetaChain
+func (s *IntentService) IsZetaChain() bool {
+	return s.isZetaChain
+}
+
+// ServiceMetrics represents detailed metrics for the service
+type ServiceMetrics struct {
+	ChainID            uint64    `json:"chain_id"`
+	ActiveGoroutines   int32     `json:"active_goroutines"`
+	SubscriptionCount  int       `json:"subscription_count"`
+	EventsProcessed    int64     `json:"events_processed"`
+	EventsSkipped      int64     `json:"events_skipped"`
+	ProcessingErrors   int64     `json:"processing_errors"`
+	LastEventTime      time.Time `json:"last_event_time"`
+	LastHealthCheck    time.Time `json:"last_health_check"`
+	ReconnectionCount  int64     `json:"reconnection_count"`
+	TimeSinceLastEvent string    `json:"time_since_last_event"`
+	IsHealthy          bool      `json:"is_healthy"`
+
+	// ZetaChain-specific metrics
+	IsZetaChain           bool      `json:"is_zetachain"`
+	PollingHealthy        bool      `json:"polling_healthy,omitempty"`
+	LastPollingCheck      time.Time `json:"last_polling_check,omitempty"`
+	TimeSincePollingCheck string    `json:"time_since_polling_check,omitempty"`
+}
+
+// GetMetrics returns detailed metrics about the service
+func (s *IntentService) GetMetrics() ServiceMetrics {
+	s.mu.Lock()
+	subscriptionCount := len(s.subs)
+	eventsProcessed := atomic.LoadInt64(&s.eventsProcessed)
+	eventsSkipped := atomic.LoadInt64(&s.eventsSkipped)
+	processingErrors := atomic.LoadInt64(&s.processingErrors)
+	lastEventTime := s.lastEventTime
+	lastHealthCheck := s.lastHealthCheck
+	reconnectionCount := atomic.LoadInt64(&s.reconnectionCount)
+
+	// ZetaChain-specific metrics
+	isZetaChain := s.isZetaChain
+	pollingHealthy := s.pollingHealthy
+	lastPollingCheck := s.lastPollingCheck
+	s.mu.Unlock()
+
+	activeGoroutines := atomic.LoadInt32(&s.activeGoroutines)
+	isHealthy := s.IsHealthy()
+
+	var timeSinceLastEvent string
+	if !lastEventTime.IsZero() {
+		timeSinceLastEvent = time.Since(lastEventTime).String()
+	} else {
+		timeSinceLastEvent = "never"
+	}
+
+	var timeSincePollingCheck string
+	if isZetaChain && !lastPollingCheck.IsZero() {
+		timeSincePollingCheck = time.Since(lastPollingCheck).String()
+	} else if isZetaChain {
+		timeSincePollingCheck = "never"
+	}
+
+	return ServiceMetrics{
+		ChainID:               s.chainID,
+		ActiveGoroutines:      activeGoroutines,
+		SubscriptionCount:     subscriptionCount,
+		EventsProcessed:       eventsProcessed,
+		EventsSkipped:         eventsSkipped,
+		ProcessingErrors:      processingErrors,
+		LastEventTime:         lastEventTime,
+		LastHealthCheck:       lastHealthCheck,
+		ReconnectionCount:     reconnectionCount,
+		TimeSinceLastEvent:    timeSinceLastEvent,
+		IsHealthy:             isHealthy,
+		IsZetaChain:           isZetaChain,
+		PollingHealthy:        pollingHealthy,
+		LastPollingCheck:      lastPollingCheck,
+		TimeSincePollingCheck: timeSincePollingCheck,
+	}
+}
+
+// RestartSubscription restarts a subscription for a given contract address
+func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress common.Address) error {
+	subID := contractAddress.Hex()
+
+	// Unsubscribe existing subscription if it exists
+	s.mu.Lock()
+	if existingSub, exists := s.subs[subID]; exists {
+		existingSub.Unsubscribe()
+		delete(s.subs, subID)
+		s.logger.InfoWithChain(s.chainID, "Unsubscribed existing subscription for restart: %s", subID)
+	}
+	s.mu.Unlock()
+
+	// Get the current block to avoid reprocessing old events
+	blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	currentBlock, err := s.client.BlockNumber(blockCtx)
+	cancel()
+
+	startBlock := uint64(0)
+	if err != nil {
+		s.logger.InfoWithChain(s.chainID, "WARNING: Failed to get current block for restart: %v, starting from block 0", err)
+	} else {
+		startBlock = currentBlock
+		s.logger.InfoWithChain(s.chainID, "Restarting subscription from current block %d", startBlock)
+	}
+
+	// Track reconnection
+	atomic.AddInt64(&s.reconnectionCount, 1)
+
+	// Start a new subscription with reconnection
+	go s.startSubscriptionWithReconnection(ctx, contractAddress, startBlock)
+
+	s.logger.InfoWithChain(s.chainID, "Restarted subscription for contract %s (reconnection #%d)",
+		contractAddress.Hex(), atomic.LoadInt64(&s.reconnectionCount))
+	return nil
+}
+
+// StartHealthMonitor starts a goroutine that monitors the health of the service
+func (s *IntentService) StartHealthMonitor(ctx context.Context, contractAddress common.Address) {
+	go func() {
+		// Increment goroutine counter for the health monitor
+		atomic.AddInt32(&s.activeGoroutines, 1)
+		defer atomic.AddInt32(&s.activeGoroutines, -1)
+
+		ticker := time.NewTicker(5 * time.Minute) // Check every 5 minutes
+		defer ticker.Stop()
+
+		consecutiveFailures := 0
+		maxConsecutiveFailures := 3
+
+		for {
+			select {
+			case <-ticker.C:
+				// Check if service is healthy
+				if !s.IsHealthy() {
+					consecutiveFailures++
+					s.logger.InfoWithChain(s.chainID, "Health check failed (%d/%d): activeGoroutines=%d, subscriptions=%d",
+						consecutiveFailures, maxConsecutiveFailures, s.ActiveGoroutines(), s.GetSubscriptionCount())
+
+					if consecutiveFailures >= maxConsecutiveFailures {
+						s.logger.InfoWithChain(s.chainID, "Service appears unhealthy, attempting restart")
+
+						// Attempt to restart the subscription
+						if err := s.RestartSubscription(ctx, contractAddress); err != nil {
+							s.logger.ErrorWithChain(s.chainID, "Failed to restart subscription: %v", err)
+						} else {
+							consecutiveFailures = 0 // Reset counter on successful restart
+						}
+					}
+				} else {
+					// Service is healthy, reset failure counter
+					if consecutiveFailures > 0 {
+						s.logger.InfoWithChain(s.chainID, "Service health restored")
+						consecutiveFailures = 0
+					}
+				}
+			case <-ctx.Done():
+				s.logger.DebugWithChain(s.chainID, "Health monitor shutting down")
+				return
+			}
+		}
+	}()
 }
 
 // StartListening starts a goroutine to listen for intent events from the specified contract address.
@@ -118,6 +398,102 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 		s.logger.Notice("Starting intent event subscription from block %d", latestBlock)
 	}
 
+	// Start a goroutine to monitor the error channel
+	go s.monitorErrors(ctx)
+
+	// Start the subscription listener with automatic reconnection
+	go s.startSubscriptionWithReconnection(ctx, contractAddress, latestBlock)
+
+	// Start the health monitor
+	s.StartHealthMonitor(ctx, contractAddress)
+
+	return nil
+}
+
+// monitorErrors processes errors from goroutines
+func (s *IntentService) monitorErrors(ctx context.Context) {
+	// Increment goroutine counter
+	atomic.AddInt32(&s.activeGoroutines, 1)
+	defer atomic.AddInt32(&s.activeGoroutines, -1)
+
+	for {
+		select {
+		case err := <-s.errChannel:
+			s.logger.Error("Error in IntentService goroutine: %v", err)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// startSubscriptionWithReconnection handles the subscription lifecycle with automatic reconnection
+func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, contractAddress common.Address, startBlock uint64) {
+	// Increment goroutine counter
+	atomic.AddInt32(&s.activeGoroutines, 1)
+	defer atomic.AddInt32(&s.activeGoroutines, -1)
+
+	subID := contractAddress.Hex()
+
+	// Add panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			err := fmt.Errorf("recovered from panic in startSubscriptionWithReconnection: %v\nstack: %s", r, debug.Stack())
+			s.errChannel <- err
+			s.logger.Error("CRITICAL: %v", err)
+		}
+	}()
+
+	// Retry configuration
+	maxRetries := 10
+	baseDelay := 1 * time.Second
+	maxDelay := 5 * time.Minute
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		select {
+		case <-ctx.Done():
+			s.logger.DebugWithChain(s.chainID, "Context cancelled, stopping subscription attempts")
+			return
+		default:
+		}
+
+		// Calculate delay with exponential backoff
+		delay := time.Duration(1<<attempt) * baseDelay
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+
+		if attempt > 0 {
+			s.logger.InfoWithChain(s.chainID, "Retrying subscription attempt %d/%d after %v", attempt+1, maxRetries, delay)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return
+			}
+		}
+
+		// Create subscription
+		err := s.createAndRunSubscription(ctx, contractAddress, subID, startBlock)
+		if err == nil {
+			// Subscription ended normally (context cancelled)
+			return
+		}
+
+		// Log the error
+		s.logger.ErrorWithChain(s.chainID, "Subscription failed (attempt %d/%d): %v", attempt+1, maxRetries, err)
+
+		// If this is a context cancellation, don't retry
+		if ctx.Err() != nil {
+			return
+		}
+	}
+
+	// If we get here, all retries failed
+	s.errChannel <- fmt.Errorf("failed to establish stable subscription after %d attempts", maxRetries)
+	s.logger.ErrorWithChain(s.chainID, "CRITICAL: Unable to establish stable subscription after %d attempts", maxRetries)
+}
+
+// createAndRunSubscription creates a new subscription and runs the event processing loop
+func (s *IntentService) createAndRunSubscription(ctx context.Context, contractAddress common.Address, subID string, startBlock uint64) error {
 	// Configure the filter query for events
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
@@ -129,88 +505,50 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 		},
 	}
 
-	// If we got the latest block, set it as the FromBlock to avoid processing old events
-	if err == nil {
-		// Set FromBlock to latest block to avoid processing old events
-		// The "latest" block is represented as nil, but we'll set it explicitly to the latest block number
-		// This ensures we only process new events going forward
-		query.FromBlock = big.NewInt(int64(latestBlock))
+	// Set FromBlock if we have a start block
+	if startBlock > 0 {
+		query.FromBlock = big.NewInt(int64(startBlock))
 	}
 
 	// Log the full query details for debugging
 	s.logger.Debug("Intent subscription filter query: Addresses=%v, Topics=%v, FromBlock=%v",
 		query.Addresses, query.Topics, query.FromBlock)
 
-	logs := make(chan types.Log)
+	// Create a new logs channel for this subscription
+	logs := make(chan types.Log, DefaultLogsChannelBuffer) // Buffer to prevent blocking
+
+	// Create the subscription
 	sub, err := s.client.SubscribeFilterLogs(ctx, query, logs)
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to logs: %v", err)
 	}
 
 	// Store the subscription
-	subID := contractAddress.Hex()
 	s.mu.Lock()
 	s.subs[subID] = sub
 	s.mu.Unlock()
 
-	s.logger.Info("Successfully subscribed to intent events for contract %s on chain %d",
-		contractAddress.Hex(), s.chainID)
+	s.logger.InfoWithChain(s.chainID, "Successfully subscribed to intent events for contract %s", contractAddress.Hex())
 
-	// Start a goroutine to monitor the error channel
-	go s.monitorErrors(ctx)
+	// Run the event processing loop
+	err = s.runEventProcessingLoop(ctx, sub, logs, subID)
 
-	// Start the event processing goroutine
-	go s.processEventLogs(ctx, sub, logs, subID)
-
-	return nil
-}
-
-// monitorErrors processes errors from goroutines
-func (s *IntentService) monitorErrors(ctx context.Context) {
-	for {
-		select {
-		case err := <-s.errChannel:
-			s.logger.Error("Error in IntentService goroutine: %v", err)
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-// processEventLogs handles the event processing loop for the subscription.
-// It manages subscription errors, log processing, and context cancellation.
-func (s *IntentService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string) {
-	// Increment goroutine counter
-	atomic.AddInt32(&s.activeGoroutines, 1)
-	defer atomic.AddInt32(&s.activeGoroutines, -1)
-
-	// Add panic recovery
-	defer func() {
-		if r := recover(); r != nil {
-			err := fmt.Errorf("recovered from panic in processEventLogs: %v\nstack: %s", r, debug.Stack())
-			s.errChannel <- err
-			s.logger.Error("CRITICAL: %v", err)
-
-			// Attempt to restart the subscription after a pause
-			time.Sleep(5 * time.Second)
-			s.mu.Lock()
-			if sub, ok := s.subs[subID]; ok {
-				sub.Unsubscribe()
-				delete(s.subs, subID)
-			}
-			s.mu.Unlock()
-		}
-	}()
-
-	s.logger.InfoWithChain(s.chainID, "Starting event log processing, subscription %s", subID)
-
-	defer func() {
-		sub.Unsubscribe()
-		s.mu.Lock()
+	// Clean up subscription
+	s.mu.Lock()
+	if storedSub, exists := s.subs[subID]; exists && storedSub == sub {
 		delete(s.subs, subID)
-		s.mu.Unlock()
-		s.logger.DebugWithChain(s.chainID, "Ended event log processing, subscription %s", subID)
-	}()
+	}
+	s.mu.Unlock()
+
+	sub.Unsubscribe()
+	close(logs) // Close the logs channel to prevent goroutine leaks
+
+	return err
+}
+
+// runEventProcessingLoop runs the main event processing loop for a subscription
+func (s *IntentService) runEventProcessingLoop(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string) error {
+	s.logger.InfoWithChain(s.chainID, "Starting event log processing, subscription %s", subID)
 
 	// Use a ticker to periodically check system health
 	healthTicker := time.NewTicker(1 * time.Minute)
@@ -227,38 +565,31 @@ func (s *IntentService) processEventLogs(ctx context.Context, sub ethereum.Subsc
 		select {
 		case err := <-sub.Err():
 			if err != nil {
-				s.errChannel <- fmt.Errorf("subscription error: %v", err)
 				s.logger.ErrorWithChain(s.chainID, "Subscription %s error: %v", subID, err)
-				// Try to resubscribe
-				if err := s.handleSubscriptionError(ctx, sub, logs, subID); err != nil {
-					s.errChannel <- fmt.Errorf("failed to resubscribe: %v", err)
-					s.logger.ErrorWithChain(s.chainID, "CRITICAL: Failed to resubscribe %s: %v", subID, err)
-					return
-				}
+				return fmt.Errorf("subscription error: %v", err)
 			}
 		case vLog, ok := <-logs:
 			if !ok {
-				s.errChannel <- fmt.Errorf("log channel closed unexpectedly")
-				s.logger.ErrorWithChain(s.chainID, "Log channel closed unexpectedly for %s", subID)
-				return
+				s.logger.ErrorWithChain(s.chainID, "Log channel closed for subscription %s", subID)
+				return fmt.Errorf("log channel closed")
 			}
 
 			eventCount++
 			s.logger.InfoWithChain(s.chainID, "EVENT RECEIVED: Block %d, TxHash %s, Topics: %v", vLog.BlockNumber, vLog.TxHash.Hex(), len(vLog.Topics))
 
-			// Process the log in a separate goroutine to avoid blocking
-			// But use a timeout to prevent processing for too long
-			logCtx, logCancel := context.WithTimeout(ctx, 30*time.Second)
+			// Process the log with timeout to prevent processing for too long
+			logCtx, logCancel := context.WithTimeout(ctx, DefaultLogTimeout)
 			startTime := time.Now()
 			err := s.processLog(logCtx, vLog)
 			processingTime := time.Since(startTime)
 			logCancel()
 
 			if err != nil {
+				atomic.AddInt64(&s.processingErrors, 1)
 				s.errChannel <- fmt.Errorf("error processing log: %v", err)
 				s.logger.ErrorWithChain(s.chainID, "Failed to process log, subscription %s: %v", subID, err)
 			} else {
-				s.logger.InfoWithChain(s.chainID, "Successfully processed event from chain %d, block %d, tx %s (took %v)", vLog.BlockNumber, vLog.TxHash.Hex(), processingTime)
+				s.logger.InfoWithChain(s.chainID, "Successfully processed event from block %d, tx %s (took %v)", vLog.BlockNumber, vLog.TxHash.Hex(), processingTime)
 			}
 		case <-healthTicker.C:
 			// Log system health information
@@ -270,68 +601,9 @@ func (s *IntentService) processEventLogs(ctx context.Context, sub ethereum.Subsc
 				subID, eventCount)
 		case <-ctx.Done():
 			s.logger.DebugWithChain(s.chainID, "Context cancelled, stopping event processing, subscription %s", subID)
-			return
+			return nil // Normal termination
 		}
 	}
-}
-
-// handleSubscriptionError attempts to recover from a subscription error by resubscribing.
-func (s *IntentService) handleSubscriptionError(ctx context.Context, oldSub ethereum.Subscription, logs chan types.Log, subID string) error {
-	oldSub.Unsubscribe()
-
-	// Get contract address from subID (which we set to contract address hex)
-	contractAddress := common.HexToAddress(subID)
-	if contractAddress == (common.Address{}) {
-		return fmt.Errorf("invalid subscription ID")
-	}
-
-	// Implement exponential backoff for retry
-	maxRetries := 5
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Check if context is cancelled
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		// Create a new query
-		query := ethereum.FilterQuery{
-			Addresses: []common.Address{contractAddress},
-			Topics: [][]common.Hash{
-				{
-					s.abi.Events[IntentInitiatedEventName].ID,
-					s.abi.Events[IntentInitiatedWithCallEventName].ID,
-				},
-			},
-		}
-
-		// Try to resubscribe
-		newSub, err := s.client.SubscribeFilterLogs(ctx, query, logs)
-		if err == nil {
-			// Update the subscription
-			s.mu.Lock()
-			s.subs[subID] = newSub
-			s.mu.Unlock()
-			s.logger.DebugWithChain(s.chainID, "Successfully resubscribed to events")
-			return nil
-		}
-
-		// If we reach here, resubscription failed
-		backoffTime := time.Duration(1<<attempt) * time.Second
-		if backoffTime > 30*time.Second {
-			backoffTime = 30 * time.Second
-		}
-		s.logger.Debug("Resubscription attempt %d/%d failed: %v. Retrying in %v",
-			attempt+1, maxRetries, err, backoffTime)
-
-		select {
-		case <-time.After(backoffTime):
-			// Continue with next retry
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	return fmt.Errorf("failed to resubscribe after %d attempts", maxRetries)
 }
 
 // processLog processes a single log entry from the blockchain.
@@ -356,7 +628,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	}
 
 	// Set a timeout for event data extraction
-	extractCtx, extractCancel := context.WithTimeout(ctx, 5*time.Second)
+	extractCtx, extractCancel := context.WithTimeout(ctx, DefaultRPCTimeout)
 	event, err := s.extractEventData(extractCtx, vLog)
 	extractCancel()
 
@@ -369,7 +641,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 
 	// Important: Use the correct chain client for intent events
 	// Intent events happen on the source chain, so we need to use the source chain client
-	var client = s.client
+	client := s.client
 	if s.clientResolver != nil {
 		// Try to get the source chain client
 		sourceClient, err := s.clientResolver.GetClient(event.ChainID)
@@ -381,8 +653,8 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	}
 
 	// Set a timeout for intent conversion
-	_, intentCancel := context.WithTimeout(ctx, 5*time.Second)
-	intent, err := event.ToIntent(client)
+	intentCtx, intentCancel := context.WithTimeout(ctx, DefaultRPCTimeout)
+	intent, err := event.ToIntent(client, intentCtx)
 	intentCancel()
 
 	if err != nil {
@@ -397,7 +669,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	}
 
 	// Check if intent already exists - set a timeout
-	dbCtx, dbCancel := context.WithTimeout(ctx, 5*time.Second)
+	dbCtx, dbCancel := context.WithTimeout(ctx, DefaultDBTimeout)
 	existingIntent, err := s.db.GetIntent(dbCtx, intent.ID)
 	dbCancel()
 
@@ -407,21 +679,32 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 
 	// Skip if intent already exists
 	if existingIntent != nil {
+		atomic.AddInt64(&s.eventsSkipped, 1)
+		s.logger.Debug("Skipped duplicate intent: %s", intent.ID)
 		return nil
 	}
 
 	// Create the intent with a timeout
-	createCtx, createCancel := context.WithTimeout(ctx, 5*time.Second)
+	createCtx, createCancel := context.WithTimeout(ctx, DefaultDBTimeout)
 	err = s.db.CreateIntent(createCtx, intent)
 	createCancel()
 
 	if err != nil {
 		// Skip if intent already exists
 		if strings.Contains(err.Error(), "duplicate key") {
+			atomic.AddInt64(&s.eventsSkipped, 1)
+			s.logger.Debug("Skipped duplicate intent during creation: %s", intent.ID)
 			return nil
 		}
+		atomic.AddInt64(&s.processingErrors, 1)
 		return fmt.Errorf("failed to store intent in database: %v", err)
 	}
+
+	// Update metrics
+	atomic.AddInt64(&s.eventsProcessed, 1)
+	s.mu.Lock()
+	s.lastEventTime = time.Now()
+	s.mu.Unlock()
 
 	s.logger.Info("Successfully processed and stored intent: %s", intent.ID)
 	return nil
@@ -546,7 +829,7 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	}
 
 	// Get the sender address from the transaction - add timeout
-	txCtx, txCancel := context.WithTimeout(ctx, 5*time.Second)
+	txCtx, txCancel := context.WithTimeout(ctx, DefaultRPCTimeout)
 	defer txCancel()
 
 	s.logger.Debug("Fetching transaction %s to extract sender", vLog.TxHash.Hex())

@@ -606,60 +606,13 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 			continue
 		}
 
-		intentQuery := ethereum.FilterQuery{
-			Addresses: []common.Address{contractAddress},
-			Topics: [][]common.Hash{
-				{intentService.abi.Events[IntentInitiatedEventName].ID},
-			},
+		// Start the intent service's own subscription management
+		s.logger.InfoWithChain(chainID, "Starting intent service subscription through StartListening")
+		if err := intentService.StartListening(ctx, contractAddress); err != nil {
+			s.logger.ErrorWithChain(chainID, "Failed to start intent service: %v", err)
+			return fmt.Errorf("failed to start intent service for chain %d: %v", chainID, err)
 		}
-
-		// Set FromBlock explicitly to avoid processing old events
-		if fromBlock > 0 {
-			intentQuery.FromBlock = big.NewInt(int64(fromBlock))
-		}
-
-		s.logger.InfoWithChain(chainID, "Intent subscription filter for chain %d: FromBlock=%v, Addresses=%s, Topics=%v",
-			intentQuery.FromBlock,
-			contractAddress.Hex(),
-			intentQuery.Topics[0][0].Hex(),
-		)
-
-		intentLogs := make(chan types.Log)
-		// Create a context that remains alive for the subscription
-		// Don't create a timeout context for the subscription as it needs to run indefinitely
-		intentSub, err := intentService.client.SubscribeFilterLogs(ctx, intentQuery, intentLogs)
-		if err != nil {
-			return fmt.Errorf("failed to subscribe to intent logs for chain %d: %v", chainID, err)
-		}
-		s.logger.InfoWithChain(chainID, "Successfully subscribed to intent events")
-
-		// Add monitoring goroutine for subscription errors
-		go func() {
-			for {
-				select {
-				case err := <-intentSub.Err():
-					if err != nil {
-						s.logger.ErrorWithChain(chainID, "Intent subscription encountered an error: %v", err)
-						// Try to resubscribe
-						resubCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-						newSub, resubErr := intentService.client.SubscribeFilterLogs(resubCtx, intentQuery, intentLogs)
-						cancel()
-
-						if resubErr != nil {
-							s.logger.ErrorWithChain(chainID, "CRITICAL: Failed to resubscribe intent listener: %v", resubErr)
-						} else {
-							intentSub = newSub
-							s.logger.InfoWithChain(chainID, "Successfully resubscribed intent listener")
-						}
-					}
-				case <-ctx.Done():
-					s.logger.InfoWithChain(chainID, "Intent subscription monitor shutting down")
-					return
-				}
-			}
-		}()
-
-		go intentService.processEventLogs(ctx, intentSub, intentLogs, fmt.Sprintf("chain_%d", chainID))
+		s.logger.InfoWithChain(chainID, "Successfully started intent service subscription")
 	}
 
 	// Start fulfillment listeners with similar block tracking
@@ -1437,12 +1390,13 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 
 // pollZetachainEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
 func (s *EventCatchupService) pollZetachainEvents(ctx context.Context, intentService *IntentService, contractAddress common.Address, blockInterval int64) {
-	// Use the generic polling function
+	// Use the generic polling function with health reporting
 	s.pollChainEvents(ctx, "intent", 7000, intentService.client, contractAddress,
 		[]common.Hash{intentService.abi.Events[IntentInitiatedEventName].ID, intentService.abi.Events[IntentInitiatedWithCallEventName].ID},
 		intentService.processLog,
 		func(blockNum uint64) { s.UpdateIntentProgress(7000, blockNum) },
-		blockInterval)
+		blockInterval,
+		intentService) // Pass intent service for health reporting
 }
 
 // pollZetachainFulfillmentEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
@@ -1452,7 +1406,8 @@ func (s *EventCatchupService) pollZetachainFulfillmentEvents(ctx context.Context
 		[]common.Hash{fulfillmentService.abi.Events[IntentFulfilledEventName].ID, fulfillmentService.abi.Events[IntentFulfilledWithCallEventName].ID},
 		fulfillmentService.processLog,
 		func(blockNum uint64) { s.UpdateFulfillmentProgress(7000, blockNum) },
-		blockInterval)
+		blockInterval,
+		nil) // No health reporting for fulfillment services yet
 }
 
 // pollZetachainSettlementEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
@@ -1462,7 +1417,8 @@ func (s *EventCatchupService) pollZetachainSettlementEvents(ctx context.Context,
 		[]common.Hash{settlementService.abi.Events[IntentSettledEventName].ID, settlementService.abi.Events[IntentSettledWithCallEventName].ID},
 		settlementService.processLog,
 		func(blockNum uint64) { s.UpdateSettlementProgress(7000, blockNum) },
-		blockInterval)
+		blockInterval,
+		nil) // No health reporting for settlement services yet
 }
 
 // pollChainEvents is a generic function to poll for blockchain events
@@ -1477,6 +1433,7 @@ func (s *EventCatchupService) pollChainEvents(
 	processLogFunc func(context.Context, types.Log) error,
 	updateProgressFunc func(uint64),
 	blockInterval int64,
+	intentService *IntentService, // Optional: for health reporting (ZetaChain only)
 ) {
 	// Default to checking every 15 seconds if not specified in config
 	interval := time.Duration(blockInterval) * time.Second
@@ -1541,7 +1498,16 @@ func (s *EventCatchupService) pollChainEvents(
 
 			if err != nil {
 				s.logger.Error("CRITICAL: Failed to get current block for ZetaChain after %d attempts. Skipping this polling cycle.", maxRetries)
+				// Report unhealthy polling if we have an intent service to report to
+				if intentService != nil && eventType == "intent" {
+					intentService.UpdatePollingHealth(false)
+				}
 				continue
+			}
+
+			// Report healthy polling if we successfully got the current block
+			if intentService != nil && eventType == "intent" {
+				intentService.UpdatePollingHealth(true)
 			}
 
 			// Skip if no new blocks
@@ -1769,8 +1735,10 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 				if err != nil {
 					s.logger.Info("WARNING: ZetaChain polling health check failed: %v", err)
+					client.UpdatePollingHealth(false)
 				} else {
 					s.logger.Info("ZetaChain polling health check passed")
+					client.UpdatePollingHealth(true)
 				}
 			}
 

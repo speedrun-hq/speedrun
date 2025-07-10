@@ -56,6 +56,18 @@ func main() {
 	// Start event listeners for each chain
 	ctx := context.Background()
 
+	// Create metrics service
+	metricsService := services.NewMetricsService(lg)
+
+	// Register all intent services with the metrics service
+	for chainID, intentService := range intentServices {
+		metricsService.RegisterIntentService(chainID, intentService)
+	}
+
+	// Start the metrics updater
+	metricsService.StartMetricsUpdater(ctx)
+	lg.Info("Started Prometheus metrics service")
+
 	// Create event catchup service for this chain
 	eventCatchupService := services.NewEventCatchupService(
 		intentServices,
@@ -97,7 +109,7 @@ func main() {
 	fulfillmentService := fulfillmentServices[firstChainID]
 
 	// Create and start the server
-	server := handlers.NewServer(fulfillmentService, intentService, database, lg)
+	server := handlers.NewServer(fulfillmentService, intentService, metricsService, database, lg)
 	if err := server.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

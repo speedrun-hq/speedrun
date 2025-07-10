@@ -26,6 +26,7 @@ import (
 type Server struct {
 	fulfillmentService *services.FulfillmentService
 	intentService      *services.IntentService
+	metricsService     *services.MetricsService
 	db                 db.Database
 	logger             logger.Logger
 }
@@ -34,12 +35,14 @@ type Server struct {
 func NewServer(
 	fulfillmentService *services.FulfillmentService,
 	intentService *services.IntentService,
+	metricsService *services.MetricsService,
 	database db.Database,
 	logger logger.Logger,
 ) *Server {
 	return &Server{
 		fulfillmentService: fulfillmentService,
 		intentService:      intentService,
+		metricsService:     metricsService,
 		db:                 database,
 		logger:             logger,
 	}
@@ -125,6 +128,15 @@ func (s *Server) Start(addr string) error {
 		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 		})
+	})
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(s.metricsService.GetHandler()))
+
+	// Metrics summary endpoint for debugging
+	router.GET("/api/v1/metrics", func(c *gin.Context) {
+		summary := s.metricsService.GetMetricsSummary()
+		c.JSON(http.StatusOK, summary)
 	})
 
 	// API v1 group
