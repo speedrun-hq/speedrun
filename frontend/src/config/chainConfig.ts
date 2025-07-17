@@ -292,7 +292,7 @@ export function getExplorerUrl(chainId: number, txHash: string): string {
     case avalanche.id:
       return `https://snowtrace.io/tx/${txHash}`;
     case ZETACHAIN_CHAIN_ID:
-      return `https://explorer.zetachain.com/tx/${txHash}`;
+      return `https://zetachain.blockscout.com/tx/${txHash}`;
     default:
       return "";
   }
