@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -110,8 +113,73 @@ func main() {
 
 	// Create and start the server
 	server := handlers.NewServer(fulfillmentService, intentService, metricsService, database, lg)
-	if err := server.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+
+	// Set up graceful shutdown
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	defer shutdownCancel()
+
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start server in a goroutine
+	go func() {
+		if err := server.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil {
+			lg.Error("Server error: %v", err)
+			shutdownCancel() // Signal shutdown on server error
+		}
+	}()
+
+	// Wait for shutdown signal
+	select {
+	case <-sigChan:
+		lg.Notice("Shutdown signal received, cleaning up services...")
+	case <-shutdownCtx.Done():
+		lg.Notice("Shutdown context cancelled, cleaning up services...")
+	}
+
+	// Shutdown all services gracefully
+	shutdownTimeout := 30 * time.Second
+	var shutdownErrors []error
+
+	// Shutdown event catchup service
+	lg.Info("Shutting down event catchup service...")
+	if err := eventCatchupService.Shutdown(shutdownTimeout); err != nil {
+		shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to shutdown event catchup service: %v", err))
+	}
+
+	// Shutdown intent services
+	for chainID, intentService := range intentServices {
+		lg.Info("Shutting down intent service for chain %d...", chainID)
+		if err := intentService.Shutdown(shutdownTimeout); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to shutdown intent service for chain %d: %v", chainID, err))
+		}
+	}
+
+	// Shutdown fulfillment services
+	for chainID, fulfillmentService := range fulfillmentServices {
+		lg.Info("Shutting down fulfillment service for chain %d...", chainID)
+		if err := fulfillmentService.Shutdown(shutdownTimeout); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to shutdown fulfillment service for chain %d: %v", chainID, err))
+		}
+	}
+
+	// Shutdown settlement services
+	for chainID, settlementService := range settlementServices {
+		lg.Info("Shutting down settlement service for chain %d...", chainID)
+		if err := settlementService.Shutdown(shutdownTimeout); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to shutdown settlement service for chain %d: %v", chainID, err))
+		}
+	}
+
+	// Log any shutdown errors
+	if len(shutdownErrors) > 0 {
+		lg.Error("Encountered %d errors during shutdown:", len(shutdownErrors))
+		for _, err := range shutdownErrors {
+			lg.Error("  - %v", err)
+		}
+	} else {
+		lg.Notice("All services shut down successfully")
 	}
 }
 

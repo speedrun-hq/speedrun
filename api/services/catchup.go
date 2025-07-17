@@ -59,6 +59,13 @@ type EventCatchupService struct {
 	activeCatchups      map[string]bool   // Track active catchup operations
 	catchupMu           sync.Mutex        // Mutex for the activeCatchups map
 	logger              logger.Logger
+
+	// Goroutine cleanup management
+	cleanupCtx    context.Context    // Context for cleanup operations
+	cleanupCancel context.CancelFunc // Cancel function for cleanup context
+	goroutineWg   sync.WaitGroup     // WaitGroup to track all goroutines
+	isShutdown    bool               // Flag to prevent new goroutines after shutdown
+	shutdownMu    sync.RWMutex       // Mutex for shutdown operations
 }
 
 // NewEventCatchupService creates a new EventCatchupService instance
@@ -69,6 +76,9 @@ func NewEventCatchupService(
 	db db.Database,
 	logger logger.Logger,
 ) *EventCatchupService {
+	// Create cleanup context
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+
 	return &EventCatchupService{
 		intentServices:      intentServices,
 		fulfillmentServices: fulfillmentServices,
@@ -79,17 +89,24 @@ func NewEventCatchupService(
 		settlementProgress:  make(map[uint64]uint64),
 		activeCatchups:      make(map[string]bool),
 		logger:              logger,
+		cleanupCtx:          cleanupCtx,
+		cleanupCancel:       cleanupCancel,
 	}
 }
 
 // StartListening starts the coordinated event listening process
 func (s *EventCatchupService) StartListening(ctx context.Context) error {
+	// Check if service is shutdown
+	if s.IsShutdown() {
+		return fmt.Errorf("cannot start listening: service is shutdown")
+	}
+
 	s.logger.Notice("Starting event catchup service")
 
 	// Start a monitoring goroutine to periodically log the status
-	monitorCtx, monitorCancel := context.WithCancel(ctx)
-	defer monitorCancel()
-	go s.monitorCatchupProgress(monitorCtx)
+	s.startGoroutine("catchup-monitor", func() {
+		s.monitorCatchupProgress(s.cleanupCtx)
+	})
 
 	// Load config
 	cfg, err := config.LoadConfig()
@@ -198,8 +215,6 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		for i, err := range catchupErrors {
 			s.logger.Info("Catchup error %d: %v", i+1, err)
 		}
-		// Still return an error if there were any issues, but services will be running
-		return fmt.Errorf("catchup process completed with %d errors", len(catchupErrors))
 	}
 
 	return nil
@@ -1828,4 +1843,69 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 			return
 		}
 	}
+}
+
+// Shutdown gracefully shuts down the service and waits for all goroutines to complete
+func (s *EventCatchupService) Shutdown(timeout time.Duration) error {
+	s.shutdownMu.Lock()
+	if s.isShutdown {
+		s.shutdownMu.Unlock()
+		return nil // Already shutdown
+	}
+	s.isShutdown = true
+	s.shutdownMu.Unlock()
+
+	s.logger.Info("Shutting down EventCatchupService...")
+
+	// Cancel the cleanup context to signal all goroutines to stop
+	s.cleanupCancel()
+
+	// Wait for all goroutines to complete with timeout
+	done := make(chan struct{})
+	go func() {
+		s.goroutineWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.Info("EventCatchupService shutdown completed successfully")
+		return nil
+	case <-time.After(timeout):
+		s.logger.Error("EventCatchupService shutdown timed out after %v", timeout)
+		return fmt.Errorf("shutdown timed out after %v", timeout)
+	}
+}
+
+// IsShutdown returns whether the service is in shutdown state
+func (s *EventCatchupService) IsShutdown() bool {
+	s.shutdownMu.RLock()
+	defer s.shutdownMu.RUnlock()
+	return s.isShutdown
+}
+
+// startGoroutine safely starts a goroutine with proper cleanup tracking
+func (s *EventCatchupService) startGoroutine(name string, fn func()) {
+	s.shutdownMu.RLock()
+	if s.isShutdown {
+		s.shutdownMu.RUnlock()
+		s.logger.Debug("Cannot start goroutine %s: service is shutdown", name)
+		return
+	}
+	s.shutdownMu.RUnlock()
+
+	s.goroutineWg.Add(1)
+
+	go func() {
+		defer func() {
+			s.goroutineWg.Done()
+
+			// Recover from panics
+			if r := recover(); r != nil {
+				s.logger.Error("CRITICAL: Panic in goroutine %s: %v", name, r)
+			}
+		}()
+
+		fn()
+	}()
 }

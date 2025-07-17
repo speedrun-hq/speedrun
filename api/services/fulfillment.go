@@ -44,6 +44,13 @@ type FulfillmentService struct {
 	subs           map[string]ethereum.Subscription
 	mu             sync.Mutex
 	logger         logger.Logger
+
+	// Goroutine cleanup management
+	cleanupCtx    context.Context    // Context for cleanup operations
+	cleanupCancel context.CancelFunc // Cancel function for cleanup context
+	goroutineWg   sync.WaitGroup     // WaitGroup to track all goroutines
+	isShutdown    bool               // Flag to prevent new goroutines after shutdown
+	shutdownMu    sync.RWMutex       // Mutex for shutdown operations
 }
 
 // NewFulfillmentService creates a new FulfillmentService instance
@@ -61,6 +68,9 @@ func NewFulfillmentService(
 		return nil, fmt.Errorf("failed to parse contract ABI: %v", err)
 	}
 
+	// Create cleanup context
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+
 	return &FulfillmentService{
 		client:         client,
 		clientResolver: clientResolver,
@@ -69,11 +79,18 @@ func NewFulfillmentService(
 		chainID:        chainID,
 		subs:           make(map[string]ethereum.Subscription),
 		logger:         logger,
+		cleanupCtx:     cleanupCtx,
+		cleanupCancel:  cleanupCancel,
 	}, nil
 }
 
 // StartListening starts listening for fulfillment events on all chains
 func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress common.Address) error {
+	// Check if service is shutdown
+	if s.IsShutdown() {
+		return fmt.Errorf("cannot start listening: service is shutdown")
+	}
+
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
@@ -99,7 +116,9 @@ func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress
 	s.logger.InfoWithChain(s.chainID, "Successfully subscribed to fulfillment events for contract %s",
 		contractAddress.Hex())
 
-	go s.processEventLogs(ctx, sub, logs, subID)
+	s.startGoroutine("fulfillment-processor", func() {
+		s.processEventLogs(s.cleanupCtx, sub, logs, subID)
+	})
 	return nil
 }
 
@@ -649,4 +668,72 @@ func (s *FulfillmentService) UnsubscribeAll() {
 		s.logger.Debug("Unsubscribed from fulfillment subscription %s on chain %d", id, s.chainID)
 		delete(s.subs, id)
 	}
+}
+
+// Shutdown gracefully shuts down the service and waits for all goroutines to complete
+func (s *FulfillmentService) Shutdown(timeout time.Duration) error {
+	s.shutdownMu.Lock()
+	if s.isShutdown {
+		s.shutdownMu.Unlock()
+		return nil // Already shutdown
+	}
+	s.isShutdown = true
+	s.shutdownMu.Unlock()
+
+	s.logger.InfoWithChain(s.chainID, "Shutting down FulfillmentService...")
+
+	// Cancel the cleanup context to signal all goroutines to stop
+	s.cleanupCancel()
+
+	// Unsubscribe from all subscriptions
+	s.UnsubscribeAll()
+
+	// Wait for all goroutines to complete with timeout
+	done := make(chan struct{})
+	go func() {
+		s.goroutineWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.InfoWithChain(s.chainID, "FulfillmentService shutdown completed successfully")
+		return nil
+	case <-time.After(timeout):
+		s.logger.ErrorWithChain(s.chainID, "FulfillmentService shutdown timed out after %v", timeout)
+		return fmt.Errorf("shutdown timed out after %v", timeout)
+	}
+}
+
+// IsShutdown returns whether the service is in shutdown state
+func (s *FulfillmentService) IsShutdown() bool {
+	s.shutdownMu.RLock()
+	defer s.shutdownMu.RUnlock()
+	return s.isShutdown
+}
+
+// startGoroutine safely starts a goroutine with proper cleanup tracking
+func (s *FulfillmentService) startGoroutine(name string, fn func()) {
+	s.shutdownMu.RLock()
+	if s.isShutdown {
+		s.shutdownMu.RUnlock()
+		s.logger.DebugWithChain(s.chainID, "Cannot start goroutine %s: service is shutdown", name)
+		return
+	}
+	s.shutdownMu.RUnlock()
+
+	s.goroutineWg.Add(1)
+
+	go func() {
+		defer func() {
+			s.goroutineWg.Done()
+
+			// Recover from panics
+			if r := recover(); r != nil {
+				s.logger.Error("CRITICAL: Panic in goroutine %s: %v", name, r)
+			}
+		}()
+
+		fn()
+	}()
 }

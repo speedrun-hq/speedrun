@@ -48,6 +48,11 @@ const (
 	DefaultDBTimeout  = 10 * time.Second // Increased from 5s for complex DB operations
 	DefaultRPCTimeout = 15 * time.Second // For RPC calls that might be slow
 	DefaultLogTimeout = 45 * time.Second // Increased from 30s for slow log processing
+
+	// Ticker intervals for reduced CPU usage
+	HealthCheckInterval  = 5 * time.Minute // Health check every 5 minutes
+	DebugLogInterval     = 2 * time.Minute // Debug logs every 2 minutes (reduced from 30s)
+	HealthTickerInterval = 1 * time.Minute // Health ticker every 1 minute
 )
 
 // IntentService handles monitoring and processing of intent events
@@ -76,6 +81,13 @@ type IntentService struct {
 	isZetaChain      bool      // Whether this is ZetaChain (uses polling instead of subscriptions)
 	lastPollingCheck time.Time // Last time polling health was verified
 	pollingHealthy   bool      // Whether HTTP polling is working
+
+	// Goroutine cleanup management
+	cleanupCtx    context.Context    // Context for cleanup operations
+	cleanupCancel context.CancelFunc // Cancel function for cleanup context
+	goroutineWg   sync.WaitGroup     // WaitGroup to track all goroutines
+	isShutdown    bool               // Flag to prevent new goroutines after shutdown
+	shutdownMu    sync.RWMutex       // Mutex for shutdown operations
 }
 
 // NewIntentService creates a new IntentService instance
@@ -98,6 +110,9 @@ func NewIntentService(
 	// Detect if this is ZetaChain (uses polling instead of subscriptions)
 	isZetaChain := chainID == 7000
 
+	// Create cleanup context
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+
 	return &IntentService{
 		client:         client,
 		clientResolver: clientResolver,
@@ -110,6 +125,8 @@ func NewIntentService(
 		startTime:      time.Now(),
 		isZetaChain:    isZetaChain,
 		pollingHealthy: isZetaChain, // ZetaChain starts as healthy (polling assumed working)
+		cleanupCtx:     cleanupCtx,
+		cleanupCancel:  cleanupCancel,
 	}, nil
 }
 
@@ -324,49 +341,43 @@ func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress
 
 // StartHealthMonitor starts a goroutine that monitors the health of the service
 func (s *IntentService) StartHealthMonitor(ctx context.Context, contractAddress common.Address) {
-	go func() {
-		// Increment goroutine counter for the health monitor
-		atomic.AddInt32(&s.activeGoroutines, 1)
-		defer atomic.AddInt32(&s.activeGoroutines, -1)
+	ticker := time.NewTicker(HealthCheckInterval) // Use constant for reduced CPU usage
+	defer ticker.Stop()
 
-		ticker := time.NewTicker(5 * time.Minute) // Check every 5 minutes
-		defer ticker.Stop()
+	consecutiveFailures := 0
+	maxConsecutiveFailures := 3
 
-		consecutiveFailures := 0
-		maxConsecutiveFailures := 3
+	for {
+		select {
+		case <-ticker.C:
+			// Check if service is healthy
+			if !s.IsHealthy() {
+				consecutiveFailures++
+				s.logger.InfoWithChain(s.chainID, "Health check failed (%d/%d): activeGoroutines=%d, subscriptions=%d",
+					consecutiveFailures, maxConsecutiveFailures, s.ActiveGoroutines(), s.GetSubscriptionCount())
 
-		for {
-			select {
-			case <-ticker.C:
-				// Check if service is healthy
-				if !s.IsHealthy() {
-					consecutiveFailures++
-					s.logger.InfoWithChain(s.chainID, "Health check failed (%d/%d): activeGoroutines=%d, subscriptions=%d",
-						consecutiveFailures, maxConsecutiveFailures, s.ActiveGoroutines(), s.GetSubscriptionCount())
+				if consecutiveFailures >= maxConsecutiveFailures {
+					s.logger.InfoWithChain(s.chainID, "Service appears unhealthy, attempting restart")
 
-					if consecutiveFailures >= maxConsecutiveFailures {
-						s.logger.InfoWithChain(s.chainID, "Service appears unhealthy, attempting restart")
-
-						// Attempt to restart the subscription
-						if err := s.RestartSubscription(ctx, contractAddress); err != nil {
-							s.logger.ErrorWithChain(s.chainID, "Failed to restart subscription: %v", err)
-						} else {
-							consecutiveFailures = 0 // Reset counter on successful restart
-						}
-					}
-				} else {
-					// Service is healthy, reset failure counter
-					if consecutiveFailures > 0 {
-						s.logger.InfoWithChain(s.chainID, "Service health restored")
-						consecutiveFailures = 0
+					// Attempt to restart the subscription
+					if err := s.RestartSubscription(ctx, contractAddress); err != nil {
+						s.logger.ErrorWithChain(s.chainID, "Failed to restart subscription: %v", err)
+					} else {
+						consecutiveFailures = 0 // Reset counter on successful restart
 					}
 				}
-			case <-ctx.Done():
-				s.logger.DebugWithChain(s.chainID, "Health monitor shutting down")
-				return
+			} else {
+				// Service is healthy, reset failure counter
+				if consecutiveFailures > 0 {
+					s.logger.InfoWithChain(s.chainID, "Service health restored")
+					consecutiveFailures = 0
+				}
 			}
+		case <-ctx.Done():
+			s.logger.DebugWithChain(s.chainID, "Health monitor shutting down")
+			return
 		}
-	}()
+	}
 }
 
 // StartListening starts a goroutine to listen for intent events from the specified contract address.
@@ -379,6 +390,11 @@ func (s *IntentService) StartHealthMonitor(ctx context.Context, contractAddress 
 // Returns:
 //   - error: Any error that occurred during setup
 func (s *IntentService) StartListening(ctx context.Context, contractAddress common.Address) error {
+	// Check if service is shutdown
+	if s.IsShutdown() {
+		return fmt.Errorf("cannot start listening: service is shutdown")
+	}
+
 	// Check if the client is using a websocket connection, which is needed for subscriptions
 	clientType := reflect.TypeOf(s.client).String()
 	isWebsocket := strings.Contains(strings.ToLower(clientType), "websocket")
@@ -399,28 +415,31 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 	}
 
 	// Start a goroutine to monitor the error channel
-	go s.monitorErrors(ctx)
+	s.startGoroutine("error-monitor", func() {
+		s.monitorErrors(s.cleanupCtx)
+	})
 
 	// Start the subscription listener with automatic reconnection
-	go s.startSubscriptionWithReconnection(ctx, contractAddress, latestBlock)
+	s.startGoroutine("subscription-reconnection", func() {
+		s.startSubscriptionWithReconnection(s.cleanupCtx, contractAddress, latestBlock)
+	})
 
 	// Start the health monitor
-	s.StartHealthMonitor(ctx, contractAddress)
+	s.startGoroutine("health-monitor", func() {
+		s.StartHealthMonitor(s.cleanupCtx, contractAddress)
+	})
 
 	return nil
 }
 
 // monitorErrors processes errors from goroutines
 func (s *IntentService) monitorErrors(ctx context.Context) {
-	// Increment goroutine counter
-	atomic.AddInt32(&s.activeGoroutines, 1)
-	defer atomic.AddInt32(&s.activeGoroutines, -1)
-
 	for {
 		select {
 		case err := <-s.errChannel:
 			s.logger.Error("Error in IntentService goroutine: %v", err)
 		case <-ctx.Done():
+			s.logger.DebugWithChain(s.chainID, "Error monitor shutting down")
 			return
 		}
 	}
@@ -428,20 +447,7 @@ func (s *IntentService) monitorErrors(ctx context.Context) {
 
 // startSubscriptionWithReconnection handles the subscription lifecycle with automatic reconnection
 func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, contractAddress common.Address, startBlock uint64) {
-	// Increment goroutine counter
-	atomic.AddInt32(&s.activeGoroutines, 1)
-	defer atomic.AddInt32(&s.activeGoroutines, -1)
-
 	subID := contractAddress.Hex()
-
-	// Add panic recovery
-	defer func() {
-		if r := recover(); r != nil {
-			err := fmt.Errorf("recovered from panic in startSubscriptionWithReconnection: %v\nstack: %s", r, debug.Stack())
-			s.errChannel <- err
-			s.logger.Error("CRITICAL: %v", err)
-		}
-	}()
 
 	// Retry configuration
 	maxRetries := 10
@@ -551,11 +557,11 @@ func (s *IntentService) runEventProcessingLoop(ctx context.Context, sub ethereum
 	s.logger.InfoWithChain(s.chainID, "Starting event log processing, subscription %s", subID)
 
 	// Use a ticker to periodically check system health
-	healthTicker := time.NewTicker(1 * time.Minute)
+	healthTicker := time.NewTicker(HealthTickerInterval)
 	defer healthTicker.Stop()
 
 	// Add a ticker for debugging to periodically log subscription status
-	debugTicker := time.NewTicker(30 * time.Second)
+	debugTicker := time.NewTicker(DebugLogInterval)
 	defer debugTicker.Stop()
 
 	// Track the number of events processed for debugging
@@ -1114,4 +1120,95 @@ func (s *IntentService) UnsubscribeAll() {
 		s.logger.Debug("Unsubscribed from intent subscription %s on chain %d", id, s.chainID)
 		delete(s.subs, id)
 	}
+}
+
+// drainErrorChannel drains the error channel to prevent goroutine leaks during shutdown
+func (s *IntentService) drainErrorChannel() {
+	// Drain the error channel with a shorter timeout to prevent blocking
+	drainCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	for {
+		select {
+		case <-s.errChannel:
+			// Consume and discard errors during shutdown
+		case <-drainCtx.Done():
+			return
+		}
+	}
+}
+
+// Shutdown gracefully shuts down the service and waits for all goroutines to complete
+func (s *IntentService) Shutdown(timeout time.Duration) error {
+	s.shutdownMu.Lock()
+	if s.isShutdown {
+		s.shutdownMu.Unlock()
+		return nil // Already shutdown
+	}
+	s.isShutdown = true
+	s.shutdownMu.Unlock()
+
+	s.logger.InfoWithChain(s.chainID, "Shutting down IntentService...")
+
+	// Cancel the cleanup context to signal all goroutines to stop
+	s.cleanupCancel()
+
+	// Unsubscribe from all subscriptions
+	s.UnsubscribeAll()
+
+	// Drain the error channel to prevent goroutine leaks (run in current goroutine)
+	s.drainErrorChannel()
+
+	// Wait for all goroutines to complete with timeout
+	done := make(chan struct{})
+	go func() {
+		s.goroutineWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.InfoWithChain(s.chainID, "IntentService shutdown completed successfully")
+		return nil
+	case <-time.After(timeout):
+		s.logger.ErrorWithChain(s.chainID, "IntentService shutdown timed out after %v", timeout)
+		return fmt.Errorf("shutdown timed out after %v", timeout)
+	}
+}
+
+// IsShutdown returns whether the service is in shutdown state
+func (s *IntentService) IsShutdown() bool {
+	s.shutdownMu.RLock()
+	defer s.shutdownMu.RUnlock()
+	return s.isShutdown
+}
+
+// startGoroutine safely starts a goroutine with proper cleanup tracking
+func (s *IntentService) startGoroutine(name string, fn func()) {
+	s.shutdownMu.RLock()
+	if s.isShutdown {
+		s.shutdownMu.RUnlock()
+		s.logger.DebugWithChain(s.chainID, "Cannot start goroutine %s: service is shutdown", name)
+		return
+	}
+	s.shutdownMu.RUnlock()
+
+	s.goroutineWg.Add(1)
+	atomic.AddInt32(&s.activeGoroutines, 1)
+
+	go func() {
+		defer func() {
+			s.goroutineWg.Done()
+			atomic.AddInt32(&s.activeGoroutines, -1)
+
+			// Recover from panics
+			if r := recover(); r != nil {
+				err := fmt.Errorf("panic in goroutine %s: %v\nstack: %s", name, r, debug.Stack())
+				s.errChannel <- err
+				s.logger.Error("CRITICAL: %v", err)
+			}
+		}()
+
+		fn()
+	}()
 }

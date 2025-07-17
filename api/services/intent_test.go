@@ -11,7 +11,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/logger"
 	"github.com/speedrun-hq/speedrun/api/models"
+	"github.com/speedrun-hq/speedrun/api/services/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -387,4 +389,138 @@ func TestIntentService_CreateCallIntent(t *testing.T) {
 // FindSQLResultMockUsage finds where SQLResultMock is actually used
 func FindSQLResultMockUsage(t *testing.T) {
 	_ = new(db.SQLResultMock)
+}
+
+func TestIntentServiceGoroutineCleanup(t *testing.T) {
+	// Create a mock logger
+	logger := logger.NewStdLogger(false, logger.DebugLevel)
+
+	// Create a mock database
+	mockDB := &db.MockDB{}
+
+	// Create a mock client resolver
+	mockResolver := &mocks.MockClientResolver{}
+
+	// Create intent service
+	intentService, err := NewIntentService(
+		nil, // client will be nil for this test
+		mockResolver,
+		mockDB,
+		`[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"receiver","type":"bytes"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"salt","type":"uint256"}],"name":"IntentInitiated","type":"event"}]`,
+		1, // chainID
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create IntentService: %v", err)
+	}
+
+	// Test that service is not shutdown initially
+	if intentService.IsShutdown() {
+		t.Error("Service should not be shutdown initially")
+	}
+
+	// Test that we can start goroutines
+	initialGoroutines := intentService.ActiveGoroutines()
+
+	// Start a test goroutine
+	intentService.startGoroutine("test-goroutine", func() {
+		time.Sleep(100 * time.Millisecond)
+	})
+
+	// Wait a bit for goroutine to start
+	time.Sleep(50 * time.Millisecond)
+
+	if intentService.ActiveGoroutines() <= initialGoroutines {
+		t.Error("Goroutine count should increase after starting a goroutine")
+	}
+
+	// Test shutdown
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = intentService.Shutdown(2 * time.Second)
+	if err != nil {
+		t.Errorf("Shutdown failed: %v", err)
+	}
+
+	// Test that service is now shutdown
+	if !intentService.IsShutdown() {
+		t.Error("Service should be shutdown after Shutdown() call")
+	}
+
+	// Test that we cannot start new goroutines after shutdown
+	intentService.startGoroutine("post-shutdown-goroutine", func() {
+		// This should not execute
+		t.Error("Goroutine should not start after shutdown")
+	})
+
+	// Wait for shutdown to complete
+	select {
+	case <-shutdownCtx.Done():
+		t.Error("Shutdown timed out")
+	default:
+		// Shutdown completed successfully
+	}
+
+	// Verify goroutine count is back to initial state
+	if intentService.ActiveGoroutines() != 0 {
+		t.Errorf("Expected 0 active goroutines after shutdown, got %d", intentService.ActiveGoroutines())
+	}
+}
+
+func TestIntentServiceShutdownTimeout(t *testing.T) {
+	// Create a mock logger
+	logger := logger.NewStdLogger(false, logger.DebugLevel)
+
+	// Create a mock database
+	mockDB := &db.MockDB{}
+
+	// Create a mock client resolver
+	mockResolver := &mocks.MockClientResolver{}
+
+	// Create intent service
+	intentService, err := NewIntentService(
+		nil, // client will be nil for this test
+		mockResolver,
+		mockDB,
+		`[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"receiver","type":"bytes"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"salt","type":"uint256"}],"name":"IntentInitiated","type":"event"}]`,
+		1, // chainID
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create IntentService: %v", err)
+	}
+
+	// Start a long-running goroutine that will cause timeout
+	intentService.startGoroutine("long-running", func() {
+		time.Sleep(3 * time.Second) // Longer than shutdown timeout
+	})
+
+	// Wait a bit for goroutine to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Test shutdown with short timeout
+	err = intentService.Shutdown(1 * time.Second)
+	if err == nil {
+		t.Error("Expected shutdown to timeout, but it succeeded")
+	}
+
+	// Verify error message contains timeout information
+	if err != nil && !contains(err.Error(), "timed out") {
+		t.Errorf("Expected timeout error, got: %v", err)
+	}
+}
+
+// Helper function to check if string contains substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			func() bool {
+				for i := 1; i <= len(s)-len(substr); i++ {
+					if s[i:i+len(substr)] == substr {
+						return true
+					}
+				}
+				return false
+			}())))
 }
