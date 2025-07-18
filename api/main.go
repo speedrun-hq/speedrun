@@ -87,13 +87,19 @@ func main() {
 		database,
 		lg,
 	)
+
+	// Register EventCatchupService with metrics service
+	metricsService.RegisterEventCatchupService(eventCatchupService)
+
 	err = eventCatchupService.StartListening(ctx)
 	if err != nil {
 		lg.Error("Failed to start event catchup service error: %v", err)
 	}
 
 	// Start subscription supervisor to monitor and restart services if needed
-	go eventCatchupService.StartSubscriptionSupervisor(ctx, cfg)
+	eventCatchupService.StartGoroutine("subscription-supervisor", func() {
+		eventCatchupService.StartSubscriptionSupervisor(ctx, cfg)
+	})
 	lg.Info("Started subscription supervisor to monitor service health")
 
 	// Perform a simple diagnostic check on clients

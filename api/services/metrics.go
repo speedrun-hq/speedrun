@@ -17,6 +17,10 @@ type MetricsService struct {
 	// Prometheus metrics
 	intentServicesUp         *prometheus.GaugeVec
 	activeGoroutines         *prometheus.GaugeVec
+	intentGoroutines         *prometheus.GaugeVec
+	fulfillmentGoroutines    *prometheus.GaugeVec
+	settlementGoroutines     *prometheus.GaugeVec
+	catchupGoroutines        *prometheus.GaugeVec
 	subscriptionCount        *prometheus.GaugeVec
 	eventsProcessedTotal     *prometheus.GaugeVec
 	eventsSkippedTotal       *prometheus.GaugeVec
@@ -30,6 +34,7 @@ type MetricsService struct {
 	intentServices      map[uint64]*IntentService
 	fulfillmentServices map[uint64]*FulfillmentService
 	settlementServices  map[uint64]*SettlementService
+	eventCatchupService *EventCatchupService
 	mu                  sync.RWMutex
 	logger              logger.Logger
 	registry            *prometheus.Registry
@@ -52,6 +57,38 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 		prometheus.GaugeOpts{
 			Name: "speedrun_active_goroutines",
 			Help: "Number of active goroutines per chain",
+		},
+		[]string{"chain_id", "chain_name"},
+	)
+
+	intentGoroutines := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "speedrun_intent_goroutines",
+			Help: "Number of active goroutines in intent service per chain",
+		},
+		[]string{"chain_id", "chain_name"},
+	)
+
+	fulfillmentGoroutines := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "speedrun_fulfillment_goroutines",
+			Help: "Number of active goroutines in fulfillment service per chain",
+		},
+		[]string{"chain_id", "chain_name"},
+	)
+
+	settlementGoroutines := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "speedrun_settlement_goroutines",
+			Help: "Number of active goroutines in settlement service per chain",
+		},
+		[]string{"chain_id", "chain_name"},
+	)
+
+	catchupGoroutines := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "speedrun_catchup_goroutines",
+			Help: "Number of active goroutines in event catchup service (global)",
 		},
 		[]string{"chain_id", "chain_name"},
 	)
@@ -123,6 +160,10 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 	// Register metrics
 	registry.MustRegister(intentServicesUp)
 	registry.MustRegister(activeGoroutines)
+	registry.MustRegister(intentGoroutines)
+	registry.MustRegister(fulfillmentGoroutines)
+	registry.MustRegister(settlementGoroutines)
+	registry.MustRegister(catchupGoroutines)
 	registry.MustRegister(subscriptionCount)
 	registry.MustRegister(eventsProcessedTotal)
 	registry.MustRegister(eventsSkippedTotal)
@@ -135,6 +176,10 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 	return &MetricsService{
 		intentServicesUp:         intentServicesUp,
 		activeGoroutines:         activeGoroutines,
+		intentGoroutines:         intentGoroutines,
+		fulfillmentGoroutines:    fulfillmentGoroutines,
+		settlementGoroutines:     settlementGoroutines,
+		catchupGoroutines:        catchupGoroutines,
 		subscriptionCount:        subscriptionCount,
 		eventsProcessedTotal:     eventsProcessedTotal,
 		eventsSkippedTotal:       eventsSkippedTotal,
@@ -176,6 +221,15 @@ func (m *MetricsService) RegisterSettlementService(chainID uint64, service *Sett
 
 	m.settlementServices[chainID] = service
 	m.logger.Info("Registered settlement service for chain %d in metrics collector", chainID)
+}
+
+// RegisterEventCatchupService registers the event catchup service for metrics collection
+func (m *MetricsService) RegisterEventCatchupService(service *EventCatchupService) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.eventCatchupService = service
+	m.logger.Info("Registered event catchup service in metrics collector")
 }
 
 // UnregisterIntentService removes an intent service from metrics collection
@@ -222,21 +276,48 @@ func (m *MetricsService) UpdateMetrics() {
 	// Collect goroutines from intent services
 	for chainID, service := range m.intentServices {
 		if service != nil {
-			chainGoroutines[chainID] += service.ActiveGoroutines()
+			goroutines := service.ActiveGoroutines()
+			chainGoroutines[chainID] += goroutines
+
+			// Emit intent service goroutines metric
+			chainName := m.GetChainName(chainID)
+			chainIDStr := fmt.Sprintf("%d", chainID)
+			m.intentGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(goroutines))
 		}
 	}
 
 	// Collect goroutines from fulfillment services
 	for chainID, service := range m.fulfillmentServices {
 		if service != nil {
-			chainGoroutines[chainID] += service.ActiveGoroutines()
+			goroutines := service.ActiveGoroutines()
+			chainGoroutines[chainID] += goroutines
+
+			// Emit fulfillment service goroutines metric
+			chainName := m.GetChainName(chainID)
+			chainIDStr := fmt.Sprintf("%d", chainID)
+			m.fulfillmentGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(goroutines))
 		}
 	}
 
 	// Collect goroutines from settlement services
 	for chainID, service := range m.settlementServices {
 		if service != nil {
-			chainGoroutines[chainID] += service.ActiveGoroutines()
+			goroutines := service.ActiveGoroutines()
+			chainGoroutines[chainID] += goroutines
+
+			// Emit settlement service goroutines metric
+			chainName := m.GetChainName(chainID)
+			chainIDStr := fmt.Sprintf("%d", chainID)
+			m.settlementGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(goroutines))
+		}
+	}
+
+	// Add EventCatchupService goroutines to all chains (it's a global service)
+	var catchupGoroutines int32
+	if m.eventCatchupService != nil {
+		catchupGoroutines = m.eventCatchupService.ActiveGoroutines()
+		for chainID := range chainGoroutines {
+			chainGoroutines[chainID] += catchupGoroutines
 		}
 	}
 
@@ -244,6 +325,9 @@ func (m *MetricsService) UpdateMetrics() {
 	for chainID, totalGoroutines := range chainGoroutines {
 		chainName := m.GetChainName(chainID)
 		chainIDStr := fmt.Sprintf("%d", chainID)
+
+		// Emit catchup goroutines metric for this chain
+		m.catchupGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(catchupGoroutines))
 
 		// Update intent service metrics (for backward compatibility)
 		if intentService, exists := m.intentServices[chainID]; exists && intentService != nil {
@@ -349,6 +433,14 @@ func (m *MetricsService) GetMetricsSummary() map[string]interface{} {
 	for chainID, service := range m.settlementServices {
 		if service != nil {
 			chainGoroutines[chainID] += service.ActiveGoroutines()
+		}
+	}
+
+	// Add EventCatchupService goroutines to all chains (it's a global service)
+	if m.eventCatchupService != nil {
+		catchupGoroutines := m.eventCatchupService.ActiveGoroutines()
+		for chainID := range chainGoroutines {
+			chainGoroutines[chainID] += catchupGoroutines
 		}
 	}
 
