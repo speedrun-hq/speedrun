@@ -62,9 +62,17 @@ func main() {
 	// Create metrics service
 	metricsService := services.NewMetricsService(lg)
 
-	// Register all intent services with the metrics service
+	// Register all services with the metrics service
 	for chainID, intentService := range intentServices {
 		metricsService.RegisterIntentService(chainID, intentService)
+	}
+
+	for chainID, fulfillmentService := range fulfillmentServices {
+		metricsService.RegisterFulfillmentService(chainID, fulfillmentService)
+	}
+
+	for chainID, settlementService := range settlementServices {
+		metricsService.RegisterSettlementService(chainID, settlementService)
 	}
 
 	// Start the metrics updater
