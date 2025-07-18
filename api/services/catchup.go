@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/speedrun-hq/speedrun/api/logger"
@@ -60,6 +61,9 @@ type EventCatchupService struct {
 	catchupMu           sync.Mutex        // Mutex for the activeCatchups map
 	logger              logger.Logger
 
+	// Goroutine tracking
+	activeGoroutines int32 // Counter for active goroutines
+
 	// Goroutine cleanup management
 	cleanupCtx    context.Context    // Context for cleanup operations
 	cleanupCancel context.CancelFunc // Cancel function for cleanup context
@@ -104,7 +108,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	s.logger.Notice("Starting event catchup service")
 
 	// Start a monitoring goroutine to periodically log the status
-	s.startGoroutine("catchup-monitor", func() {
+	s.StartGoroutine("catchup-monitor", func() {
 		s.monitorCatchupProgress(s.cleanupCtx)
 	})
 
@@ -1884,8 +1888,8 @@ func (s *EventCatchupService) IsShutdown() bool {
 	return s.isShutdown
 }
 
-// startGoroutine safely starts a goroutine with proper cleanup tracking
-func (s *EventCatchupService) startGoroutine(name string, fn func()) {
+// StartGoroutine safely starts a goroutine with proper cleanup tracking
+func (s *EventCatchupService) StartGoroutine(name string, fn func()) {
 	s.shutdownMu.RLock()
 	if s.isShutdown {
 		s.shutdownMu.RUnlock()
@@ -1895,10 +1899,12 @@ func (s *EventCatchupService) startGoroutine(name string, fn func()) {
 	s.shutdownMu.RUnlock()
 
 	s.goroutineWg.Add(1)
+	atomic.AddInt32(&s.activeGoroutines, 1)
 
 	go func() {
 		defer func() {
 			s.goroutineWg.Done()
+			atomic.AddInt32(&s.activeGoroutines, -1)
 
 			// Recover from panics
 			if r := recover(); r != nil {
@@ -1908,4 +1914,9 @@ func (s *EventCatchupService) startGoroutine(name string, fn func()) {
 
 		fn()
 	}()
+}
+
+// ActiveGoroutines returns the current count of active goroutines
+func (s *EventCatchupService) ActiveGoroutines() int32 {
+	return atomic.LoadInt32(&s.activeGoroutines)
 }
