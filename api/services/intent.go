@@ -332,7 +332,9 @@ func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress
 	atomic.AddInt64(&s.reconnectionCount, 1)
 
 	// Start a new subscription with reconnection
-	go s.startSubscriptionWithReconnection(ctx, contractAddress, startBlock)
+	s.startGoroutine("restart-subscription", func() {
+		s.startSubscriptionWithReconnection(ctx, contractAddress, startBlock)
+	})
 
 	s.logger.InfoWithChain(s.chainID, "Restarted subscription for contract %s (reconnection #%d)",
 		contractAddress.Hex(), atomic.LoadInt64(&s.reconnectionCount))

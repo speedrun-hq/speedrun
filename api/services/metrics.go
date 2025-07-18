@@ -27,10 +27,12 @@ type MetricsService struct {
 	lastHealthCheckTimestamp *prometheus.GaugeVec
 
 	// Service references
-	intentServices map[uint64]*IntentService
-	mu             sync.RWMutex
-	logger         logger.Logger
-	registry       *prometheus.Registry
+	intentServices      map[uint64]*IntentService
+	fulfillmentServices map[uint64]*FulfillmentService
+	settlementServices  map[uint64]*SettlementService
+	mu                  sync.RWMutex
+	logger              logger.Logger
+	registry            *prometheus.Registry
 }
 
 // NewMetricsService creates a new metrics service
@@ -142,6 +144,8 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 		timeSinceLastEvent:       timeSinceLastEvent,
 		lastHealthCheckTimestamp: lastHealthCheckTimestamp,
 		intentServices:           make(map[uint64]*IntentService),
+		fulfillmentServices:      make(map[uint64]*FulfillmentService),
+		settlementServices:       make(map[uint64]*SettlementService),
 		logger:                   logger,
 		registry:                 registry,
 	}
@@ -154,6 +158,24 @@ func (m *MetricsService) RegisterIntentService(chainID uint64, service *IntentSe
 
 	m.intentServices[chainID] = service
 	m.logger.Info("Registered intent service for chain %d in metrics collector", chainID)
+}
+
+// RegisterFulfillmentService registers a fulfillment service for metrics collection
+func (m *MetricsService) RegisterFulfillmentService(chainID uint64, service *FulfillmentService) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.fulfillmentServices[chainID] = service
+	m.logger.Info("Registered fulfillment service for chain %d in metrics collector", chainID)
+}
+
+// RegisterSettlementService registers a settlement service for metrics collection
+func (m *MetricsService) RegisterSettlementService(chainID uint64, service *SettlementService) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.settlementServices[chainID] = service
+	m.logger.Info("Registered settlement service for chain %d in metrics collector", chainID)
 }
 
 // UnregisterIntentService removes an intent service from metrics collection
@@ -194,54 +216,80 @@ func (m *MetricsService) UpdateMetrics() {
 
 	now := time.Now()
 
-	for chainID, service := range m.intentServices {
-		if service == nil {
-			continue
-		}
+	// Create a map to track total goroutines per chain
+	chainGoroutines := make(map[uint64]int32)
 
-		metrics := service.GetMetrics()
+	// Collect goroutines from intent services
+	for chainID, service := range m.intentServices {
+		if service != nil {
+			chainGoroutines[chainID] += service.ActiveGoroutines()
+		}
+	}
+
+	// Collect goroutines from fulfillment services
+	for chainID, service := range m.fulfillmentServices {
+		if service != nil {
+			chainGoroutines[chainID] += service.ActiveGoroutines()
+		}
+	}
+
+	// Collect goroutines from settlement services
+	for chainID, service := range m.settlementServices {
+		if service != nil {
+			chainGoroutines[chainID] += service.ActiveGoroutines()
+		}
+	}
+
+	// Update metrics for each chain
+	for chainID, totalGoroutines := range chainGoroutines {
 		chainName := m.GetChainName(chainID)
 		chainIDStr := fmt.Sprintf("%d", chainID)
 
-		// Update gauge metrics
-		if metrics.IsHealthy {
-			m.intentServicesUp.WithLabelValues(chainIDStr, chainName).Set(1)
-		} else {
-			m.intentServicesUp.WithLabelValues(chainIDStr, chainName).Set(0)
-		}
+		// Update intent service metrics (for backward compatibility)
+		if intentService, exists := m.intentServices[chainID]; exists && intentService != nil {
+			metrics := intentService.GetMetrics()
 
-		m.activeGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.ActiveGoroutines))
-
-		// For ZetaChain, subscription count is always 0 since it uses HTTP polling
-		// For other chains, report actual subscription count
-		if metrics.IsZetaChain {
-			// ZetaChain uses polling, so report 1 if polling is healthy, 0 if not
-			if metrics.PollingHealthy {
-				m.subscriptionCount.WithLabelValues(chainIDStr, chainName).Set(1)
+			// Update gauge metrics
+			if metrics.IsHealthy {
+				m.intentServicesUp.WithLabelValues(chainIDStr, chainName).Set(1)
 			} else {
-				m.subscriptionCount.WithLabelValues(chainIDStr, chainName).Set(0)
+				m.intentServicesUp.WithLabelValues(chainIDStr, chainName).Set(0)
 			}
-		} else {
-			m.subscriptionCount.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.SubscriptionCount))
+
+			// For ZetaChain, subscription count is always 0 since it uses HTTP polling
+			// For other chains, report actual subscription count
+			if metrics.IsZetaChain {
+				// ZetaChain uses polling, so report 1 if polling is healthy, 0 if not
+				if metrics.PollingHealthy {
+					m.subscriptionCount.WithLabelValues(chainIDStr, chainName).Set(1)
+				} else {
+					m.subscriptionCount.WithLabelValues(chainIDStr, chainName).Set(0)
+				}
+			} else {
+				m.subscriptionCount.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.SubscriptionCount))
+			}
+
+			// Update counter metrics - we need to track the current values and set them
+			// Note: These are counters that reset on service restart, so we use gauges to track current values
+			m.eventsProcessedTotal.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.EventsProcessed))
+			m.eventsSkippedTotal.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.EventsSkipped))
+			m.processingErrorsTotal.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.ProcessingErrors))
+			m.reconnectionCount.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.ReconnectionCount))
+
+			// Update timestamp metrics
+			if !metrics.LastEventTime.IsZero() {
+				m.lastEventTimestamp.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.LastEventTime.Unix()))
+				timeSinceLastEvent := now.Sub(metrics.LastEventTime).Seconds()
+				m.timeSinceLastEvent.WithLabelValues(chainIDStr, chainName).Set(timeSinceLastEvent)
+			}
+
+			if !metrics.LastHealthCheck.IsZero() {
+				m.lastHealthCheckTimestamp.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.LastHealthCheck.Unix()))
+			}
 		}
 
-		// Update counter metrics - we need to track the current values and set them
-		// Note: These are counters that reset on service restart, so we use gauges to track current values
-		m.eventsProcessedTotal.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.EventsProcessed))
-		m.eventsSkippedTotal.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.EventsSkipped))
-		m.processingErrorsTotal.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.ProcessingErrors))
-		m.reconnectionCount.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.ReconnectionCount))
-
-		// Update timestamp metrics
-		if !metrics.LastEventTime.IsZero() {
-			m.lastEventTimestamp.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.LastEventTime.Unix()))
-			timeSinceLastEvent := now.Sub(metrics.LastEventTime).Seconds()
-			m.timeSinceLastEvent.WithLabelValues(chainIDStr, chainName).Set(timeSinceLastEvent)
-		}
-
-		if !metrics.LastHealthCheck.IsZero() {
-			m.lastHealthCheckTimestamp.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.LastHealthCheck.Unix()))
-		}
+		// Update total goroutines metric (sum of all services for this chain)
+		m.activeGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(totalGoroutines))
 	}
 }
 
@@ -280,31 +328,80 @@ func (m *MetricsService) GetMetricsSummary() map[string]interface{} {
 	summary := make(map[string]interface{})
 	chainMetrics := make(map[string]interface{})
 
-	for chainID, service := range m.intentServices {
-		if service == nil {
-			continue
-		}
+	// Create a map to track total goroutines per chain
+	chainGoroutines := make(map[uint64]int32)
 
-		metrics := service.GetMetrics()
+	// Collect goroutines from intent services
+	for chainID, service := range m.intentServices {
+		if service != nil {
+			chainGoroutines[chainID] += service.ActiveGoroutines()
+		}
+	}
+
+	// Collect goroutines from fulfillment services
+	for chainID, service := range m.fulfillmentServices {
+		if service != nil {
+			chainGoroutines[chainID] += service.ActiveGoroutines()
+		}
+	}
+
+	// Collect goroutines from settlement services
+	for chainID, service := range m.settlementServices {
+		if service != nil {
+			chainGoroutines[chainID] += service.ActiveGoroutines()
+		}
+	}
+
+	// Build metrics summary for each chain
+	for chainID, totalGoroutines := range chainGoroutines {
 		chainName := m.GetChainName(chainID)
 
+		// Get intent service metrics for backward compatibility
+		var intentMetrics *ServiceMetrics
+		if intentService, exists := m.intentServices[chainID]; exists && intentService != nil {
+			metrics := intentService.GetMetrics()
+			intentMetrics = &metrics
+		}
+
 		chainMetrics[chainName] = map[string]interface{}{
-			"chain_id":              chainID,
-			"is_healthy":            metrics.IsHealthy,
-			"active_goroutines":     metrics.ActiveGoroutines,
-			"subscription_count":    metrics.SubscriptionCount,
-			"events_processed":      metrics.EventsProcessed,
-			"events_skipped":        metrics.EventsSkipped,
-			"processing_errors":     metrics.ProcessingErrors,
-			"reconnection_count":    metrics.ReconnectionCount,
-			"last_event_time":       metrics.LastEventTime,
-			"last_health_check":     metrics.LastHealthCheck,
-			"time_since_last_event": metrics.TimeSinceLastEvent,
+			"chain_id":          chainID,
+			"active_goroutines": totalGoroutines, // Total from all services
+			"intent_goroutines": func() int32 {
+				if intentMetrics != nil {
+					return intentMetrics.ActiveGoroutines
+				}
+				return 0
+			}(),
+			"fulfillment_goroutines": func() int32 {
+				if service, exists := m.fulfillmentServices[chainID]; exists && service != nil {
+					return service.ActiveGoroutines()
+				}
+				return 0
+			}(),
+			"settlement_goroutines": func() int32 {
+				if service, exists := m.settlementServices[chainID]; exists && service != nil {
+					return service.ActiveGoroutines()
+				}
+				return 0
+			}(),
+		}
+
+		// Add intent service specific metrics if available
+		if intentMetrics != nil {
+			chainMetrics[chainName].(map[string]interface{})["is_healthy"] = intentMetrics.IsHealthy
+			chainMetrics[chainName].(map[string]interface{})["subscription_count"] = intentMetrics.SubscriptionCount
+			chainMetrics[chainName].(map[string]interface{})["events_processed"] = intentMetrics.EventsProcessed
+			chainMetrics[chainName].(map[string]interface{})["events_skipped"] = intentMetrics.EventsSkipped
+			chainMetrics[chainName].(map[string]interface{})["processing_errors"] = intentMetrics.ProcessingErrors
+			chainMetrics[chainName].(map[string]interface{})["reconnection_count"] = intentMetrics.ReconnectionCount
+			chainMetrics[chainName].(map[string]interface{})["last_event_time"] = intentMetrics.LastEventTime
+			chainMetrics[chainName].(map[string]interface{})["last_health_check"] = intentMetrics.LastHealthCheck
+			chainMetrics[chainName].(map[string]interface{})["time_since_last_event"] = intentMetrics.TimeSinceLastEvent
 		}
 	}
 
 	summary["chains"] = chainMetrics
-	summary["total_chains"] = len(m.intentServices)
+	summary["total_chains"] = len(chainGoroutines)
 	summary["timestamp"] = time.Now()
 
 	return summary

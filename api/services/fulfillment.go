@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/speedrun-hq/speedrun/api/logger"
@@ -44,6 +45,9 @@ type FulfillmentService struct {
 	subs           map[string]ethereum.Subscription
 	mu             sync.Mutex
 	logger         logger.Logger
+
+	// Goroutine tracking
+	activeGoroutines int32 // Counter for active goroutines
 
 	// Goroutine cleanup management
 	cleanupCtx    context.Context    // Context for cleanup operations
@@ -723,10 +727,12 @@ func (s *FulfillmentService) startGoroutine(name string, fn func()) {
 	s.shutdownMu.RUnlock()
 
 	s.goroutineWg.Add(1)
+	atomic.AddInt32(&s.activeGoroutines, 1)
 
 	go func() {
 		defer func() {
 			s.goroutineWg.Done()
+			atomic.AddInt32(&s.activeGoroutines, -1)
 
 			// Recover from panics
 			if r := recover(); r != nil {
@@ -736,4 +742,9 @@ func (s *FulfillmentService) startGoroutine(name string, fn func()) {
 
 		fn()
 	}()
+}
+
+// ActiveGoroutines returns the current count of active goroutines
+func (s *FulfillmentService) ActiveGoroutines() int32 {
+	return atomic.LoadInt32(&s.activeGoroutines)
 }
