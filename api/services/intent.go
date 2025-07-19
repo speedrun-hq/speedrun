@@ -82,6 +82,9 @@ type IntentService struct {
 	lastPollingCheck time.Time // Last time polling health was verified
 	pollingHealthy   bool      // Whether HTTP polling is working
 
+	// Restart coordination
+	restartSignal chan struct{} // Channel to signal subscription restart
+
 	// Goroutine cleanup management
 	cleanupCtx    context.Context    // Context for cleanup operations
 	cleanupCancel context.CancelFunc // Cancel function for cleanup context
@@ -125,6 +128,7 @@ func NewIntentService(
 		startTime:      time.Now(),
 		isZetaChain:    isZetaChain,
 		pollingHealthy: isZetaChain, // ZetaChain starts as healthy (polling assumed working)
+		restartSignal:  make(chan struct{}),
 		cleanupCtx:     cleanupCtx,
 		cleanupCancel:  cleanupCancel,
 	}, nil
@@ -315,29 +319,19 @@ func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress
 	}
 	s.mu.Unlock()
 
-	// Get the current block to avoid reprocessing old events
-	blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	currentBlock, err := s.client.BlockNumber(blockCtx)
-	cancel()
-
-	startBlock := uint64(0)
-	if err != nil {
-		s.logger.InfoWithChain(s.chainID, "WARNING: Failed to get current block for restart: %v, starting from block 0", err)
-	} else {
-		startBlock = currentBlock
-		s.logger.InfoWithChain(s.chainID, "Restarting subscription from current block %d", startBlock)
-	}
-
 	// Track reconnection
 	atomic.AddInt64(&s.reconnectionCount, 1)
 
-	// Start a new subscription with reconnection
-	s.startGoroutine("restart-subscription", func() {
-		s.startSubscriptionWithReconnection(ctx, contractAddress, startBlock)
-	})
+	// Signal the subscription goroutine to restart
+	select {
+	case s.restartSignal <- struct{}{}:
+		s.logger.InfoWithChain(s.chainID, "Restart signal sent for contract %s (reconnection #%d)",
+			contractAddress.Hex(), atomic.LoadInt64(&s.reconnectionCount))
+	default:
+		// Channel is full, restart signal already pending
+		s.logger.DebugWithChain(s.chainID, "Restart signal already pending for contract %s", contractAddress.Hex())
+	}
 
-	s.logger.InfoWithChain(s.chainID, "Restarted subscription for contract %s (reconnection #%d)",
-		contractAddress.Hex(), atomic.LoadInt64(&s.reconnectionCount))
 	return nil
 }
 
@@ -461,6 +455,21 @@ func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, c
 		case <-ctx.Done():
 			s.logger.DebugWithChain(s.chainID, "Context cancelled, stopping subscription attempts")
 			return
+		case <-s.restartSignal:
+			s.logger.InfoWithChain(s.chainID, "Restart signal received, restarting subscription")
+			// Reset attempt counter for restart
+			attempt = 0
+			// Get current block for restart
+			blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			currentBlock, err := s.client.BlockNumber(blockCtx)
+			cancel()
+			if err != nil {
+				s.logger.InfoWithChain(s.chainID, "WARNING: Failed to get current block for restart: %v, using existing startBlock", err)
+			} else {
+				startBlock = currentBlock
+				s.logger.InfoWithChain(s.chainID, "Restarting subscription from current block %d", startBlock)
+			}
+			// Continue to create new subscription
 		default:
 		}
 
@@ -476,6 +485,10 @@ func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, c
 			case <-time.After(delay):
 			case <-ctx.Done():
 				return
+			case <-s.restartSignal:
+				s.logger.InfoWithChain(s.chainID, "Restart signal received during delay, restarting immediately")
+				attempt = 0
+				continue
 			}
 		}
 

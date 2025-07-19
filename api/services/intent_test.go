@@ -524,3 +524,65 @@ func contains(s, substr string) bool {
 				return false
 			}())))
 }
+
+func TestIntentService_RestartSubscriptionNoGoroutineLeak(t *testing.T) {
+	// Create logger
+	logger := logger.NewStdLogger(false, logger.InfoLevel)
+
+	// Create mock database
+	mockDB := &mockDB{}
+
+	// Create intent service
+	intentService, err := NewIntentService(
+		nil, // client will be nil for this test
+		nil, // clientResolver will be nil for this test
+		mockDB,
+		`[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"receiver","type":"bytes"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"salt","type":"uint256"}],"name":"IntentInitiated","type":"event"}]`,
+		1, // chainID
+		logger,
+	)
+	assert.NoError(t, err)
+
+	// Initially should have 0 goroutines
+	assert.Equal(t, int32(0), intentService.ActiveGoroutines())
+
+	// Start some test goroutines to simulate normal operation
+	intentService.startGoroutine("test-1", func() {
+		time.Sleep(100 * time.Millisecond)
+	})
+	intentService.startGoroutine("test-2", func() {
+		time.Sleep(100 * time.Millisecond)
+	})
+
+	// Wait a bit for goroutines to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Should have 2 goroutines
+	assert.Equal(t, int32(2), intentService.ActiveGoroutines())
+
+	// Call RestartSubscription multiple times - this should NOT create new goroutines
+	contractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	for i := 0; i < 5; i++ {
+		err := intentService.RestartSubscription(context.Background(), contractAddress)
+		assert.NoError(t, err)
+
+		// Wait a bit
+		time.Sleep(10 * time.Millisecond)
+
+		// Should still have only 2 goroutines (no new ones created)
+		assert.Equal(t, int32(2), intentService.ActiveGoroutines(),
+			"RestartSubscription should not create new goroutines, attempt %d", i+1)
+	}
+
+	// Wait for goroutines to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Should be back to 0
+	assert.Equal(t, int32(0), intentService.ActiveGoroutines())
+
+	// Test shutdown
+	err = intentService.Shutdown(5 * time.Second)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(0), intentService.ActiveGoroutines())
+}
