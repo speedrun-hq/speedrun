@@ -95,6 +95,13 @@ func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress
 		return fmt.Errorf("cannot start listening: service is shutdown")
 	}
 
+	// Check if service is already running - prevent multiple starts
+	activeGoroutines := atomic.LoadInt32(&s.activeGoroutines)
+	if activeGoroutines > 0 {
+		s.logger.InfoWithChain(s.chainID, "Service already running with %d goroutines, skipping start", activeGoroutines)
+		return nil
+	}
+
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
@@ -657,6 +664,45 @@ func (s *FulfillmentService) GetSubscriptionCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.subs)
+}
+
+// Restart properly restarts the service by shutting down existing goroutines and starting new ones
+func (s *FulfillmentService) Restart(ctx context.Context, contractAddress common.Address) error {
+	s.logger.InfoWithChain(s.chainID, "Restarting fulfillment service...")
+
+	// Check if service is shutdown
+	if s.IsShutdown() {
+		return fmt.Errorf("cannot restart: service is shutdown")
+	}
+
+	// Cancel the cleanup context to signal all existing goroutines to stop
+	s.cleanupCancel()
+
+	// Wait for existing goroutines to complete with a short timeout
+	done := make(chan struct{})
+	go func() {
+		s.goroutineWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.DebugWithChain(s.chainID, "Existing goroutines stopped successfully")
+	case <-time.After(5 * time.Second):
+		s.logger.InfoWithChain(s.chainID, "Timeout waiting for existing goroutines to stop")
+	}
+
+	// Unsubscribe from all subscriptions
+	s.UnsubscribeAll()
+
+	// Create a new cleanup context
+	s.cleanupCtx, s.cleanupCancel = context.WithCancel(context.Background())
+
+	// Reset goroutine counter
+	atomic.StoreInt32(&s.activeGoroutines, 0)
+
+	// Start the service again
+	return s.StartListening(ctx, contractAddress)
 }
 
 // UnsubscribeAll unsubscribes from all active subscriptions

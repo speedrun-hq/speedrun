@@ -530,7 +530,7 @@ func TestIntentService_RestartSubscriptionNoGoroutineLeak(t *testing.T) {
 	logger := logger.NewStdLogger(false, logger.InfoLevel)
 
 	// Create mock database
-	mockDB := &mockDB{}
+	mockDB := &db.MockDB{}
 
 	// Create intent service
 	intentService, err := NewIntentService(
@@ -585,4 +585,90 @@ func TestIntentService_RestartSubscriptionNoGoroutineLeak(t *testing.T) {
 	err = intentService.Shutdown(5 * time.Second)
 	assert.NoError(t, err)
 	assert.Equal(t, int32(0), intentService.ActiveGoroutines())
+}
+
+func TestIntentService_MultipleStartListeningNoLeak(t *testing.T) {
+	// Create a mock logger
+	logger := logger.NewStdLogger(false, logger.DebugLevel)
+
+	// Create a mock database
+	mockDB := &db.MockDB{}
+
+	// Create a mock client resolver
+	mockResolver := &mocks.MockClientResolver{}
+
+	// Create intent service
+	intentService, err := NewIntentService(
+		nil, // client will be nil for this test
+		mockResolver,
+		mockDB,
+		`[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"intentId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"asset","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"targetChain","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"receiver","type":"bytes"},{"indexed":false,"internalType":"uint256","name":"tip","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"salt","type":"uint256"}],"name":"IntentInitiated","type":"event"}]`,
+		1, // chainID
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create IntentService: %v", err)
+	}
+
+	// Initially should have 0 goroutines
+	if intentService.ActiveGoroutines() != 0 {
+		t.Errorf("Expected 0 active goroutines initially, got %d", intentService.ActiveGoroutines())
+	}
+
+	contractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	// Test that multiple calls to StartListening don't create additional goroutines
+	// We'll test this by manually starting some goroutines first, then calling StartListening
+
+	// Start some test goroutines to simulate the service already running
+	intentService.startGoroutine("test-1", func() {
+		time.Sleep(100 * time.Millisecond)
+	})
+	intentService.startGoroutine("test-2", func() {
+		time.Sleep(100 * time.Millisecond)
+	})
+	intentService.startGoroutine("test-3", func() {
+		time.Sleep(100 * time.Millisecond)
+	})
+
+	// Wait a bit for goroutines to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Should have 3 goroutines now
+	if intentService.ActiveGoroutines() != 3 {
+		t.Errorf("Expected 3 active goroutines after starting test goroutines, got %d", intentService.ActiveGoroutines())
+	}
+
+	// Now call StartListening multiple times - should be skipped since goroutines are already running
+	for i := 0; i < 5; i++ {
+		err := intentService.StartListening(context.Background(), contractAddress)
+		if err != nil {
+			t.Errorf("StartListening call %d failed: %v", i+1, err)
+		}
+
+		// Should still have exactly 3 goroutines (no new ones created)
+		if intentService.ActiveGoroutines() != 3 {
+			t.Errorf("After StartListening call %d: expected 3 goroutines, got %d",
+				i+1, intentService.ActiveGoroutines())
+		}
+	}
+
+	// Wait for test goroutines to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Should be back to 0 goroutines
+	if intentService.ActiveGoroutines() != 0 {
+		t.Errorf("Expected 0 active goroutines after test goroutines complete, got %d", intentService.ActiveGoroutines())
+	}
+
+	// Test shutdown
+	err = intentService.Shutdown(5 * time.Second)
+	if err != nil {
+		t.Errorf("Shutdown failed: %v", err)
+	}
+
+	// Should still be 0 goroutines
+	if intentService.ActiveGoroutines() != 0 {
+		t.Errorf("Expected 0 active goroutines after shutdown, got %d", intentService.ActiveGoroutines())
+	}
 }

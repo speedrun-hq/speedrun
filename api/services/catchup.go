@@ -1681,7 +1681,7 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 					// Create a context with timeout for restart
 					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-					err := intentService.StartListening(restartCtx, contractAddress)
+					err := intentService.Restart(restartCtx, contractAddress)
 					if err != nil {
 						s.logger.Error("Failed to restart intent service for chain %d: %v", chainID, err)
 					} else {
@@ -1708,7 +1708,7 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 					// Create a context with timeout for restart
 					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-					err := fulfillmentService.StartListening(restartCtx, contractAddress)
+					err := fulfillmentService.Restart(restartCtx, contractAddress)
 					if err != nil {
 						s.logger.Error("Failed to restart fulfillment service for chain %d: %v", chainID, err)
 					} else {
@@ -1735,7 +1735,7 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 					// Create a context with timeout for restart
 					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-					err := settlementService.StartListening(restartCtx, contractAddress)
+					err := settlementService.Restart(restartCtx, contractAddress)
 					if err != nil {
 						s.logger.Error("Failed to restart settlement service for chain %d: %v", chainID, err)
 					} else {
@@ -1783,7 +1783,7 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 				// Create a context with timeout for restart
 				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				err := intentService.StartListening(restartCtx, contractAddress)
+				err := intentService.Restart(restartCtx, contractAddress)
 				if err != nil {
 					s.logger.Error("Failed to reconnect intent service for chain %d: %v", chainID, err)
 				} else {
@@ -1808,7 +1808,7 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 				// Create a context with timeout for restart
 				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				err := fulfillmentService.StartListening(restartCtx, contractAddress)
+				err := fulfillmentService.Restart(restartCtx, contractAddress)
 				if err != nil {
 					s.logger.Error("Failed to reconnect fulfillment service for chain %d: %v", chainID, err)
 				} else {
@@ -1833,7 +1833,7 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 				// Create a context with timeout for restart
 				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				err := settlementService.StartListening(restartCtx, contractAddress)
+				err := settlementService.Restart(restartCtx, contractAddress)
 				if err != nil {
 					s.logger.Error("Failed to reconnect settlement service for chain %d: %v", chainID, err)
 				} else {
