@@ -17,10 +17,7 @@ type MetricsService struct {
 	// Prometheus metrics
 	intentServicesUp         *prometheus.GaugeVec
 	activeGoroutines         *prometheus.GaugeVec
-	intentGoroutines         *prometheus.GaugeVec
-	fulfillmentGoroutines    *prometheus.GaugeVec
-	settlementGoroutines     *prometheus.GaugeVec
-	catchupGoroutines        *prometheus.GaugeVec
+	serviceGoroutines        *prometheus.GaugeVec
 	subscriptionCount        *prometheus.GaugeVec
 	eventsProcessedTotal     *prometheus.GaugeVec
 	eventsSkippedTotal       *prometheus.GaugeVec
@@ -61,36 +58,12 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 		[]string{"chain_id", "chain_name"},
 	)
 
-	intentGoroutines := prometheus.NewGaugeVec(
+	serviceGoroutines := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "speedrun_intent_goroutines",
-			Help: "Number of active goroutines in intent service per chain",
+			Name: "speedrun_service_goroutines",
+			Help: "Number of active goroutines for a specific service per chain",
 		},
-		[]string{"chain_id", "chain_name"},
-	)
-
-	fulfillmentGoroutines := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "speedrun_fulfillment_goroutines",
-			Help: "Number of active goroutines in fulfillment service per chain",
-		},
-		[]string{"chain_id", "chain_name"},
-	)
-
-	settlementGoroutines := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "speedrun_settlement_goroutines",
-			Help: "Number of active goroutines in settlement service per chain",
-		},
-		[]string{"chain_id", "chain_name"},
-	)
-
-	catchupGoroutines := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "speedrun_catchup_goroutines",
-			Help: "Number of active goroutines in event catchup service (global)",
-		},
-		[]string{"chain_id", "chain_name"},
+		[]string{"chain_id", "chain_name", "service_type"},
 	)
 
 	subscriptionCount := prometheus.NewGaugeVec(
@@ -160,10 +133,7 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 	// Register metrics
 	registry.MustRegister(intentServicesUp)
 	registry.MustRegister(activeGoroutines)
-	registry.MustRegister(intentGoroutines)
-	registry.MustRegister(fulfillmentGoroutines)
-	registry.MustRegister(settlementGoroutines)
-	registry.MustRegister(catchupGoroutines)
+	registry.MustRegister(serviceGoroutines)
 	registry.MustRegister(subscriptionCount)
 	registry.MustRegister(eventsProcessedTotal)
 	registry.MustRegister(eventsSkippedTotal)
@@ -176,10 +146,7 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 	return &MetricsService{
 		intentServicesUp:         intentServicesUp,
 		activeGoroutines:         activeGoroutines,
-		intentGoroutines:         intentGoroutines,
-		fulfillmentGoroutines:    fulfillmentGoroutines,
-		settlementGoroutines:     settlementGoroutines,
-		catchupGoroutines:        catchupGoroutines,
+		serviceGoroutines:        serviceGoroutines,
 		subscriptionCount:        subscriptionCount,
 		eventsProcessedTotal:     eventsProcessedTotal,
 		eventsSkippedTotal:       eventsSkippedTotal,
@@ -282,7 +249,7 @@ func (m *MetricsService) UpdateMetrics() {
 			// Emit intent service goroutines metric
 			chainName := m.GetChainName(chainID)
 			chainIDStr := fmt.Sprintf("%d", chainID)
-			m.intentGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(goroutines))
+			m.serviceGoroutines.WithLabelValues(chainIDStr, chainName, "intent").Set(float64(goroutines))
 		}
 	}
 
@@ -295,7 +262,7 @@ func (m *MetricsService) UpdateMetrics() {
 			// Emit fulfillment service goroutines metric
 			chainName := m.GetChainName(chainID)
 			chainIDStr := fmt.Sprintf("%d", chainID)
-			m.fulfillmentGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(goroutines))
+			m.serviceGoroutines.WithLabelValues(chainIDStr, chainName, "fulfillment").Set(float64(goroutines))
 		}
 	}
 
@@ -308,7 +275,7 @@ func (m *MetricsService) UpdateMetrics() {
 			// Emit settlement service goroutines metric
 			chainName := m.GetChainName(chainID)
 			chainIDStr := fmt.Sprintf("%d", chainID)
-			m.settlementGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(goroutines))
+			m.serviceGoroutines.WithLabelValues(chainIDStr, chainName, "settlement").Set(float64(goroutines))
 		}
 	}
 
@@ -327,7 +294,10 @@ func (m *MetricsService) UpdateMetrics() {
 		chainIDStr := fmt.Sprintf("%d", chainID)
 
 		// Emit catchup goroutines metric for this chain
-		m.catchupGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(catchupGoroutines))
+		m.serviceGoroutines.WithLabelValues(chainIDStr, chainName, "catchup").Set(float64(catchupGoroutines))
+
+		// Update total goroutines metric (sum of all services for this chain)
+		m.activeGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(totalGoroutines))
 
 		// Update intent service metrics (for backward compatibility)
 		if intentService, exists := m.intentServices[chainID]; exists && intentService != nil {
@@ -371,9 +341,6 @@ func (m *MetricsService) UpdateMetrics() {
 				m.lastHealthCheckTimestamp.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.LastHealthCheck.Unix()))
 			}
 		}
-
-		// Update total goroutines metric (sum of all services for this chain)
-		m.activeGoroutines.WithLabelValues(chainIDStr, chainName).Set(float64(totalGoroutines))
 	}
 }
 
