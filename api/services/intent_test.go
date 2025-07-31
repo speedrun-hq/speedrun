@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/speedrun-hq/speedrun/api/db"
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/speedrun-hq/speedrun/api/services/mocks"
 	"github.com/stretchr/testify/assert"
@@ -393,7 +393,7 @@ func FindSQLResultMockUsage(t *testing.T) {
 
 func TestIntentServiceGoroutineCleanup(t *testing.T) {
 	// Create a mock logger
-	logger := logger.NewStdLogger(false, logger.DebugLevel)
+	logger := logging.NewTesting(t)
 
 	// Create a mock database
 	mockDB := &db.MockDB{}

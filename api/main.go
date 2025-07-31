@@ -6,20 +6,16 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/clients/evm"
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/handlers"
-	"github.com/speedrun-hq/speedrun/api/logger"
 	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/services"
 )
@@ -58,7 +54,7 @@ func main() {
 	}
 
 	// Create services for all chains
-	intentServices, fulfillmentServices, settlementServices, err := createServices(clients, database, cfg, lg)
+	intentServices, fulfillmentServices, settlementServices, err := createServices(clients, database, cfg, log)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create services")
 	}
@@ -223,7 +219,7 @@ func createServices(
 	clients map[uint64]*ethclient.Client,
 	db db.Database,
 	cfg *config.Config,
-	logger logger.Logger,
+	logger zerolog.Logger,
 ) (
 	map[uint64]*services.IntentService,
 	map[uint64]*services.FulfillmentService,

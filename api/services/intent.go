@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/rs/zerolog"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/speedrun-hq/speedrun/api/utils"
 )
@@ -66,7 +67,7 @@ type IntentService struct {
 	activeGoroutines int32      // Counter for active goroutines
 	errChannel       chan error // Channel for collecting errors from goroutines
 	mu               sync.Mutex // Mutex for thread-safe operations
-	logger           logger.Logger
+	logger           zerolog.Logger
 
 	// Metrics tracking
 	eventsProcessed   int64     // Total events processed
@@ -100,7 +101,7 @@ func NewIntentService(
 	db db.Database,
 	intentInitiatedEventABI string,
 	chainID uint64,
-	logger logger.Logger,
+	logger zerolog.Logger,
 ) (*IntentService, error) {
 	// Parse the contract ABI
 	parsedABI, err := abi.JSON(strings.NewReader(intentInitiatedEventABI))
@@ -221,9 +222,9 @@ func (s *IntentService) UpdatePollingHealth(healthy bool) {
 	s.mu.Unlock()
 
 	if healthy {
-		s.logger.DebugWithChain(s.chainID, "ZetaChain polling health updated: healthy")
+		s.logger.Debug().Uint64(logging.FieldChain, s.chainID).Msg("ZetaChain polling health updated: healthy")
 	} else {
-		s.logger.DebugWithChain(s.chainID, "ZetaChain polling health updated: unhealthy")
+		s.logger.Debug().Uint64(logging.FieldChain, s.chainID).Msg("ZetaChain polling health updated: unhealthy")
 	}
 }
 
@@ -325,11 +326,10 @@ func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress
 	// Signal the subscription goroutine to restart
 	select {
 	case s.restartSignal <- struct{}{}:
-		s.logger.InfoWithChain(s.chainID, "Restart signal sent for contract %s (reconnection #%d)",
-			contractAddress.Hex(), atomic.LoadInt64(&s.reconnectionCount))
+		s.logger.Info().Uint64(logging.FieldChain, s.chainID).Str("contract", contractAddress.Hex()).Int64("reconnection_count", atomic.LoadInt64(&s.reconnectionCount)).Msg("Restart signal sent")
 	default:
 		// Channel is full, restart signal already pending
-		s.logger.DebugWithChain(s.chainID, "Restart signal already pending for contract %s", contractAddress.Hex())
+		s.logger.Debug().Uint64(logging.FieldChain, s.chainID).Str("contract", contractAddress.Hex()).Msg("Restart signal already pending")
 	}
 
 	return nil
@@ -337,7 +337,7 @@ func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress
 
 // Restart properly restarts the service by shutting down existing goroutines and starting new ones
 func (s *IntentService) Restart(ctx context.Context, contractAddress common.Address) error {
-	s.logger.InfoWithChain(s.chainID, "Restarting intent service...")
+	s.logger.Info().Uint64(logging.FieldChain, s.chainID).Msg("Restarting intent service...")
 
 	// Check if service is shutdown
 	if s.IsShutdown() {
@@ -356,9 +356,9 @@ func (s *IntentService) Restart(ctx context.Context, contractAddress common.Addr
 
 	select {
 	case <-done:
-		s.logger.DebugWithChain(s.chainID, "Existing goroutines stopped successfully")
+		s.logger.Debug().Uint64(logging.FieldChain, s.chainID).Msg("Existing goroutines stopped successfully")
 	case <-time.After(5 * time.Second):
-		s.logger.InfoWithChain(s.chainID, "Timeout waiting for existing goroutines to stop")
+		s.logger.Info().Uint64(logging.FieldChain, s.chainID).Msg("Timeout waiting for existing goroutines to stop")
 	}
 
 	// Unsubscribe from all subscriptions

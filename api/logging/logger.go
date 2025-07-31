@@ -2,6 +2,7 @@ package logging
 
 import (
 	"io"
+	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -22,4 +23,8 @@ func New(writer io.Writer, level zerolog.Level, jsonOutput bool) zerolog.Logger 
 	}
 
 	return zerolog.New(writer).Level(level).With().Timestamp().Caller().Logger()
+}
+
+func NewTesting(t *testing.T) zerolog.Logger {
+	return New(zerolog.NewTestWriter(t), zerolog.DebugLevel, true)
 }

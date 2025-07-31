@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/rs/zerolog"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/logging"
 )
 
 // Constants for timeouts and monitoring
@@ -59,7 +60,7 @@ type EventCatchupService struct {
 	settlementProgress  map[uint64]uint64 // chainID -> last processed block
 	activeCatchups      map[string]bool   // Track active catchup operations
 	catchupMu           sync.Mutex        // Mutex for the activeCatchups map
-	logger              logger.Logger
+	logger              zerolog.Logger
 
 	// Goroutine tracking
 	activeGoroutines int32 // Counter for active goroutines
@@ -78,7 +79,7 @@ func NewEventCatchupService(
 	fulfillmentServices map[uint64]*FulfillmentService,
 	settlementServices map[uint64]*SettlementService,
 	db db.Database,
-	logger logger.Logger,
+	logger zerolog.Logger,
 ) *EventCatchupService {
 	// Create cleanup context
 	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
@@ -105,7 +106,7 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		return fmt.Errorf("cannot start listening: service is shutdown")
 	}
 
-	s.logger.Notice("Starting event catchup service")
+	s.logger.Info().Msg("Starting event catchup service")
 
 	// Start a monitoring goroutine to periodically log the status
 	s.StartGoroutine("catchup-monitor", func() {
@@ -120,27 +121,36 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 
 	// Print information about active chains for debugging
 	for chainID, chainConfig := range cfg.ChainConfigs {
-		s.logger.Debug("Configured chain %d with contract address %s",
-			chainID, chainConfig.ContractAddr)
+		s.logger.Debug().
+			Uint64(logging.FieldChain, chainID).
+			Str("contract", chainConfig.ContractAddr).
+			Msg("Configured chain")
 	}
 
 	// Initialize progress tracking for all chains
 	s.mu.Lock()
 	for chainID := range s.intentServices {
-		s.logger.InfoWithChain(chainID, "Initializing intent progress tracking")
+		s.logger.Info().
+			Uint64(logging.FieldChain, chainID).
+			Msg("Initializing intent progress tracking")
 		lastBlock, err := s.db.GetLastProcessedBlock(ctx, chainID)
 		if err != nil {
 			s.mu.Unlock()
 			return fmt.Errorf("failed to get last processed block for chain %d: %v", chainID, err)
 		}
 		if lastBlock < cfg.ChainConfigs[chainID].DefaultBlock {
-			s.logger.InfoWithChain(chainID, "Last processed block %d is less than default block %d, using default",
-				lastBlock, cfg.ChainConfigs[chainID].DefaultBlock,
-			)
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Uint64(logging.FieldBlock, lastBlock).
+				Uint64("default_block", cfg.ChainConfigs[chainID].DefaultBlock).
+				Msg("Last processed block is less than default block, using default")
 			lastBlock = cfg.ChainConfigs[chainID].DefaultBlock
 		}
 		s.intentProgress[chainID] = lastBlock
-		s.logger.InfoWithChain(chainID, "Setting intent progress to block %d", lastBlock)
+		s.logger.Info().
+			Uint64(logging.FieldChain, chainID).
+			Uint64(logging.FieldBlock, lastBlock).
+			Msg("Setting intent progress block")
 	}
 	s.mu.Unlock()
 
@@ -156,21 +166,24 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 			return fmt.Errorf("failed to get current block number for chain %d: %v", chainID, err)
 		}
 		currentBlocks[chainID] = currentBlock
-		s.logger.InfoWithChain(chainID, "Current block for chain: %d", currentBlock)
+		s.logger.Info().
+			Uint64(logging.FieldChain, chainID).
+			Uint64(logging.FieldBlock, currentBlock).
+			Msg("Got current block number")
 	}
 
 	// Track any errors that occur during catchup
 	var catchupErrors []error
 
 	// INTENT CATCHUP
-	s.logger.Info("Starting intent event catchup")
+	s.logger.Info().Msg("Starting intent event catchup")
 	if err := s.runIntentCatchup(ctx, cfg, currentBlocks); err != nil {
 		// Store the error but continue with fulfillment and settlement catchup
 		catchupErrors = append(catchupErrors, fmt.Errorf("intent catchup failed: %v", err))
 		// TODO: consider throwing an error here
-		s.logger.Info("WARNING: Intent catchup encountered errors: %v, continuing with fulfillment catchup", err)
+		s.logger.Warn().Err(err).Msg("Intent catchup encountered errors, continuing with fulfillment catchup")
 	} else {
-		s.logger.Info("All intent services have completed catchup successfully")
+		s.logger.Info().Msg("All intent services have completed catchup successfully")
 	}
 
 	// FULFILLMENT CATCHUP
@@ -179,30 +192,36 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 		// Store the error but continue with settlement catchup
 		catchupErrors = append(catchupErrors, fmt.Errorf("fulfillment catchup failed: %v", err))
 		// TODO: consider throwing an error here
-		s.logger.Info("WARNING: Fulfillment catchup encountered errors: %v, continuing with settlement catchup", err)
+		s.logger.Warn().Err(err).Msg("Fulfillment catchup encountered errors, continuing with settlement catchup")
 	} else {
-		s.logger.Info("All fulfillment services have completed catchup successfully")
+		s.logger.Info().Msg("All fulfillment services have completed catchup successfully")
 	}
 
 	// SETTLEMENT CATCHUP
-	s.logger.Info("Starting settlement catchup")
+	s.logger.Info().Msg("Starting settlement catchup")
 	if err := s.runSettlementCatchup(ctx, cfg, currentBlocks); err != nil {
 		// Store the error
 		catchupErrors = append(catchupErrors, fmt.Errorf("settlement catchup failed: %v", err))
 		// TODO: consider throwing an error here
-		s.logger.Info("WARNING: Settlement catchup encountered errors: %v", err)
+		s.logger.Warn().Err(err).Msg("Settlement catchup encountered errors")
 	} else {
-		s.logger.Info("All settlement services have completed catchup successfully")
+		s.logger.Info().Msg("All settlement services have completed catchup successfully")
 	}
 
 	// Only attempt to update processed blocks for chains that completed successfully
 	for chainID, currentBlock := range currentBlocks {
 		updateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		if err := s.db.UpdateLastProcessedBlock(updateCtx, chainID, currentBlock); err != nil {
-			s.logger.InfoWithChain(chainID, "WARNING: Failed to update last processed block: %v", err)
+			s.logger.Warn().
+				Uint64(logging.FieldChain, chainID).
+				Err(err).
+				Msg("Failed to update last processed block")
 			// Don't return an error here, just log the warning
 		} else {
-			s.logger.InfoWithChain(chainID, "Updated last processed block to %d", currentBlock)
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Uint64(logging.FieldBlock, currentBlock).
+				Msg("Updated last processed block")
 		}
 		cancel()
 	}
@@ -210,14 +229,19 @@ func (s *EventCatchupService) StartListening(ctx context.Context) error {
 	// Start live subscriptions for all services
 	if err := s.StartLiveEventListeners(ctx, cfg); err != nil {
 		catchupErrors = append(catchupErrors, fmt.Errorf("failed to start live subscriptions: %v", err))
-		s.logger.Info("WARNING: Failed to start some live subscriptions: %v", err)
+		s.logger.Warn().Err(err).Msg("Failed to start some live subscriptions")
 	}
 
 	// If there were any errors during the catchup process, log them but don't fail
 	if len(catchupErrors) > 0 {
-		s.logger.Debug("Catchup process completed with %d errors:", len(catchupErrors))
+		s.logger.Debug().
+			Int("error_count", len(catchupErrors)).
+			Msg("Catchup process completed with errors")
 		for i, err := range catchupErrors {
-			s.logger.Info("Catchup error %d: %v", i+1, err)
+			s.logger.Error().
+				Int("error_index", i+1).
+				Err(err).
+				Msg("Catchup error")
 		}
 	}
 
@@ -240,20 +264,27 @@ func (s *EventCatchupService) monitorCatchupProgress(ctx context.Context) {
 			}
 			s.catchupMu.Unlock()
 
-			s.logger.Debug("CATCHUP STATUS: %d active operations", activeOps)
+			s.logger.Debug().
+				Int("active_operations", activeOps).
+				Msg("CATCHUP STATUS")
 			if activeOps > 0 {
-				s.logger.Debug("Active operations: %v", activeList)
+				s.logger.Debug().
+					Strs("operations", activeList).
+					Msg("Active operations")
 			}
 
 			// Log intent service goroutines if available
 			for chainID, service := range s.intentServices {
 				if service != nil {
 					activeGoroutines := service.ActiveGoroutines()
-					s.logger.DebugWithChain(chainID, "Intent service: %d active goroutines", activeGoroutines)
+					s.logger.Debug().
+						Uint64(logging.FieldChain, chainID).
+						Int32("active_goroutines", activeGoroutines).
+						Msg("Intent service")
 				}
 			}
 		case <-ctx.Done():
-			s.logger.Debug("Stopping catchup monitoring")
+			s.logger.Debug().Msg("Stopping catchup monitoring")
 			return
 		}
 	}
@@ -264,7 +295,7 @@ func (s *EventCatchupService) trackCatchupOperation(operation string) {
 	s.catchupMu.Lock()
 	defer s.catchupMu.Unlock()
 	s.activeCatchups[operation] = true
-	s.logger.Debug("Starting catchup operation: %s", operation)
+	s.logger.Debug().Str("operation", operation).Msg("Starting catchup operation")
 }
 
 // untrackCatchupOperation removes an operation from the active operations map
@@ -272,7 +303,7 @@ func (s *EventCatchupService) untrackCatchupOperation(operation string) {
 	s.catchupMu.Lock()
 	defer s.catchupMu.Unlock()
 	delete(s.activeCatchups, operation)
-	s.logger.Debug("Completed catchup operation: %s", operation)
+	s.logger.Debug().Str("operation", operation).Msg("Completed catchup operation")
 }
 
 // runIntentCatchup handles the intent catchup process with proper error handling and timeouts
@@ -294,7 +325,9 @@ func (s *EventCatchupService) runIntentCatchup(ctx context.Context, cfg *config.
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 		if lastBlock >= currentBlock {
-			s.logger.InfoWithChain(chainID, "No missed events to process")
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Msg("No missed events to process")
 			continue
 		}
 
@@ -309,8 +342,11 @@ func (s *EventCatchupService) runIntentCatchup(ctx context.Context, cfg *config.
 			defer intentWg.Done()
 			defer s.untrackCatchupOperation(opName)
 
-			s.logger.InfoWithChain(chainID, "Starting intent event catch-up (blocks %d to %d)",
-				lastBlock+1, currentBlock)
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Uint64("from_block", lastBlock+1).
+				Uint64("to_block", currentBlock).
+				Msg("Starting intent event catch-up")
 
 			// Create a timeout context for this specific chain's catchup
 			chainCtx, chainCancel := context.WithTimeout(catchupCtx, CatchupOperationTimeout)
@@ -318,19 +354,24 @@ func (s *EventCatchupService) runIntentCatchup(ctx context.Context, cfg *config.
 
 			if err := s.catchUpOnIntentEvents(chainCtx, intentService, contractAddress, lastBlock, currentBlock, opName); err != nil {
 				intentErrors <- fmt.Errorf("failed to catch up on intent events for chain %d: %v", chainID, err)
-				s.logger.ErrorWithChain(chainID, "Intent catchup for failed: %v", err)
+				s.logger.Error().
+					Uint64(logging.FieldChain, chainID).
+					Err(err).
+					Msg("Intent catchup failed")
 				return
 			}
 
 			// Update progress
 			s.UpdateIntentProgress(chainID, currentBlock)
-			s.logger.InfoWithChain(chainID, "Completed intent event catch-up")
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Msg("Completed intent event catch-up")
 		}(chainID, intentService, lastBlock, currentBlock, opName)
 	}
 
 	// If there are no chains to process, we can return early
 	if chainsToProcess == 0 {
-		s.logger.Debug("No intent catchup needed for any chain")
+		s.logger.Debug().Msg("No intent catchup needed for any chain")
 		return nil
 	}
 
@@ -350,7 +391,7 @@ func (s *EventCatchupService) runIntentCatchup(ctx context.Context, cfg *config.
 		for err := range intentErrors {
 			if err != nil {
 				errs = append(errs, err)
-				s.logger.Error("Intent catchup error: %v", err)
+				s.logger.Error().Err(err).Msg("Intent catchup error")
 			}
 		}
 	case <-catchupCtx.Done():
@@ -401,7 +442,9 @@ func (s *EventCatchupService) runFulfillmentCatchup(ctx context.Context, cfg *co
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 		if lastBlock >= currentBlock {
-			s.logger.DebugWithChain(chainID, "No missed fulfillment events to process")
+			s.logger.Debug().
+				Uint64(logging.FieldChain, chainID).
+				Msg("No missed fulfillment events to process")
 			continue
 		}
 
@@ -416,8 +459,11 @@ func (s *EventCatchupService) runFulfillmentCatchup(ctx context.Context, cfg *co
 			defer fulfillmentWg.Done()
 			defer s.untrackCatchupOperation(opName)
 
-			s.logger.InfoWithChain(chainID, "Starting fulfillment event catch-up (blocks %d to %d)",
-				lastBlock+1, currentBlock)
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Uint64("from_block", lastBlock+1).
+				Uint64("to_block", currentBlock).
+				Msg("Starting fulfillment event catch-up")
 
 			// Create a timeout context for this specific chain's catchup
 			chainCtx, chainCancel := context.WithTimeout(catchupCtx, CatchupOperationTimeout)
@@ -425,19 +471,24 @@ func (s *EventCatchupService) runFulfillmentCatchup(ctx context.Context, cfg *co
 
 			if err := s.catchUpOnFulfillmentEvents(chainCtx, fulfillmentService, contractAddress, lastBlock, currentBlock, opName); err != nil {
 				fulfillmentErrors <- fmt.Errorf("failed to catch up on fulfillment events for chain %d: %v", chainID, err)
-				s.logger.ErrorWithChain(chainID, "ERROR: Fulfillment catchup failed: %v", err)
+				s.logger.Error().
+					Uint64(logging.FieldChain, chainID).
+					Err(err).
+					Msg("Fulfillment catchup failed")
 				return
 			}
 
 			// Update progress
 			s.UpdateFulfillmentProgress(chainID, currentBlock)
-			s.logger.InfoWithChain(chainID, "Completed fulfillment event catch-up for chain %d", chainID)
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Msg("Completed fulfillment event catch-up")
 		}(chainID, fulfillmentService, lastBlock, currentBlock, opName)
 	}
 
 	// If there are no chains to process, we can return early
 	if chainsToProcess == 0 {
-		s.logger.Debug("No fulfillment catchup needed for any chain")
+		s.logger.Debug().Msg("No fulfillment catchup needed for any chain")
 		return nil
 	}
 
@@ -457,7 +508,7 @@ func (s *EventCatchupService) runFulfillmentCatchup(ctx context.Context, cfg *co
 		for err := range fulfillmentErrors {
 			if err != nil {
 				errs = append(errs, err)
-				s.logger.Error("Fulfillment catchup error: %v", err)
+				s.logger.Error().Err(err).Msg("Fulfillment catchup error")
 			}
 		}
 	case <-catchupCtx.Done():
@@ -509,7 +560,9 @@ func (s *EventCatchupService) runSettlementCatchup(ctx context.Context, cfg *con
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 		if lastBlock >= currentBlock {
-			s.logger.DebugWithChain(chainID, "No missed settlement events to process")
+			s.logger.Debug().
+				Uint64(logging.FieldChain, chainID).
+				Msg("No missed settlement events to process")
 			continue
 		}
 
@@ -524,7 +577,11 @@ func (s *EventCatchupService) runSettlementCatchup(ctx context.Context, cfg *con
 			defer settlementWg.Done()
 			defer s.untrackCatchupOperation(opName)
 
-			s.logger.InfoWithChain(chainID, "Starting settlement event catch-up (blocks %d to %d)", lastBlock+1, currentBlock)
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Uint64("from_block", lastBlock+1).
+				Uint64("to_block", currentBlock).
+				Msg("Starting settlement event catch-up")
 
 			// Create a timeout context for this specific chain's catchup
 			chainCtx, chainCancel := context.WithTimeout(catchupCtx, CatchupOperationTimeout)
@@ -532,19 +589,24 @@ func (s *EventCatchupService) runSettlementCatchup(ctx context.Context, cfg *con
 
 			if err := s.catchUpOnSettlementEvents(chainCtx, settlementService, contractAddress, lastBlock, currentBlock, opName); err != nil {
 				settlementErrors <- fmt.Errorf("failed to catch up on settlement events for chain %d: %v", chainID, err)
-				s.logger.ErrorWithChain(chainID, "Settlement catchup failed: %v", err)
+				s.logger.Error().
+					Uint64(logging.FieldChain, chainID).
+					Err(err).
+					Msg("Settlement catchup failed")
 				return
 			}
 
 			// Update progress
 			s.UpdateSettlementProgress(chainID, currentBlock)
-			s.logger.InfoWithChain(chainID, "Completed settlement event catch-up")
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Msg("Completed settlement event catch-up")
 		}(chainID, settlementService, lastBlock, currentBlock, opName)
 	}
 
 	// If there are no chains to process, we can return early
 	if chainsToProcess == 0 {
-		s.logger.Debug("No settlement catchup needed for any chain")
+		s.logger.Debug().Msg("No settlement catchup needed for any chain")
 		return nil
 	}
 
@@ -564,7 +626,7 @@ func (s *EventCatchupService) runSettlementCatchup(ctx context.Context, cfg *con
 		for err := range settlementErrors {
 			if err != nil {
 				errs = append(errs, err)
-				s.logger.Error("Settlement catchup error: %v", err)
+				s.logger.Error().Err(err).Msg("Settlement catchup error")
 			}
 		}
 	case <-catchupCtx.Done():
@@ -582,13 +644,16 @@ func (s *EventCatchupService) runSettlementCatchup(ctx context.Context, cfg *con
 // StartLiveEventListeners starts the live event listeners for all services
 func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *config.Config) error {
 	// Start intent listeners with block tracking
-	s.logger.Notice("Starting live intent event listeners")
+	s.logger.Info().Msg("Starting live intent event listeners")
 	for chainID, intentService := range s.intentServices {
 		chainID := chainID // Create a copy of the loop variable for the closure
 		intentService := intentService
 
 		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
-		s.logger.InfoWithChain(chainID, "Starting intent event listener at contract %s", contractAddress.Hex())
+		s.logger.Info().
+			Uint64(logging.FieldChain, chainID).
+			Str("contract", contractAddress.Hex()).
+			Msg("Starting intent event listener")
 
 		// For live subscriptions, use the last processed block + 1 as the starting point
 		// This ensures we don't miss events and don't process duplicates
@@ -603,10 +668,16 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 			currentBlock, err := intentService.client.BlockNumber(blockCtx)
 			cancel()
 			if err != nil {
-				s.logger.InfoWithChain(chainID, "WARNING: Unable to get current block: %v", err)
+				s.logger.Warn().
+					Uint64(logging.FieldChain, chainID).
+					Err(err).
+					Msg("Unable to get current block")
 			} else {
 				fromBlock = currentBlock
-				s.logger.DebugWithChain(chainID, "No stored progress found, setting intent listener for chain %d to start from current block %d", fromBlock)
+				s.logger.Debug().
+					Uint64(logging.FieldChain, chainID).
+					Uint64("from_block", fromBlock).
+					Msg("No stored progress found, setting intent listener to start from current block")
 			}
 		}
 		s.mu.Unlock()
@@ -618,7 +689,10 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 			s.intentProgress[chainID] = fromBlock
 			s.mu.Unlock()
 
-			s.logger.InfoWithChain(chainID, "Setting up polling-based event monitoring for ZetaChain starting from block %d", fromBlock)
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Uint64("from_block", fromBlock).
+				Msg("Setting up polling-based event monitoring for ZetaChain")
 
 			// Start polling goroutine
 			go s.pollZetachainEvents(ctx, intentService, contractAddress, cfg.ChainConfigs[chainID].BlockInterval)
@@ -626,16 +700,23 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 		}
 
 		// Start the intent service's own subscription management
-		s.logger.InfoWithChain(chainID, "Starting intent service subscription through StartListening")
+		s.logger.Info().
+			Uint64(logging.FieldChain, chainID).
+			Msg("Starting intent service subscription through StartListening")
 		if err := intentService.StartListening(ctx, contractAddress); err != nil {
-			s.logger.ErrorWithChain(chainID, "Failed to start intent service: %v", err)
+			s.logger.Error().
+				Uint64(logging.FieldChain, chainID).
+				Err(err).
+				Msg("Failed to start intent service")
 			return fmt.Errorf("failed to start intent service for chain %d: %v", chainID, err)
 		}
-		s.logger.InfoWithChain(chainID, "Successfully started intent service subscription")
+		s.logger.Info().
+			Uint64(logging.FieldChain, chainID).
+			Msg("Successfully started intent service subscription")
 	}
 
 	// Start fulfillment listeners with similar block tracking
-	s.logger.Debug("Starting live fulfillment event listeners")
+	s.logger.Debug().Msg("Starting live fulfillment event listeners")
 	for chainID, fulfillmentService := range s.fulfillmentServices {
 		chainID := chainID // Create a copy of the loop variable for the closure
 		fulfillmentService := fulfillmentService
@@ -647,17 +728,26 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 		s.mu.Lock()
 		if lastBlock, exists := s.fulfillmentProgress[chainID]; exists && lastBlock > 0 {
 			fromBlock = lastBlock + 1
-			s.logger.DebugWithChain(chainID, "Setting fulfillment listener to start from block %d", fromBlock)
+			s.logger.Debug().
+				Uint64(logging.FieldChain, chainID).
+				Uint64("from_block", fromBlock).
+				Msg("Setting fulfillment listener to start from block")
 		} else {
 			// If we don't have a stored last block, get the current one
 			blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			currentBlock, err := fulfillmentService.client.BlockNumber(blockCtx)
 			cancel()
 			if err != nil {
-				s.logger.InfoWithChain(chainID, "WARNING: Unable to get current block: %v", err)
+				s.logger.Warn().
+					Uint64(logging.FieldChain, chainID).
+					Err(err).
+					Msg("Unable to get current block")
 			} else {
 				fromBlock = currentBlock
-				s.logger.DebugWithChain(chainID, "No stored progress found, setting fulfillment listener to start from current block %d", fromBlock)
+				s.logger.Debug().
+					Uint64(logging.FieldChain, chainID).
+					Uint64("from_block", fromBlock).
+					Msg("No stored progress found, setting fulfillment listener to start from current block")
 			}
 		}
 		s.mu.Unlock()
@@ -669,7 +759,10 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 			s.fulfillmentProgress[chainID] = fromBlock
 			s.mu.Unlock()
 
-			s.logger.DebugWithChain(chainID, "Setting up polling-based fulfillment monitoring for ZetaChain starting from block %d", fromBlock)
+			s.logger.Debug().
+				Uint64(logging.FieldChain, chainID).
+				Uint64("from_block", fromBlock).
+				Msg("Setting up polling-based fulfillment monitoring for ZetaChain")
 
 			// Start polling goroutine
 			go s.pollZetachainFulfillmentEvents(ctx, fulfillmentService, contractAddress, cfg.ChainConfigs[chainID].BlockInterval)
@@ -688,7 +781,12 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 			fulfillmentQuery.FromBlock = big.NewInt(int64(fromBlock))
 		}
 
-		s.logger.DebugWithChain(chainID, "Fulfillment subscription filter: FromBlock=%v, Addresses=%s, Topics=%v", fulfillmentQuery.FromBlock, contractAddress.Hex(), fulfillmentQuery.Topics[0][0].Hex())
+		s.logger.Debug().
+			Uint64(logging.FieldChain, chainID).
+			Interface("from_block", fulfillmentQuery.FromBlock).
+			Str("address", contractAddress.Hex()).
+			Str("topic", fulfillmentQuery.Topics[0][0].Hex()).
+			Msg("Fulfillment subscription filter")
 
 		fulfillmentLogs := make(chan types.Log)
 		// Use the parent context for the subscription
@@ -703,21 +801,31 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 				select {
 				case err := <-fulfillmentSub.Err():
 					if err != nil {
-						s.logger.ErrorWithChain(chainID, "ERROR: Fulfillment subscription encountered an error: %v", err)
+						s.logger.Error().
+							Uint64(logging.FieldChain, chainID).
+							Err(err).
+							Msg("Fulfillment subscription encountered an error")
 						// Try to resubscribe
 						resubCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 						newSub, resubErr := fulfillmentService.client.SubscribeFilterLogs(resubCtx, fulfillmentQuery, fulfillmentLogs)
 						cancel()
 
 						if resubErr != nil {
-							s.logger.ErrorWithChain(chainID, "CRITICAL: Failed to resubscribe fulfillment listener: %v", resubErr)
+							s.logger.Error().
+								Uint64(logging.FieldChain, chainID).
+								Err(resubErr).
+								Msg("CRITICAL: Failed to resubscribe fulfillment listener")
 						} else {
 							fulfillmentSub = newSub
-							s.logger.InfoWithChain(chainID, "Successfully resubscribed fulfillment listener")
+							s.logger.Info().
+								Uint64(logging.FieldChain, chainID).
+								Msg("Successfully resubscribed fulfillment listener")
 						}
 					}
 				case <-ctx.Done():
-					s.logger.DebugWithChain(chainID, "Fulfillment subscription monitor shutting down")
+					s.logger.Debug().
+						Uint64(logging.FieldChain, chainID).
+						Msg("Fulfillment subscription monitor shutting down")
 					return
 				}
 			}
@@ -727,7 +835,7 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 	}
 
 	// Start settlement listeners with similar block tracking
-	s.logger.Info("Starting live settlement event listeners")
+	s.logger.Info().Msg("Starting live settlement event listeners")
 	for chainID, settlementService := range s.settlementServices {
 		chainID := chainID // Create a copy of the loop variable for the closure
 		settlementService := settlementService
@@ -739,17 +847,26 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 		s.mu.Lock()
 		if lastBlock, exists := s.settlementProgress[chainID]; exists && lastBlock > 0 {
 			fromBlock = lastBlock + 1
-			s.logger.DebugWithChain(chainID, "Setting settlement listener to start from block %d", fromBlock)
+			s.logger.Debug().
+				Uint64(logging.FieldChain, chainID).
+				Uint64("from_block", fromBlock).
+				Msg("Setting settlement listener to start from block")
 		} else {
 			// If we don't have a stored last block, get the current one
 			blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			currentBlock, err := settlementService.client.BlockNumber(blockCtx)
 			cancel()
 			if err != nil {
-				s.logger.InfoWithChain(chainID, "WARNING: Unable to get current block: %v", err)
+				s.logger.Warn().
+					Uint64(logging.FieldChain, chainID).
+					Err(err).
+					Msg("Unable to get current block")
 			} else {
 				fromBlock = currentBlock
-				s.logger.DebugWithChain(chainID, "No stored progress found, setting settlement listener to start from current block %d", fromBlock)
+				s.logger.Debug().
+					Uint64(logging.FieldChain, chainID).
+					Uint64("from_block", fromBlock).
+					Msg("No stored progress found, setting settlement listener to start from current block")
 			}
 		}
 		s.mu.Unlock()
@@ -761,7 +878,10 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 			s.settlementProgress[chainID] = fromBlock
 			s.mu.Unlock()
 
-			s.logger.InfoWithChain(chainID, "Setting up polling-based settlement monitoring for ZetaChain == starting from block %d", fromBlock)
+			s.logger.Info().
+				Uint64(logging.FieldChain, chainID).
+				Uint64("from_block", fromBlock).
+				Msg("Setting up polling-based settlement monitoring for ZetaChain starting from block")
 
 			// Start polling goroutine
 			go s.pollZetachainSettlementEvents(ctx, settlementService, contractAddress, cfg.ChainConfigs[chainID].BlockInterval)
@@ -780,7 +900,12 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 			settlementQuery.FromBlock = big.NewInt(int64(fromBlock))
 		}
 
-		s.logger.InfoWithChain(chainID, "Settlement subscription filter: FromBlock=%v, Addresses=%s, Topics=%v", settlementQuery.FromBlock, contractAddress.Hex(), settlementQuery.Topics[0][0].Hex())
+		s.logger.Info().
+			Uint64(logging.FieldChain, chainID).
+			Interface("from_block", settlementQuery.FromBlock).
+			Str("contract", contractAddress.Hex()).
+			Str("topic", settlementQuery.Topics[0][0].Hex()).
+			Msg("Settlement subscription filter")
 
 		settlementLogs := make(chan types.Log)
 		// Use the parent context for the subscription
@@ -795,21 +920,31 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 				select {
 				case err := <-settlementSub.Err():
 					if err != nil {
-						s.logger.ErrorWithChain(chainID, "ERROR: Settlement subscription encountered an error: %v", err)
+						s.logger.Error().
+							Uint64(logging.FieldChain, chainID).
+							Err(err).
+							Msg("Settlement subscription encountered an error")
 						// Try to resubscribe
 						resubCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 						newSub, resubErr := settlementService.client.SubscribeFilterLogs(resubCtx, settlementQuery, settlementLogs)
 						cancel()
 
 						if resubErr != nil {
-							s.logger.ErrorWithChain(chainID, "CRITICAL: Failed to resubscribe settlement listener: %v", resubErr)
+							s.logger.Error().
+								Uint64(logging.FieldChain, chainID).
+								Err(resubErr).
+								Msg("CRITICAL: Failed to resubscribe settlement listener")
 						} else {
 							settlementSub = newSub
-							s.logger.DebugWithChain(chainID, "Successfully resubscribed settlement listener")
+							s.logger.Debug().
+								Uint64(logging.FieldChain, chainID).
+								Msg("Successfully resubscribed settlement listener")
 						}
 					}
 				case <-ctx.Done():
-					s.logger.DebugWithChain(chainID, "Settlement subscription monitor shutting down")
+					s.logger.Debug().
+						Uint64(logging.FieldChain, chainID).
+						Msg("Settlement subscription monitor shutting down")
 					return
 				}
 			}
@@ -818,7 +953,7 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 		go settlementService.processEventLogs(ctx, settlementSub, settlementLogs, contractAddress.Hex(), contractAddress)
 	}
 
-	s.logger.Info("All live event listeners started successfully")
+	s.logger.Info().Msg("All live event listeners started successfully")
 	return nil
 }
 
@@ -906,7 +1041,10 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 	var maxBlockRange uint64
 	if intentService.chainID == 1 { // Ethereum mainnet
 		maxBlockRange = EthereumMaxBlockRange
-		s.logger.Debug("[%s] Using smaller block range of %d for Ethereum mainnet", opName, maxBlockRange)
+		s.logger.Debug().
+			Str("operation", opName).
+			Uint64("max_block_range", maxBlockRange).
+			Msg("Using smaller block range for Ethereum mainnet")
 	} else {
 		maxBlockRange = DefaultMaxBlockRange
 	}
@@ -935,11 +1073,17 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 			hasEvents, err := hasEventsInBlockRange(ctx, intentService.client, contractAddress,
 				eventSigs, chunkStart+1, chunkEnd)
 			if err != nil {
-				s.logger.Debug("[%s] Error in bloom check: %v, will process range", opName, err)
+				s.logger.Debug().
+					Str("operation", opName).
+					Err(err).
+					Msg("Error in bloom check, will process range")
 			} else if !hasEvents {
 				// Skip this chunk as it likely has no events
-				s.logger.Debug("[%s] Fast-forwarding through block range %d-%d (no events detected)",
-					opName, chunkStart+1, chunkEnd)
+				s.logger.Debug().
+					Str("operation", opName).
+					Uint64("from_block", chunkStart+1).
+					Uint64("to_block", chunkEnd).
+					Msg("Fast-forwarding through block range (no events detected)")
 
 				// Update progress even though we're skipping
 				s.UpdateIntentProgress(intentService.chainID, chunkEnd)
@@ -958,7 +1102,11 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 			defer chunkCancel()
 			defer s.untrackCatchupOperation(chunkOpName)
 
-			s.logger.Debug("[%s] Fetching intent logs for blocks %d to %d", opName, chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Fetching intent logs for blocks")
 
 			query := ethereum.FilterQuery{
 				FromBlock: big.NewInt(int64(chunkStart + 1)),
@@ -981,7 +1129,12 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 				return fmt.Errorf("failed to fetch intent logs for range %d-%d: %v", chunkStart+1, chunkEnd, err)
 			}
 
-			s.logger.Debug("[%s] Processing %d logs from blocks %d to %d", opName, len(logs), chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Int("log_count", len(logs)).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Processing logs from blocks")
 
 			// Process logs in batches to report progress
 			batchSize := 100
@@ -1010,8 +1163,13 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 							return batchCtx.Err()
 						}
 
-						s.logger.Debug("[%s] Processing intent log %d/%d: Block=%d, TxHash=%s",
-							opName, i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+						s.logger.Debug().
+							Str("operation", opName).
+							Int("log_index", i+j+1).
+							Int("total_logs", len(logs)).
+							Uint64("block_number", txlog.BlockNumber).
+							Str("tx_hash", txlog.TxHash.Hex()).
+							Msg("Processing intent log")
 
 						// Extract intent ID from the log
 						intentID := txlog.Topics[1].Hex()
@@ -1027,7 +1185,10 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 
 						// Skip if intent already exists
 						if existingIntent != nil {
-							s.logger.Debug("[%s] Skipping existing intent: %s", opName, intentID)
+							s.logger.Debug().
+								Str("operation", opName).
+								Str("intent_id", intentID).
+								Msg("Skipping existing intent")
 							continue
 						}
 
@@ -1039,7 +1200,10 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 						if err != nil {
 							// Skip if intent already exists
 							if strings.Contains(err.Error(), "duplicate key") {
-								s.logger.Debug("[%s] Skipping duplicate intent: %s", opName, intentID)
+								s.logger.Debug().
+									Str("operation", opName).
+									Str("intent_id", intentID).
+									Msg("Skipping duplicate intent")
 								continue
 							}
 							return fmt.Errorf("failed to process intent log: %v", err)
@@ -1056,7 +1220,11 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 				if len(batch) > 0 {
 					lastBlock := batch[len(batch)-1].BlockNumber
 					s.UpdateIntentProgress(intentService.chainID, lastBlock)
-					s.logger.Debug("[%s] Updated progress for chain %d to block %d", opName, intentService.chainID, lastBlock)
+					s.logger.Debug().
+						Str("operation", opName).
+						Uint64(logging.FieldChain, intentService.chainID).
+						Uint64("block_number", lastBlock).
+						Msg("Updated progress")
 				}
 			}
 
@@ -1068,13 +1236,24 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 			dbErr := s.db.UpdateLastProcessedBlock(dbUpdateCtx, intentService.chainID, chunkEnd)
 			dbUpdateCancel()
 			if dbErr != nil {
-				s.logger.Debug("[%s] Warning: Failed to persist progress to DB: %v", opName, dbErr)
+				s.logger.Debug().
+					Str("operation", opName).
+					Err(dbErr).
+					Msg("Warning: Failed to persist progress to DB")
 				// Continue processing even if DB update fails
 			} else {
-				s.logger.Debug("[%s] Persisted progress to DB: chain %d at block %d", opName, intentService.chainID, chunkEnd)
+				s.logger.Debug().
+					Str("operation", opName).
+					Uint64(logging.FieldChain, intentService.chainID).
+					Uint64("block_number", chunkEnd).
+					Msg("Persisted progress to DB")
 			}
 
-			s.logger.Debug("[%s] Completed processing intent logs for blocks %d to %d", opName, chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Completed processing intent logs for blocks")
 
 			return nil
 		}()
@@ -1092,7 +1271,10 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 	var maxBlockRange uint64
 	if fulfillmentService.chainID == 1 { // Ethereum mainnet
 		maxBlockRange = EthereumMaxBlockRange
-		s.logger.Debug("[%s] Using smaller block range of %d for Ethereum mainnet", opName, maxBlockRange)
+		s.logger.Debug().
+			Str("operation", opName).
+			Uint64("max_block_range", maxBlockRange).
+			Msg("Using smaller block range for Ethereum mainnet")
 	} else {
 		maxBlockRange = DefaultMaxBlockRange
 	}
@@ -1120,7 +1302,11 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 				chunkEnd = toBlock
 			}
 
-			s.logger.Debug("[%s] Fetching fulfillment logs for blocks %d to %d", opName, chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Fetching fulfillment logs for blocks")
 
 			query := ethereum.FilterQuery{
 				FromBlock: big.NewInt(int64(chunkStart + 1)),
@@ -1143,7 +1329,12 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 				return fmt.Errorf("failed to fetch fulfillment logs for range %d-%d: %v", chunkStart+1, chunkEnd, err)
 			}
 
-			s.logger.Debug("[%s] Processing %d logs from blocks %d to %d", opName, len(logs), chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Int("log_count", len(logs)).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Processing logs from blocks")
 
 			// Process logs in batches to report progress
 			batchSize := 100
@@ -1172,8 +1363,13 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 							return batchCtx.Err()
 						}
 
-						s.logger.Debug("[%s] Processing fulfillment log %d/%d: Block=%d, TxHash=%s",
-							opName, i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+						s.logger.Debug().
+							Str("operation", opName).
+							Int("log_index", i+j+1).
+							Int("total_logs", len(logs)).
+							Uint64("block_number", txlog.BlockNumber).
+							Str("tx_hash", txlog.TxHash.Hex()).
+							Msg("Processing fulfillment log")
 
 						// Extract intent ID from the log
 						intentID := txlog.Topics[1].Hex()
@@ -1185,10 +1381,16 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 
 						if err != nil {
 							if strings.Contains(err.Error(), "not found") {
-								s.logger.Debug("[%s] Skipping fulfillment for non-existent intent: %s", opName, intentID)
+								s.logger.Debug().
+									Str("operation", opName).
+									Str("intent_id", intentID).
+									Msg("Skipping fulfillment for non-existent intent")
 								continue
 							}
-							s.logger.Debug("[%s] Failed to check for existing intent: %v", opName, err)
+							s.logger.Debug().
+								Str("operation", opName).
+								Err(err).
+								Msg("Failed to check for existing intent")
 							continue
 						}
 
@@ -1200,7 +1402,10 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 						if err != nil {
 							// Skip if fulfillment already exists
 							if strings.Contains(err.Error(), "duplicate key") {
-								s.logger.Debug("[%s] Skipping duplicate fulfillment: %s", opName, intentID)
+								s.logger.Debug().
+									Str("operation", opName).
+									Str("intent_id", intentID).
+									Msg("Skipping duplicate fulfillment")
 								continue
 							}
 							return fmt.Errorf("failed to process fulfillment log: %v", err)
@@ -1217,7 +1422,11 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 				if len(batch) > 0 {
 					lastBlock := batch[len(batch)-1].BlockNumber
 					s.UpdateFulfillmentProgress(fulfillmentService.chainID, lastBlock)
-					s.logger.Debug("[%s] Updated progress for chain %d to block %d", opName, fulfillmentService.chainID, lastBlock)
+					s.logger.Debug().
+						Str("operation", opName).
+						Uint64(logging.FieldChain, fulfillmentService.chainID).
+						Uint64("block_number", lastBlock).
+						Msg("Updated progress")
 				}
 			}
 
@@ -1229,13 +1438,24 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 			dbErr := s.db.UpdateLastProcessedBlock(dbUpdateCtx, fulfillmentService.chainID, chunkEnd)
 			dbUpdateCancel()
 			if dbErr != nil {
-				s.logger.Debug("[%s] Warning: Failed to persist progress to DB: %v", opName, dbErr)
+				s.logger.Debug().
+					Str("operation", opName).
+					Err(dbErr).
+					Msg("Warning: Failed to persist progress to DB")
 				// Continue processing even if DB update fails
 			} else {
-				s.logger.Debug("[%s] Persisted progress to DB: chain %d at block %d", opName, fulfillmentService.chainID, chunkEnd)
+				s.logger.Debug().
+					Str("operation", opName).
+					Uint64(logging.FieldChain, fulfillmentService.chainID).
+					Uint64("block_number", chunkEnd).
+					Msg("Persisted progress to DB")
 			}
 
-			s.logger.Debug("[%s] Completed processing fulfillment logs for blocks %d to %d", opName, chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Completed processing fulfillment logs for blocks")
 
 			return nil
 		}()
@@ -1253,7 +1473,10 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 	var maxBlockRange uint64
 	if settlementService.chainID == 1 { // Ethereum mainnet
 		maxBlockRange = EthereumMaxBlockRange
-		s.logger.Debug("[%s] Using smaller block range of %d for Ethereum mainnet", opName, maxBlockRange)
+		s.logger.Debug().
+			Str("operation", opName).
+			Uint64("max_block_range", maxBlockRange).
+			Msg("Using smaller block range for Ethereum mainnet")
 	} else {
 		maxBlockRange = DefaultMaxBlockRange
 	}
@@ -1281,7 +1504,11 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 				chunkEnd = toBlock
 			}
 
-			s.logger.Debug("[%s] Fetching settlement logs for blocks %d to %d", opName, chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Fetching settlement logs for blocks")
 
 			query := ethereum.FilterQuery{
 				FromBlock: big.NewInt(int64(chunkStart + 1)),
@@ -1304,7 +1531,12 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 				return fmt.Errorf("failed to fetch settlement logs for range %d-%d: %v", chunkStart+1, chunkEnd, err)
 			}
 
-			s.logger.Debug("[%s] Processing %d logs from blocks %d to %d", opName, len(logs), chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Int("log_count", len(logs)).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Processing logs from blocks")
 
 			// Process logs in batches to report progress
 			batchSize := 100
@@ -1333,8 +1565,13 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 							return batchCtx.Err()
 						}
 
-						s.logger.Debug("[%s] Processing settlement log %d/%d: Block=%d, TxHash=%s",
-							opName, i+j+1, len(logs), txlog.BlockNumber, txlog.TxHash.Hex())
+						s.logger.Debug().
+							Str("operation", opName).
+							Int("log_index", i+j+1).
+							Int("total_logs", len(logs)).
+							Uint64("block_number", txlog.BlockNumber).
+							Str("tx_hash", txlog.TxHash.Hex()).
+							Msg("Processing settlement log")
 
 						// Extract intent ID from the log
 						intentID := txlog.Topics[1].Hex()
@@ -1346,7 +1583,10 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 
 						if err != nil {
 							if strings.Contains(err.Error(), "not found") {
-								s.logger.Debug("[%s] Skipping settlement for non-existent intent: %s", opName, intentID)
+								s.logger.Debug().
+									Str("operation", opName).
+									Str("intent_id", intentID).
+									Msg("Skipping settlement for non-existent intent")
 								continue
 							}
 							return fmt.Errorf("failed to check for existing intent: %v", err)
@@ -1360,7 +1600,10 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 						if err != nil {
 							// Skip if settlement already exists
 							if strings.Contains(err.Error(), "duplicate key") {
-								s.logger.Debug("[%s] Skipping duplicate settlement: %s", opName, intentID)
+								s.logger.Debug().
+									Str("operation", opName).
+									Str("intent_id", intentID).
+									Msg("Skipping duplicate settlement")
 								continue
 							}
 							return fmt.Errorf("failed to process settlement log: %v", err)
@@ -1377,7 +1620,11 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 				if len(batch) > 0 {
 					lastBlock := batch[len(batch)-1].BlockNumber
 					s.UpdateSettlementProgress(settlementService.chainID, lastBlock)
-					s.logger.Debug("[%s] Updated progress for chain %d to block %d", opName, settlementService.chainID, lastBlock)
+					s.logger.Debug().
+						Str("operation", opName).
+						Uint64(logging.FieldChain, settlementService.chainID).
+						Uint64("block_number", lastBlock).
+						Msg("Updated progress")
 				}
 			}
 
@@ -1389,13 +1636,24 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 			dbErr := s.db.UpdateLastProcessedBlock(dbUpdateCtx, settlementService.chainID, chunkEnd)
 			dbUpdateCancel()
 			if dbErr != nil {
-				s.logger.Debug("[%s] Warning: Failed to persist progress to DB: %v", opName, dbErr)
+				s.logger.Debug().
+					Str("operation", opName).
+					Err(dbErr).
+					Msg("Warning: Failed to persist progress to DB")
 				// Continue processing even if DB update fails
 			} else {
-				s.logger.Debug("[%s] Persisted progress to DB: chain %d at block %d", opName, settlementService.chainID, chunkEnd)
+				s.logger.Debug().
+					Str("operation", opName).
+					Uint64(logging.FieldChain, settlementService.chainID).
+					Uint64("block_number", chunkEnd).
+					Msg("Persisted progress to DB")
 			}
 
-			s.logger.Debug("[%s] Completed processing settlement logs for blocks %d to %d", opName, chunkStart+1, chunkEnd)
+			s.logger.Debug().
+				Str("operation", opName).
+				Uint64("from_block", chunkStart+1).
+				Uint64("to_block", chunkEnd).
+				Msg("Completed processing settlement logs for blocks")
 
 			return nil
 		}()
@@ -1463,7 +1721,10 @@ func (s *EventCatchupService) pollChainEvents(
 	maxRetries := 3
 	baseRetryDelay := 5 * time.Second
 
-	s.logger.Info("Starting ZetaChain polling for %s events with interval of %v", eventType, interval)
+	s.logger.Info().
+		Str("event_type", eventType).
+		Dur("interval", interval).
+		Msg("Starting ZetaChain polling for events")
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -1475,7 +1736,9 @@ func (s *EventCatchupService) pollChainEvents(
 	for {
 		select {
 		case <-ctx.Done():
-			s.logger.Info("Context cancelled, stopping ZetaChain %s event polling", eventType)
+			s.logger.Info().
+				Str("event_type", eventType).
+				Msg("Context cancelled, stopping ZetaChain event polling")
 			return
 		case <-ticker.C:
 			// Get the last processed block
@@ -1504,8 +1767,12 @@ func (s *EventCatchupService) pollChainEvents(
 				}
 
 				retryDelay := baseRetryDelay * time.Duration(1<<retry)
-				s.logger.Error("ERROR: Failed to get current block for ZetaChain (attempt %d/%d): %v. Retrying in %v",
-					retry+1, maxRetries, err, retryDelay)
+				s.logger.Error().
+					Int("attempt", retry+1).
+					Int("max_attempts", maxRetries).
+					Err(err).
+					Dur("retry_delay", retryDelay).
+					Msg("Failed to get current block for ZetaChain")
 
 				select {
 				case <-time.After(retryDelay):
@@ -1516,7 +1783,9 @@ func (s *EventCatchupService) pollChainEvents(
 			}
 
 			if err != nil {
-				s.logger.Error("CRITICAL: Failed to get current block for ZetaChain after %d attempts. Skipping this polling cycle.", maxRetries)
+				s.logger.Error().
+					Int("max_attempts", maxRetries).
+					Msg("CRITICAL: Failed to get current block for ZetaChain after retries. Skipping this polling cycle.")
 				// Report unhealthy polling if we have an intent service to report to
 				if intentService != nil && eventType == "intent" {
 					intentService.UpdatePollingHealth(false)
@@ -1535,9 +1804,16 @@ func (s *EventCatchupService) pollChainEvents(
 					// Even if no new blocks, periodically update the DB to ensure we don't lose progress
 					dbUpdateCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 					if err := s.db.UpdateLastProcessedBlock(dbUpdateCtx, chainID, lastProcessedBlock); err != nil {
-						s.logger.Info("WARNING: Failed to persist %s progress to DB: %v", eventType, err)
+						s.logger.Warn().
+							Str("event_type", eventType).
+							Err(err).
+							Msg("Failed to persist progress to DB")
 					} else {
-						s.logger.Debug("Persisted %s progress to DB: chain %d at block %d", eventType, chainID, lastProcessedBlock)
+						s.logger.Debug().
+							Str("event_type", eventType).
+							Uint64(logging.FieldChain, chainID).
+							Uint64("block_number", lastProcessedBlock).
+							Msg("Persisted progress to DB")
 					}
 					cancel()
 					lastDbUpdateTime = time.Now()
@@ -1551,7 +1827,11 @@ func (s *EventCatchupService) pollChainEvents(
 				endBlock = currentBlock
 			}
 
-			s.logger.Debug("Polling ZetaChain for %s events from blocks %d to %d", eventType, lastProcessedBlock+1, endBlock)
+			s.logger.Debug().
+				Str("event_type", eventType).
+				Uint64("from_block", lastProcessedBlock+1).
+				Uint64("to_block", endBlock).
+				Msg("Polling ZetaChain for events")
 
 			// Create query for the block range
 			query := ethereum.FilterQuery{
@@ -1575,8 +1855,13 @@ func (s *EventCatchupService) pollChainEvents(
 				}
 
 				retryDelay := baseRetryDelay * time.Duration(1<<retry)
-				s.logger.Error("ERROR: Failed to filter logs for ZetaChain %s events (attempt %d/%d): %v. Retrying in %v",
-					eventType, retry+1, maxRetries, err, retryDelay)
+				s.logger.Error().
+					Str("event_type", eventType).
+					Int("attempt", retry+1).
+					Int("max_attempts", maxRetries).
+					Err(err).
+					Dur("retry_delay", retryDelay).
+					Msg("Failed to filter logs for ZetaChain events")
 
 				select {
 				case <-time.After(retryDelay):
@@ -1587,8 +1872,10 @@ func (s *EventCatchupService) pollChainEvents(
 			}
 
 			if err != nil {
-				s.logger.Error("CRITICAL: Failed to filter logs for ZetaChain %s events after %d attempts. Skipping this block range.",
-					eventType, maxRetries)
+				s.logger.Error().
+					Str("event_type", eventType).
+					Int("max_attempts", maxRetries).
+					Msg("CRITICAL: Failed to filter logs for ZetaChain events after retries. Skipping this block range.")
 				continue
 			}
 
@@ -1596,8 +1883,12 @@ func (s *EventCatchupService) pollChainEvents(
 			processedCount := 0
 			errorCount := 0
 			if len(logs) > 0 {
-				s.logger.Debug("Found %d new %s events in ZetaChain blocks %d to %d",
-					len(logs), eventType, lastProcessedBlock+1, endBlock)
+				s.logger.Debug().
+					Int("log_count", len(logs)).
+					Str("event_type", eventType).
+					Uint64("from_block", lastProcessedBlock+1).
+					Uint64("to_block", endBlock).
+					Msg("Found new events in ZetaChain blocks")
 
 				// Process the logs with individual timeouts
 				for _, logEntry := range logs {
@@ -1609,19 +1900,32 @@ func (s *EventCatchupService) pollChainEvents(
 						errorCount++
 						if strings.Contains(err.Error(), "duplicate key") {
 							// This is expected for duplicates, just log at debug level
-							s.logger.Debug("Skipping duplicate %s event in tx: %s", eventType, logEntry.TxHash.Hex())
+							s.logger.Debug().
+								Str("event_type", eventType).
+								Str("tx_hash", logEntry.TxHash.Hex()).
+								Msg("Skipping duplicate event")
 						} else {
-							s.logger.Error("Failed to process ZetaChain %s log: %v", eventType, err)
+							s.logger.Error().
+								Str("event_type", eventType).
+								Err(err).
+								Msg("Failed to process ZetaChain log")
 						}
 					} else {
 						processedCount++
 					}
 				}
-				s.logger.Info("Successfully processed %d/%d %s events (errors: %d)",
-					processedCount, len(logs), eventType, errorCount)
+				s.logger.Info().
+					Int("processed_count", processedCount).
+					Int("total_logs", len(logs)).
+					Str("event_type", eventType).
+					Int("error_count", errorCount).
+					Msg("Successfully processed events")
 			} else {
-				s.logger.Info("No new %s events found in ZetaChain blocks %d to %d",
-					eventType, lastProcessedBlock+1, endBlock)
+				s.logger.Info().
+					Str("event_type", eventType).
+					Uint64("from_block", lastProcessedBlock+1).
+					Uint64("to_block", endBlock).
+					Msg("No new events found in ZetaChain blocks")
 			}
 
 			// Update the last processed block
@@ -1630,9 +1934,16 @@ func (s *EventCatchupService) pollChainEvents(
 			// Persist progress to the database
 			dbUpdateCtx, dbUpdateCancel := context.WithTimeout(ctx, 10*time.Second)
 			if err := s.db.UpdateLastProcessedBlock(dbUpdateCtx, chainID, endBlock); err != nil {
-				s.logger.Info("WARNING: Failed to persist %s progress to DB: %v", eventType, err)
+				s.logger.Warn().
+					Str("event_type", eventType).
+					Err(err).
+					Msg("Failed to persist progress to DB")
 			} else {
-				s.logger.Debug("Persisted %s progress to DB: chain %d at block %d", eventType, chainID, endBlock)
+				s.logger.Debug().
+					Str("event_type", eventType).
+					Uint64(logging.FieldChain, chainID).
+					Uint64("block_number", endBlock).
+					Msg("Persisted progress to DB")
 				lastDbUpdateTime = time.Now()
 			}
 			dbUpdateCancel()
@@ -1643,7 +1954,7 @@ func (s *EventCatchupService) pollChainEvents(
 // StartSubscriptionSupervisor starts a background goroutine that periodically checks
 // if services are still running and restarts them if needed
 func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, cfg *config.Config) {
-	s.logger.Info("Starting subscription supervisor to monitor service health")
+	s.logger.Info().Msg("Starting subscription supervisor to monitor service health")
 
 	// Run health check every 5 minutes
 	healthCheckTicker := time.NewTicker(5 * time.Minute)
@@ -1662,30 +1973,40 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 	for {
 		select {
 		case <-healthCheckTicker.C:
-			s.logger.Info("Subscription supervisor checking service health...")
+			s.logger.Info().Msg("Subscription supervisor checking service health...")
 
 			// Check intent services
 			for chainID, intentService := range s.intentServices {
 				// Skip health check for ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info("ZetaChain intent service using polling mechanism - skipping subscription check")
+					s.logger.Info().Msg("ZetaChain intent service using polling mechanism - skipping subscription check")
 					continue
 				}
 
 				activeGoroutines := intentService.ActiveGoroutines()
-				s.logger.Debug("Intent service for chain %d: %d active goroutines", chainID, activeGoroutines)
+				s.logger.Debug().
+					Uint64(logging.FieldChain, chainID).
+					Int32("active_goroutines", activeGoroutines).
+					Msg("Intent service")
 
 				if activeGoroutines == 0 {
-					s.logger.Info("WARNING: Intent service for chain %d has 0 active goroutines, restarting", chainID)
+					s.logger.Warn().
+						Uint64(logging.FieldChain, chainID).
+						Msg("Intent service has 0 active goroutines, restarting")
 					contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 					// Create a context with timeout for restart
 					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 					err := intentService.Restart(restartCtx, contractAddress)
 					if err != nil {
-						s.logger.Error("Failed to restart intent service for chain %d: %v", chainID, err)
+						s.logger.Error().
+							Uint64(logging.FieldChain, chainID).
+							Err(err).
+							Msg("Failed to restart intent service")
 					} else {
-						s.logger.Info("RECOVERY: Successfully restarted intent service for chain %d", chainID)
+						s.logger.Info().
+							Uint64(logging.FieldChain, chainID).
+							Msg("RECOVERY: Successfully restarted intent service")
 					}
 					cancel()
 				}
@@ -1695,24 +2016,34 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 			for chainID, fulfillmentService := range s.fulfillmentServices {
 				// Skip health check for ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info("ZetaChain fulfillment service using polling mechanism - skipping subscription check")
+					s.logger.Info().Msg("ZetaChain fulfillment service using polling mechanism - skipping subscription check")
 					continue
 				}
 
 				count := fulfillmentService.GetSubscriptionCount()
-				s.logger.Info("Fulfillment service for chain %d: %d active subscriptions", chainID, count)
+				s.logger.Info().
+					Uint64(logging.FieldChain, chainID).
+					Int("active_subscriptions", count).
+					Msg("Fulfillment service")
 
 				if count == 0 {
-					s.logger.Info("WARNING: Fulfillment service for chain %d has no active subscriptions, restarting", chainID)
+					s.logger.Warn().
+						Uint64(logging.FieldChain, chainID).
+						Msg("Fulfillment service has no active subscriptions, restarting")
 					contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 					// Create a context with timeout for restart
 					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 					err := fulfillmentService.Restart(restartCtx, contractAddress)
 					if err != nil {
-						s.logger.Error("Failed to restart fulfillment service for chain %d: %v", chainID, err)
+						s.logger.Error().
+							Uint64(logging.FieldChain, chainID).
+							Err(err).
+							Msg("Failed to restart fulfillment service")
 					} else {
-						s.logger.Info("Successfully restarted fulfillment service for chain %d", chainID)
+						s.logger.Info().
+							Uint64(logging.FieldChain, chainID).
+							Msg("Successfully restarted fulfillment service")
 					}
 					cancel()
 				}
@@ -1722,24 +2053,34 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 			for chainID, settlementService := range s.settlementServices {
 				// Skip health check for ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info("ZetaChain settlement service using polling mechanism - skipping subscription check")
+					s.logger.Info().Msg("ZetaChain settlement service using polling mechanism - skipping subscription check")
 					continue
 				}
 
 				count := settlementService.GetSubscriptionCount()
-				s.logger.Info("Settlement service for chain %d: %d active subscriptions", chainID, count)
+				s.logger.Info().
+					Uint64(logging.FieldChain, chainID).
+					Int("active_subscriptions", count).
+					Msg("Settlement service")
 
 				if count == 0 {
-					s.logger.Info("WARNING: Settlement service for chain %d has no active subscriptions, restarting", chainID)
+					s.logger.Warn().
+						Uint64(logging.FieldChain, chainID).
+						Msg("Settlement service has no active subscriptions, restarting")
 					contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 					// Create a context with timeout for restart
 					restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 					err := settlementService.Restart(restartCtx, contractAddress)
 					if err != nil {
-						s.logger.Error("Failed to restart settlement service for chain %d: %v", chainID, err)
+						s.logger.Error().
+							Uint64(logging.FieldChain, chainID).
+							Err(err).
+							Msg("Failed to restart settlement service")
 					} else {
-						s.logger.Info("Successfully restarted settlement service for chain %d", chainID)
+						s.logger.Info().
+							Uint64(logging.FieldChain, chainID).
+							Msg("Successfully restarted settlement service")
 					}
 					cancel()
 				}
@@ -1747,16 +2088,16 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 
 			// Check ZetaChain health by getting block number
 			if client, ok := s.intentServices[zetaChainID]; ok && client != nil {
-				s.logger.Info("Checking ZetaChain polling health...")
+				s.logger.Info().Msg("Checking ZetaChain polling health...")
 				blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 				_, err := client.client.BlockNumber(blockCtx)
 				cancel()
 
 				if err != nil {
-					s.logger.Info("WARNING: ZetaChain polling health check failed: %v", err)
+					s.logger.Warn().Err(err).Msg("ZetaChain polling health check failed")
 					client.UpdatePollingHealth(false)
 				} else {
-					s.logger.Info("ZetaChain polling health check passed")
+					s.logger.Info().Msg("ZetaChain polling health check passed")
 					client.UpdatePollingHealth(true)
 				}
 			}
@@ -1764,18 +2105,22 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 		case <-reconnectTicker.C:
 			// Perform a complete refresh of all WebSocket connections every 2 hours
 			timeSinceLastReconnect := time.Since(lastFullReconnect)
-			s.logger.Info("Performing scheduled full reconnection of all services (last reconnect: %v ago)", timeSinceLastReconnect)
+			s.logger.Info().
+				Dur("time_since_last", timeSinceLastReconnect).
+				Msg("Performing scheduled full reconnection of all services")
 			lastFullReconnect = time.Now()
 
 			// Force reconnect all intent services (except ZetaChain)
 			for chainID, intentService := range s.intentServices {
 				// Skip ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info("Skipping ZetaChain intent service reconnection (using polling)")
+					s.logger.Info().Msg("Skipping ZetaChain intent service reconnection (using polling)")
 					continue
 				}
 
-				s.logger.Info("Scheduled reconnect: Restarting intent service for chain %d", chainID)
+				s.logger.Info().
+					Uint64(logging.FieldChain, chainID).
+					Msg("Scheduled reconnect: Restarting intent service")
 				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 				// First, unsubscribe from all existing subscriptions
@@ -1785,9 +2130,14 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 				err := intentService.Restart(restartCtx, contractAddress)
 				if err != nil {
-					s.logger.Error("Failed to reconnect intent service for chain %d: %v", chainID, err)
+					s.logger.Error().
+						Uint64(logging.FieldChain, chainID).
+						Err(err).
+						Msg("Failed to reconnect intent service")
 				} else {
-					s.logger.Info("Scheduled reconnect: Successfully reconnected intent service for chain %d", chainID)
+					s.logger.Info().
+						Uint64(logging.FieldChain, chainID).
+						Msg("Scheduled reconnect: Successfully reconnected intent service")
 				}
 				cancel()
 			}
@@ -1796,11 +2146,13 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 			for chainID, fulfillmentService := range s.fulfillmentServices {
 				// Skip ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info("Skipping ZetaChain fulfillment service reconnection (using polling)")
+					s.logger.Info().Msg("Skipping ZetaChain fulfillment service reconnection (using polling)")
 					continue
 				}
 
-				s.logger.Info("Scheduled reconnect: Restarting fulfillment service for chain %d", chainID)
+				s.logger.Info().
+					Uint64(logging.FieldChain, chainID).
+					Msg("Scheduled reconnect: Restarting fulfillment service")
 				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 				// First, unsubscribe from all existing subscriptions
@@ -1810,9 +2162,14 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 				err := fulfillmentService.Restart(restartCtx, contractAddress)
 				if err != nil {
-					s.logger.Error("Failed to reconnect fulfillment service for chain %d: %v", chainID, err)
+					s.logger.Error().
+						Uint64(logging.FieldChain, chainID).
+						Err(err).
+						Msg("Failed to reconnect fulfillment service")
 				} else {
-					s.logger.Info("Scheduled reconnect: Successfully reconnected fulfillment service for chain %d", chainID)
+					s.logger.Info().
+						Uint64(logging.FieldChain, chainID).
+						Msg("Scheduled reconnect: Successfully reconnected fulfillment service")
 				}
 				cancel()
 			}
@@ -1821,11 +2178,13 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 			for chainID, settlementService := range s.settlementServices {
 				// Skip ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info("Skipping ZetaChain settlement service reconnection (using polling)")
+					s.logger.Info().Msg("Skipping ZetaChain settlement service reconnection (using polling)")
 					continue
 				}
 
-				s.logger.Info("Scheduled reconnect: Restarting settlement service for chain %d", chainID)
+				s.logger.Info().
+					Uint64(logging.FieldChain, chainID).
+					Msg("Scheduled reconnect: Restarting settlement service")
 				contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
 
 				// First, unsubscribe from all existing subscriptions
@@ -1835,15 +2194,20 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 				restartCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 				err := settlementService.Restart(restartCtx, contractAddress)
 				if err != nil {
-					s.logger.Error("Failed to reconnect settlement service for chain %d: %v", chainID, err)
+					s.logger.Error().
+						Uint64(logging.FieldChain, chainID).
+						Err(err).
+						Msg("Failed to reconnect settlement service")
 				} else {
-					s.logger.Info("Scheduled reconnect: Successfully reconnected settlement service for chain %d", chainID)
+					s.logger.Info().
+						Uint64(logging.FieldChain, chainID).
+						Msg("Scheduled reconnect: Successfully reconnected settlement service")
 				}
 				cancel()
 			}
 
 		case <-ctx.Done():
-			s.logger.Debug("Subscription supervisor shutting down")
+			s.logger.Debug().Msg("Subscription supervisor shutting down")
 			return
 		}
 	}
@@ -1859,7 +2223,7 @@ func (s *EventCatchupService) Shutdown(timeout time.Duration) error {
 	s.isShutdown = true
 	s.shutdownMu.Unlock()
 
-	s.logger.Info("Shutting down EventCatchupService...")
+	s.logger.Info().Msg("Shutting down EventCatchupService...")
 
 	// Cancel the cleanup context to signal all goroutines to stop
 	s.cleanupCancel()
@@ -1873,10 +2237,12 @@ func (s *EventCatchupService) Shutdown(timeout time.Duration) error {
 
 	select {
 	case <-done:
-		s.logger.Info("EventCatchupService shutdown completed successfully")
+		s.logger.Info().Msg("EventCatchupService shutdown completed successfully")
 		return nil
 	case <-time.After(timeout):
-		s.logger.Error("EventCatchupService shutdown timed out after %v", timeout)
+		s.logger.Error().
+			Dur("timeout", timeout).
+			Msg("EventCatchupService shutdown timed out")
 		return fmt.Errorf("shutdown timed out after %v", timeout)
 	}
 }
@@ -1893,9 +2259,12 @@ func (s *EventCatchupService) StartGoroutine(name string, fn func()) {
 	s.shutdownMu.RLock()
 	if s.isShutdown {
 		s.shutdownMu.RUnlock()
-		s.logger.Debug("Cannot start goroutine %s: service is shutdown", name)
+		s.logger.Debug().
+			Str("goroutine_name", name).
+			Msg("Cannot start goroutine: service is shutdown")
 		return
 	}
+
 	s.shutdownMu.RUnlock()
 
 	s.goroutineWg.Add(1)
@@ -1908,7 +2277,10 @@ func (s *EventCatchupService) StartGoroutine(name string, fn func()) {
 
 			// Recover from panics
 			if r := recover(); r != nil {
-				s.logger.Error("CRITICAL: Panic in goroutine %s: %v", name, r)
+				s.logger.Error().
+					Str("goroutine_name", name).
+					Any("panic", r).
+					Msg("Panic in goroutine")
 			}
 		}()
 

@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/rs/zerolog"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -64,7 +64,7 @@ func NewFulfillmentService(
 	db db.Database,
 	intentFulfilledEventABI string,
 	chainID uint64,
-	logger logger.Logger,
+	logger zerolog.Logger,
 ) (*FulfillmentService, error) {
 	// Parse the contract ABI
 	parsedABI, err := abi.JSON(strings.NewReader(intentFulfilledEventABI))

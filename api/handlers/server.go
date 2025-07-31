@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/rs/zerolog"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -28,7 +28,7 @@ type Server struct {
 	intentService      *services.IntentService
 	metricsService     *services.MetricsService
 	db                 db.Database
-	logger             logger.Logger
+	logger             zerolog.Logger
 }
 
 // NewServer creates a new HTTP server
@@ -37,7 +37,7 @@ func NewServer(
 	intentService *services.IntentService,
 	metricsService *services.MetricsService,
 	database db.Database,
-	logger logger.Logger,
+	logger zerolog.Logger,
 ) *Server {
 	return &Server{
 		fulfillmentService: fulfillmentService,
@@ -84,7 +84,7 @@ func (s *Server) Start(addr string) error {
 		case <-ctx.Done():
 			if ctx.Err() == context.DeadlineExceeded {
 				// Log timeout and send an error response
-				s.logger.Info("Request timeout: %s %s", c.Request.Method, c.Request.URL.Path)
+				s.logger.Info().Msgf("Request timeout: %s %s", c.Request.Method, c.Request.URL.Path)
 				c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
 					"error": "Request timeout",
 				})
@@ -115,11 +115,11 @@ func (s *Server) Start(addr string) error {
 
 		// Log information after request is processed
 		latency := time.Since(start)
-		s.logger.Debug("%s %s [%d] %v", c.Request.Method, path, c.Writer.Status(), latency)
+		s.logger.Debug().Msgf("%s %s [%d] %v", c.Request.Method, path, c.Writer.Status(), latency)
 
 		// Log slow requests
 		if latency > 500*time.Millisecond {
-			s.logger.Debug("SLOW REQUEST: %s %s took %v", c.Request.Method, path, latency)
+			s.logger.Debug().Msgf("SLOW REQUEST: %s %s took %v", c.Request.Method, path, latency)
 		}
 	})
 
@@ -172,7 +172,7 @@ func (s *Server) Start(addr string) error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	s.logger.Info("Shutting down server...")
+	s.logger.Info().Msg("Shutting down server...")
 
 	// Create a timeout context for graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -183,7 +183,7 @@ func (s *Server) Start(addr string) error {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	s.logger.Debug("Server exited properly")
+	s.logger.Debug().Msg("Server exited properly")
 	return nil
 }
 
@@ -228,11 +228,11 @@ func (s *Server) GetIntent(c *gin.Context) {
 	}
 
 	// Log the request for debugging
-	s.logger.Debug("GetIntent request received for ID: %s", id)
+	s.logger.Debug().Msgf("GetIntent request received for ID: %s", id)
 
 	// Validate ID format
 	if !utils.ValidateBytes32(id) {
-		s.logger.Debug("Invalid intent ID format: %s", id)
+		s.logger.Debug().Msgf("Invalid intent ID format: %s", id)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid intent ID format"})
 		return
 	}
@@ -240,7 +240,7 @@ func (s *Server) GetIntent(c *gin.Context) {
 	intent, err := s.intentService.GetIntent(c.Request.Context(), id)
 	if err != nil {
 		// Log the error for debugging
-		s.logger.Debug("Error getting intent %s: %v", id, err)
+		s.logger.Debug().Msgf("Error getting intent %s: %v", id, err)
 
 		// Check if it's a "not found" error
 		if strings.Contains(err.Error(), "not found") {
@@ -252,7 +252,7 @@ func (s *Server) GetIntent(c *gin.Context) {
 		return
 	}
 
-	s.logger.Debug("Successfully retrieved intent %s", id)
+	s.logger.Debug().Msgf("Successfully retrieved intent %s", id)
 	c.JSON(http.StatusOK, intent)
 }
 
