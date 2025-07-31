@@ -470,7 +470,7 @@ func TestIntentServiceGoroutineCleanup(t *testing.T) {
 
 func TestIntentServiceShutdownTimeout(t *testing.T) {
 	// Create a mock logger
-	logger := logger.NewStdLogger(false, logger.DebugLevel)
+	logger := logging.NewTesting(t)
 
 	// Create a mock database
 	mockDB := &db.MockDB{}
@@ -527,7 +527,7 @@ func contains(s, substr string) bool {
 
 func TestIntentService_RestartSubscriptionNoGoroutineLeak(t *testing.T) {
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create mock database
 	mockDB := &db.MockDB{}
@@ -589,7 +589,7 @@ func TestIntentService_RestartSubscriptionNoGoroutineLeak(t *testing.T) {
 
 func TestIntentService_MultipleStartListeningNoLeak(t *testing.T) {
 	// Create a mock logger
-	logger := logger.NewStdLogger(false, logger.DebugLevel)
+	logger := logging.NewTesting(t)
 
 	// Create a mock database
 	mockDB := &db.MockDB{}

@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
 )
 
@@ -66,8 +67,10 @@ func NewSettlementService(
 	db db.Database,
 	intentSettledEventABI string,
 	chainID uint64,
-	logger logger.Logger,
+	logger zerolog.Logger,
 ) (*SettlementService, error) {
+	logger = logger.With().Uint64(logging.FieldChain, chainID).Logger()
+
 	// Parse the contract ABI
 	parsedABI, err := abi.JSON(strings.NewReader(intentSettledEventABI))
 	if err != nil {
@@ -99,7 +102,9 @@ func (s *SettlementService) StartListening(ctx context.Context, contractAddress 
 	// Check if service is already running - prevent multiple starts
 	activeGoroutines := atomic.LoadInt32(&s.activeGoroutines)
 	if activeGoroutines > 0 {
-		s.logger.InfoWithChain(s.chainID, "Service already running with %d goroutines, skipping start", activeGoroutines)
+		s.logger.Info().
+			Int32("active_goroutines", activeGoroutines).
+			Msg("Service already running, skipping start")
 		return nil
 	}
 
@@ -125,8 +130,9 @@ func (s *SettlementService) StartListening(ctx context.Context, contractAddress 
 	s.subs[subID] = sub
 	s.mu.Unlock()
 
-	s.logger.InfoWithChain(s.chainID, "Successfully subscribed to settlement events for contract %s",
-		contractAddress.Hex())
+	s.logger.Info().
+		Str("contract", contractAddress.Hex()).
+		Msg("Successfully subscribed to settlement events")
 
 	s.startGoroutine("settlement-processor", func() {
 		s.processEventLogs(s.cleanupCtx, sub, logs, subID, contractAddress)
@@ -141,10 +147,14 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 		s.mu.Lock()
 		delete(s.subs, subID)
 		s.mu.Unlock()
-		s.logger.InfoWithChain(s.chainID, "Ended settlement event log processing, subscription %s", subID)
+		s.logger.Info().
+			Str("subscription_id", subID).
+			Msg("Ended settlement event log processing")
 	}()
 
-	s.logger.NoticeWithChain(s.chainID, "Starting settlement event log processing, subscription %s", subID)
+	s.logger.Info().
+		Str("subscription_id", subID).
+		Msg("Starting settlement event log processing")
 
 	// Add a ticker for debugging to periodically log subscription status
 	debugTicker := time.NewTicker(30 * time.Second)
@@ -154,11 +164,14 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 		select {
 		case err := <-sub.Err():
 			if err != nil {
-				s.logger.ErrorWithChain(s.chainID, "Settlement subscription %s error: %v", subID, err)
+				s.logger.Error().
+					Str("subscription_id", subID).
+					Err(err).
+					Msg("Settlement subscription error")
 				// Try to resubscribe
 				newSub, err := s.handleSubscriptionError(ctx, sub, logs, subID, contractAddress)
 				if err != nil {
-					s.logger.ErrorWithChain(s.chainID, "CRITICAL: Failed to resubscribe settlement service: %v", err)
+					s.logger.Error().Err(err).Msg("CRITICAL: Failed to resubscribe settlement service")
 					return
 				}
 				// Update the subscription and continue the loop
@@ -166,21 +179,28 @@ func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.S
 			}
 		case vLog, ok := <-logs:
 			if !ok {
-				s.logger.ErrorWithChain(s.chainID, "ERROR: Settlement log channel closed unexpectedly for %s", subID)
+				s.logger.Error().
+					Str("subscription_id", subID).
+					Msg("Settlement log channel closed unexpectedly")
 				return
 			}
 
-			s.logger.InfoWithChain(s.chainID, "SETTLEMENT EVENT RECEIVED: Block %d, TxHash %s", vLog.BlockNumber, vLog.TxHash.Hex())
+			s.logger.Info().
+				Uint64(logging.FieldBlock, vLog.BlockNumber).
+				Str("tx_hash", vLog.TxHash.Hex()).
+				Msg("SETTLEMENT EVENT RECEIVED")
 
 			if err := s.processLog(ctx, vLog); err != nil {
-				s.logger.Error("Error processing settlement log: %v", err)
+				s.logger.Error().Err(err).Msg("Error processing settlement log")
 				continue
 			}
 		case <-debugTicker.C:
 			// Extra debugging info
-			s.logger.DebugWithChain(s.chainID, "Settlement subscription %s still active", subID)
+			s.logger.Debug().
+				Str("subscription_id", subID).
+				Msg("Settlement subscription still active")
 		case <-ctx.Done():
-			s.logger.DebugWithChain(s.chainID, "Context cancelled, stopping settlement event processing")
+			s.logger.Debug().Msg("Context cancelled, stopping settlement event processing")
 			return
 		}
 	}
@@ -223,7 +243,7 @@ func (s *SettlementService) handleSubscriptionError(
 			s.mu.Lock()
 			s.subs[subID] = newSub
 			s.mu.Unlock()
-			s.logger.DebugWithChain(s.chainID, "Successfully resubscribed to settlement events")
+			s.logger.Debug().Msg("Successfully resubscribed to settlement events")
 			return newSub, nil
 		}
 
@@ -232,8 +252,12 @@ func (s *SettlementService) handleSubscriptionError(
 		if backoffTime > 30*time.Second {
 			backoffTime = 30 * time.Second
 		}
-		s.logger.Debug("Settlement service resubscription attempt %d/%d failed: %v. Retrying in %v",
-			attempt+1, maxRetries, err, backoffTime)
+		s.logger.Debug().
+			Int("attempt", attempt+1).
+			Int("max_attempts", maxRetries).
+			Err(err).
+			Dur("backoff_time", backoffTime).
+			Msg("Settlement service resubscription attempt failed")
 
 		select {
 		case <-time.After(backoffTime):
@@ -271,7 +295,7 @@ func (s *SettlementService) processLog(ctx context.Context, vLog types.Log) erro
 		if err == nil {
 			client = destClient
 		} else {
-			s.logger.Info("Warning: Failed to get destination chain client: %v, using default client", err)
+			s.logger.Warn().Err(err).Msg("Failed to get destination chain client, using default client")
 			client = s.client
 		}
 	} else {
@@ -280,14 +304,16 @@ func (s *SettlementService) processLog(ctx context.Context, vLog types.Log) erro
 
 	settlement, err := event.ToSettlement(client)
 	if err != nil {
-		s.logger.Info("Warning: Failed to get block timestamp: %v", err)
+		s.logger.Warn().Err(err).Msg("Failed to get block timestamp")
 		// Continue with what we have
 	}
 
 	// Add a warning log if the chain IDs don't match and we're using the default client
 	if intent.DestinationChain != s.chainID && client == s.client {
-		s.logger.Info("Warning: Using client for chain %d to fetch timestamp for settlement event on chain %d",
-			s.chainID, intent.DestinationChain)
+		s.logger.Warn().
+			Uint64("service_chain", s.chainID).
+			Uint64("destination_chain", intent.DestinationChain).
+			Msg("Using client for different chain to fetch timestamp for settlement event")
 	}
 
 	// Process the event
@@ -375,7 +401,9 @@ func (s *SettlementService) extractEventData(vLog types.Log) (*models.IntentSett
 		if callData, ok := unpacked[5].([]byte); ok {
 			event.Data = callData
 		} else {
-			s.logger.Info("Warning: Invalid call data in settlement event: %v", unpacked[5])
+			s.logger.Warn().
+				Interface("call_data", unpacked[5]).
+				Msg("Invalid call data in settlement event")
 		}
 	}
 
@@ -425,7 +453,7 @@ func (s *SettlementService) GetSubscriptionCount() int {
 
 // Restart properly restarts the service by shutting down existing goroutines and starting new ones
 func (s *SettlementService) Restart(ctx context.Context, contractAddress common.Address) error {
-	s.logger.InfoWithChain(s.chainID, "Restarting settlement service...")
+	s.logger.Info().Msg("Restarting settlement service...")
 
 	// Check if service is shutdown
 	if s.IsShutdown() {
@@ -444,9 +472,9 @@ func (s *SettlementService) Restart(ctx context.Context, contractAddress common.
 
 	select {
 	case <-done:
-		s.logger.DebugWithChain(s.chainID, "Existing goroutines stopped successfully")
+		s.logger.Debug().Msg("Existing goroutines stopped successfully")
 	case <-time.After(5 * time.Second):
-		s.logger.InfoWithChain(s.chainID, "Timeout waiting for existing goroutines to stop")
+		s.logger.Warn().Msg("Timeout waiting for existing goroutines to stop")
 	}
 
 	// Unsubscribe from all subscriptions
@@ -467,11 +495,15 @@ func (s *SettlementService) UnsubscribeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.logger.DebugWithChain(s.chainID, "Unsubscribing from all settlement subscriptions (%d active subscriptions)", len(s.subs))
+	s.logger.Debug().
+		Int("active_subscriptions", len(s.subs)).
+		Msg("Unsubscribing from all settlement subscriptions")
 
 	for id, sub := range s.subs {
 		sub.Unsubscribe()
-		s.logger.DebugWithChain(s.chainID, "Unsubscribed from settlement subscription %s", id)
+		s.logger.Debug().
+			Str("subscription_id", id).
+			Msg("Unsubscribed from settlement subscription")
 		delete(s.subs, id)
 	}
 }
@@ -513,7 +545,7 @@ func (s *SettlementService) CreateCallSettlement(
 			if err == nil {
 				client = destClient
 			} else {
-				s.logger.Info("Warning: Failed to get destination chain client for manual settlement: %v, using default client", err)
+				s.logger.Warn().Err(err).Msg("Failed to get destination chain client for manual settlement, using default client")
 				client = s.client
 			}
 		} else {
@@ -570,7 +602,7 @@ func (s *SettlementService) Shutdown(timeout time.Duration) error {
 	s.isShutdown = true
 	s.shutdownMu.Unlock()
 
-	s.logger.InfoWithChain(s.chainID, "Shutting down SettlementService...")
+	s.logger.Info().Msg("Shutting down SettlementService...")
 
 	// Cancel the cleanup context to signal all goroutines to stop
 	s.cleanupCancel()
@@ -587,10 +619,12 @@ func (s *SettlementService) Shutdown(timeout time.Duration) error {
 
 	select {
 	case <-done:
-		s.logger.InfoWithChain(s.chainID, "SettlementService shutdown completed successfully")
+		s.logger.Info().Msg("SettlementService shutdown completed successfully")
 		return nil
 	case <-time.After(timeout):
-		s.logger.ErrorWithChain(s.chainID, "SettlementService shutdown timed out after %v", timeout)
+		s.logger.Error().
+			Dur("timeout", timeout).
+			Msg("SettlementService shutdown timed out")
 		return fmt.Errorf("shutdown timed out after %v", timeout)
 	}
 }
@@ -607,7 +641,9 @@ func (s *SettlementService) startGoroutine(name string, fn func()) {
 	s.shutdownMu.RLock()
 	if s.isShutdown {
 		s.shutdownMu.RUnlock()
-		s.logger.DebugWithChain(s.chainID, "Cannot start goroutine %s: service is shutdown", name)
+		s.logger.Debug().
+			Str("goroutine_name", name).
+			Msg("Cannot start goroutine: service is shutdown")
 		return
 	}
 	s.shutdownMu.RUnlock()
@@ -622,7 +658,10 @@ func (s *SettlementService) startGoroutine(name string, fn func()) {
 
 			// Recover from panics
 			if r := recover(); r != nil {
-				s.logger.Error("CRITICAL: Panic in goroutine %s: %v", name, r)
+				s.logger.Error().
+					Str("goroutine_name", name).
+					Any("panic", r).
+					Msg("Panic in goroutine")
 			}
 		}()
 

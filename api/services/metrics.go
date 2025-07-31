@@ -351,14 +351,14 @@ func (m *MetricsService) StartMetricsUpdater(ctx context.Context) {
 		ticker := time.NewTicker(15 * time.Second) // Update every 15 seconds
 		defer ticker.Stop()
 
-		m.logger.Info("Started Prometheus metrics updater")
+		m.logger.Info().Msg("Started Prometheus metrics updater")
 
 		for {
 			select {
 			case <-ticker.C:
 				m.UpdateMetrics()
 			case <-ctx.Done():
-				m.logger.Info("Stopped Prometheus metrics updater")
+				m.logger.Info().Msg("Stopped Prometheus metrics updater")
 				return
 			}
 		}

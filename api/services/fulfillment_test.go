@@ -125,7 +125,7 @@ func TestFulfillmentService_Shutdown(t *testing.T) {
 	mockDB := &mockDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewFulfillmentService(

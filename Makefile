@@ -66,3 +66,6 @@ docker-db-clean: ## Clean Docker database
 
 start-all: docker-db-start ## Start all services with Docker database
 	GO_ENV=production npx concurrently "cd frontend && npm run dev" "cd api && go run main.go"
+
+.PHONY: help build clean test run-api deps lint fmt
+.PHONY: migrate docker-db-start docker-db-stop docker-db-logs docker-db-clean start-all

@@ -141,7 +141,7 @@ func TestCoreServices_GoroutineTracking(t *testing.T) {
 
 func TestCoreServices_NoGoroutineLeaks(t *testing.T) {
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create mock database
 	mockDB := &mockDB{}
