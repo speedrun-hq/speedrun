@@ -15,7 +15,7 @@ func TestChainNameFromID(t *testing.T) {
 	}{
 		{arbitrumMainnetChainID, arbitrumName, false},
 		{baseMainnetChainID, baseName, false},
-		{zetachainMainnetChainID, zetachainName, false},
+		{ZetachainMainnetChainID, zetachainName, false},
 		{polygonMainnetChainID, polygonName, false},
 		{ethereumMainnetChainID, ethereumName, false},
 		{bscMainnetChainID, bscName, false},
