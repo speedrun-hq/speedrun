@@ -58,7 +58,11 @@ func (m *MockEthClient) BlockByNumber(ctx context.Context, number *big.Int) (*ty
 }
 
 // SubscribeFilterLogs mocks the SubscribeFilterLogs method
-func (m *MockEthClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
+func (m *MockEthClient) SubscribeFilterLogs(
+	ctx context.Context,
+	q ethereum.FilterQuery,
+	ch chan<- types.Log,
+) (ethereum.Subscription, error) {
 	args := m.Called(ctx, q, ch)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

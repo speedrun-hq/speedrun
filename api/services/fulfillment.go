@@ -9,13 +9,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/rs/zerolog"
-
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
@@ -139,7 +138,12 @@ func (s *FulfillmentService) StartListening(ctx context.Context, contractAddress
 
 // processEventLogs handles the event processing loop for the subscription.
 // It manages subscription errors, log processing, and context cancellation.
-func (s *FulfillmentService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string) {
+func (s *FulfillmentService) processEventLogs(
+	ctx context.Context,
+	sub ethereum.Subscription,
+	logs chan types.Log,
+	subID string,
+) {
 	// Get the contract address from subID (which we set to contract address hex)
 	contractAddress := common.HexToAddress(subID)
 
@@ -362,7 +366,11 @@ func (s *FulfillmentService) processLog(ctx context.Context, vLog types.Log) err
 func (s *FulfillmentService) validateLog(vLog types.Log) error {
 	// Check if the log has the minimum required topics
 	if len(vLog.Topics) < IntentFulfilledRequiredTopics {
-		return fmt.Errorf("invalid log: expected at least %d topics, got %d", IntentFulfilledRequiredTopics, len(vLog.Topics))
+		return fmt.Errorf(
+			"invalid log: expected at least %d topics, got %d",
+			IntentFulfilledRequiredTopics,
+			len(vLog.Topics),
+		)
 	}
 
 	// Check if the event signature matches one of our expected event types
@@ -591,7 +599,11 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 }
 
 // CreateCallFulfillment creates a new fulfillment for an intent with call
-func (s *FulfillmentService) CreateCallFulfillment(ctx context.Context, intentID, txHash string, callData string) error {
+func (s *FulfillmentService) CreateCallFulfillment(
+	ctx context.Context,
+	intentID, txHash string,
+	callData string,
+) error {
 	// Validate intent exists
 	intent, err := s.db.GetIntent(ctx, intentID)
 	if err != nil {

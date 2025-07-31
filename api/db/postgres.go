@@ -9,6 +9,7 @@ import (
 	"log"
 	"time"
 
+	//nolint:revive // uses PG init() internally
 	_ "github.com/lib/pq"
 	"github.com/speedrun-hq/speedrun/api/models"
 )
@@ -620,7 +621,11 @@ func (p *PostgresDB) ListIntentsByRecipient(ctx context.Context, recipient strin
 }
 
 // ListIntentsPaginated retrieves intents with pagination
-func (p *PostgresDB) ListIntentsPaginated(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+func (p *PostgresDB) ListIntentsPaginated(
+	ctx context.Context,
+	page, pageSize int,
+	status string,
+) ([]*models.Intent, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -695,7 +700,11 @@ func (p *PostgresDB) ListIntentsPaginated(ctx context.Context, page, pageSize in
 }
 
 // ListIntentsPaginatedOptimized retrieves intents with pagination using a single query with window functions
-func (p *PostgresDB) ListIntentsPaginatedOptimized(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+func (p *PostgresDB) ListIntentsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+	status string,
+) ([]*models.Intent, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -753,7 +762,11 @@ func (p *PostgresDB) ListIntentsPaginatedOptimized(ctx context.Context, page, pa
 }
 
 // ListIntentsBySenderPaginated retrieves intents by sender with pagination
-func (p *PostgresDB) ListIntentsBySenderPaginated(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
+func (p *PostgresDB) ListIntentsBySenderPaginated(
+	ctx context.Context,
+	sender string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -813,7 +826,11 @@ func (p *PostgresDB) ListIntentsBySenderPaginated(ctx context.Context, sender st
 }
 
 // ListIntentsBySenderPaginatedOptimized retrieves intents by sender with pagination using a single query
-func (p *PostgresDB) ListIntentsBySenderPaginatedOptimized(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
+func (p *PostgresDB) ListIntentsBySenderPaginatedOptimized(
+	ctx context.Context,
+	sender string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -861,7 +878,11 @@ func (p *PostgresDB) ListIntentsBySenderPaginatedOptimized(ctx context.Context, 
 }
 
 // ListIntentsByRecipientPaginated retrieves intents by recipient with pagination
-func (p *PostgresDB) ListIntentsByRecipientPaginated(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
+func (p *PostgresDB) ListIntentsByRecipientPaginated(
+	ctx context.Context,
+	recipient string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -921,7 +942,11 @@ func (p *PostgresDB) ListIntentsByRecipientPaginated(ctx context.Context, recipi
 }
 
 // ListIntentsByRecipientPaginatedOptimized retrieves intents by recipient with pagination using a single query
-func (p *PostgresDB) ListIntentsByRecipientPaginatedOptimized(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
+func (p *PostgresDB) ListIntentsByRecipientPaginatedOptimized(
+	ctx context.Context,
+	recipient string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -969,7 +994,10 @@ func (p *PostgresDB) ListIntentsByRecipientPaginatedOptimized(ctx context.Contex
 }
 
 // ListFulfillmentsPaginated retrieves fulfillments with pagination
-func (p *PostgresDB) ListFulfillmentsPaginated(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+func (p *PostgresDB) ListFulfillmentsPaginated(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Fulfillment, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -1024,7 +1052,10 @@ func (p *PostgresDB) ListFulfillmentsPaginated(ctx context.Context, page, pageSi
 }
 
 // ListSettlementsPaginated retrieves settlements with pagination
-func (p *PostgresDB) ListSettlementsPaginated(ctx context.Context, page, pageSize int) ([]*models.Settlement, int, error) {
+func (p *PostgresDB) ListSettlementsPaginated(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Settlement, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -1083,7 +1114,10 @@ func (p *PostgresDB) ListSettlementsPaginated(ctx context.Context, page, pageSiz
 }
 
 // ListFulfillmentsPaginatedOptimized retrieves fulfillments with pagination using a single query
-func (p *PostgresDB) ListFulfillmentsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+func (p *PostgresDB) ListFulfillmentsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Fulfillment, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -1127,7 +1161,10 @@ func (p *PostgresDB) ListFulfillmentsPaginatedOptimized(ctx context.Context, pag
 }
 
 // ListSettlementsPaginatedOptimized retrieves settlements with pagination using a single query
-func (p *PostgresDB) ListSettlementsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Settlement, int, error) {
+func (p *PostgresDB) ListSettlementsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Settlement, int, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -1308,7 +1345,13 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 }
 
 // ListIntentsKeysetPaginated retrieves intents using keyset pagination (more efficient for large datasets)
-func (p *PostgresDB) ListIntentsKeysetPaginated(ctx context.Context, lastTimestamp time.Time, lastID string, pageSize int, status string) ([]*models.Intent, bool, error) {
+func (p *PostgresDB) ListIntentsKeysetPaginated(
+	ctx context.Context,
+	lastTimestamp time.Time,
+	lastID string,
+	pageSize int,
+	status string,
+) ([]*models.Intent, bool, error) {
 	whereClause := ""
 	var args []interface{}
 	argIndex := 1

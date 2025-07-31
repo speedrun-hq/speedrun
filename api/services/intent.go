@@ -11,13 +11,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/rs/zerolog"
-
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
@@ -315,7 +314,7 @@ func (s *IntentService) GetMetrics() ServiceMetrics {
 }
 
 // RestartSubscription restarts a subscription for a given contract address
-func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress common.Address) error {
+func (s *IntentService) RestartSubscription(_ context.Context, contractAddress common.Address) error {
 	subID := contractAddress.Hex()
 
 	// Unsubscribe existing subscription if it exists
@@ -515,7 +514,11 @@ func (s *IntentService) monitorErrors(ctx context.Context) {
 }
 
 // startSubscriptionWithReconnection handles the subscription lifecycle with automatic reconnection
-func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, contractAddress common.Address, startBlock uint64) {
+func (s *IntentService) startSubscriptionWithReconnection(
+	ctx context.Context,
+	contractAddress common.Address,
+	startBlock uint64,
+) {
 	subID := contractAddress.Hex()
 
 	// Retry configuration
@@ -599,7 +602,12 @@ func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, c
 }
 
 // createAndRunSubscription creates a new subscription and runs the event processing loop
-func (s *IntentService) createAndRunSubscription(ctx context.Context, contractAddress common.Address, subID string, startBlock uint64) error {
+func (s *IntentService) createAndRunSubscription(
+	ctx context.Context,
+	contractAddress common.Address,
+	subID string,
+	startBlock uint64,
+) error {
 	// Configure the filter query for events
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
@@ -658,7 +666,12 @@ func (s *IntentService) createAndRunSubscription(ctx context.Context, contractAd
 }
 
 // runEventProcessingLoop runs the main event processing loop for a subscription
-func (s *IntentService) runEventProcessingLoop(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string) error {
+func (s *IntentService) runEventProcessingLoop(
+	ctx context.Context,
+	sub ethereum.Subscription,
+	logs chan types.Log,
+	subID string,
+) error {
 	s.logger.Info().
 		Str("subscription_id", subID).
 		Msg("Starting event log processing")
@@ -893,7 +906,11 @@ func (s *IntentService) validateLog(vLog types.Log) error {
 			Int("required_topics", IntentInitiatedRequiredTopics).
 			Int("got_topics", len(vLog.Topics)).
 			Msg("Invalid log: insufficient topics")
-		return fmt.Errorf("invalid log: expected at least %d topics, got %d", IntentInitiatedRequiredTopics, len(vLog.Topics))
+		return fmt.Errorf(
+			"invalid log: expected at least %d topics, got %d",
+			IntentInitiatedRequiredTopics,
+			len(vLog.Topics),
+		)
 	}
 
 	// Validate event signature - now check for both event types
@@ -1168,7 +1185,14 @@ func (s *IntentService) GetIntentsByRecipient(ctx context.Context, recipient str
 }
 
 // CreateIntent creates a new intent
-func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string, timestamp ...time.Time) (*models.Intent, error) {
+func (s *IntentService) CreateIntent(
+	ctx context.Context,
+	id string,
+	sourceChain uint64,
+	destinationChain uint64,
+	token, amount, recipient, sender, intentFee string,
+	timestamp ...time.Time,
+) (*models.Intent, error) {
 	// Validate chain IDs
 	if err := utils.ValidateChain(sourceChain); err != nil {
 		return nil, fmt.Errorf("invalid source chain: %v", err)
@@ -1233,7 +1257,15 @@ func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain
 }
 
 // CreateCallIntent creates a new intent with call data
-func (s *IntentService) CreateCallIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string, callData string, timestamp ...time.Time) (*models.Intent, error) {
+func (s *IntentService) CreateCallIntent(
+	ctx context.Context,
+	id string,
+	sourceChain uint64,
+	destinationChain uint64,
+	token, amount, recipient, sender, intentFee string,
+	callData string,
+	timestamp ...time.Time,
+) (*models.Intent, error) {
 	// Validate chain IDs
 	if err := utils.ValidateChain(sourceChain); err != nil {
 		return nil, fmt.Errorf("invalid source chain: %v", err)

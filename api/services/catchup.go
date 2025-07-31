@@ -10,12 +10,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/rs/zerolog"
-
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/logging"
@@ -47,6 +46,8 @@ const (
 	// NOTE: Smaller range for Ethereum mainnet (chain ID 1) since it has higher transaction density
 	EthereumMaxBlockRange = uint64(1000)
 )
+
+const eventTypeIntent = "intent"
 
 // EventCatchupService coordinates the catch-up process between intent and fulfillment services
 type EventCatchupService struct {
@@ -307,7 +308,11 @@ func (s *EventCatchupService) untrackCatchupOperation(operation string) {
 }
 
 // runIntentCatchup handles the intent catchup process with proper error handling and timeouts
-func (s *EventCatchupService) runIntentCatchup(ctx context.Context, cfg *config.Config, currentBlocks map[uint64]uint64) error {
+func (s *EventCatchupService) runIntentCatchup(
+	ctx context.Context,
+	cfg *config.Config,
+	currentBlocks map[uint64]uint64,
+) error {
 	// Create a context with a global timeout
 	catchupCtx, catchupCancel := context.WithTimeout(ctx, CatchupOperationTimeout)
 	defer catchupCancel()
@@ -407,7 +412,11 @@ func (s *EventCatchupService) runIntentCatchup(ctx context.Context, cfg *config.
 }
 
 // runFulfillmentCatchup handles the fulfillment catchup process with proper error handling and timeouts
-func (s *EventCatchupService) runFulfillmentCatchup(ctx context.Context, cfg *config.Config, currentBlocks map[uint64]uint64) error {
+func (s *EventCatchupService) runFulfillmentCatchup(
+	ctx context.Context,
+	cfg *config.Config,
+	currentBlocks map[uint64]uint64,
+) error {
 	// Create a context with a global timeout
 	catchupCtx, catchupCancel := context.WithTimeout(ctx, CatchupOperationTimeout)
 	defer catchupCancel()
@@ -525,7 +534,11 @@ func (s *EventCatchupService) runFulfillmentCatchup(ctx context.Context, cfg *co
 
 // runSettlementCatchup handles the settlement catchup process with proper error handling and timeouts
 // TODO: lot of duplicated logic among these catchup functions, check for factorization
-func (s *EventCatchupService) runSettlementCatchup(ctx context.Context, cfg *config.Config, currentBlocks map[uint64]uint64) error {
+func (s *EventCatchupService) runSettlementCatchup(
+	ctx context.Context,
+	cfg *config.Config,
+	currentBlocks map[uint64]uint64,
+) error {
 	// Create a context with a global timeout
 	catchupCtx, catchupCancel := context.WithTimeout(ctx, CatchupOperationTimeout)
 	defer catchupCancel()
@@ -765,7 +778,12 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 				Msg("Setting up polling-based fulfillment monitoring for ZetaChain")
 
 			// Start polling goroutine
-			go s.pollZetachainFulfillmentEvents(ctx, fulfillmentService, contractAddress, cfg.ChainConfigs[chainID].BlockInterval)
+			go s.pollZetachainFulfillmentEvents(
+				ctx,
+				fulfillmentService,
+				contractAddress,
+				cfg.ChainConfigs[chainID].BlockInterval,
+			)
 			continue
 		}
 
@@ -807,7 +825,11 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 							Msg("Fulfillment subscription encountered an error")
 						// Try to resubscribe
 						resubCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-						newSub, resubErr := fulfillmentService.client.SubscribeFilterLogs(resubCtx, fulfillmentQuery, fulfillmentLogs)
+						newSub, resubErr := fulfillmentService.client.SubscribeFilterLogs(
+							resubCtx,
+							fulfillmentQuery,
+							fulfillmentLogs,
+						)
 						cancel()
 
 						if resubErr != nil {
@@ -884,7 +906,12 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 				Msg("Setting up polling-based settlement monitoring for ZetaChain starting from block")
 
 			// Start polling goroutine
-			go s.pollZetachainSettlementEvents(ctx, settlementService, contractAddress, cfg.ChainConfigs[chainID].BlockInterval)
+			go s.pollZetachainSettlementEvents(
+				ctx,
+				settlementService,
+				contractAddress,
+				cfg.ChainConfigs[chainID].BlockInterval,
+			)
 			continue
 		}
 
@@ -926,7 +953,11 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 							Msg("Settlement subscription encountered an error")
 						// Try to resubscribe
 						resubCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-						newSub, resubErr := settlementService.client.SubscribeFilterLogs(resubCtx, settlementQuery, settlementLogs)
+						newSub, resubErr := settlementService.client.SubscribeFilterLogs(
+							resubCtx,
+							settlementQuery,
+							settlementLogs,
+						)
 						cancel()
 
 						if resubErr != nil {
@@ -950,7 +981,13 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 			}
 		}()
 
-		go settlementService.processEventLogs(ctx, settlementSub, settlementLogs, contractAddress.Hex(), contractAddress)
+		go settlementService.processEventLogs(
+			ctx,
+			settlementSub,
+			settlementLogs,
+			contractAddress.Hex(),
+			contractAddress,
+		)
 	}
 
 	s.logger.Info().Msg("All live event listeners started successfully")
@@ -979,7 +1016,13 @@ func (s *EventCatchupService) UpdateSettlementProgress(chainID, blockNumber uint
 }
 
 // hasEventsInBlockRange needs to check for both standard and call event signatures
-func hasEventsInBlockRange(ctx context.Context, client *ethclient.Client, contractAddress common.Address, eventSigs []common.Hash, startBlock, endBlock uint64) (bool, error) {
+func hasEventsInBlockRange(
+	ctx context.Context,
+	client *ethclient.Client,
+	contractAddress common.Address,
+	eventSigs []common.Hash,
+	startBlock, endBlock uint64,
+) (bool, error) {
 	// Skip if range is too small
 	if endBlock <= startBlock {
 		return false, nil
@@ -1036,7 +1079,13 @@ func hasEventsInBlockRange(ctx context.Context, client *ethclient.Client, contra
 }
 
 // Modify the intent events function to use bloom filtering on Ethereum
-func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentService *IntentService, contractAddress common.Address, fromBlock, toBlock uint64, opName string) error {
+func (s *EventCatchupService) catchUpOnIntentEvents(
+	ctx context.Context,
+	intentService *IntentService,
+	contractAddress common.Address,
+	fromBlock, toBlock uint64,
+	opName string,
+) error {
 	// Use a chain-specific block range - smaller for Ethereum mainnet
 	var maxBlockRange uint64
 	if intentService.chainID == 1 { // Ethereum mainnet
@@ -1266,7 +1315,13 @@ func (s *EventCatchupService) catchUpOnIntentEvents(ctx context.Context, intentS
 }
 
 // catchUpOnFulfillmentEvents processes missed fulfillment events for a specific chain
-func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fulfillmentService *FulfillmentService, contractAddress common.Address, fromBlock, toBlock uint64, opName string) error {
+func (s *EventCatchupService) catchUpOnFulfillmentEvents(
+	ctx context.Context,
+	fulfillmentService *FulfillmentService,
+	contractAddress common.Address,
+	fromBlock, toBlock uint64,
+	opName string,
+) error {
 	// Use a chain-specific block range - smaller for Ethereum mainnet
 	var maxBlockRange uint64
 	if fulfillmentService.chainID == 1 { // Ethereum mainnet
@@ -1468,7 +1523,13 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(ctx context.Context, fu
 }
 
 // catchUpOnSettlementEvents processes missed settlement events for a specific chain
-func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, settlementService *SettlementService, contractAddress common.Address, fromBlock, toBlock uint64, opName string) error {
+func (s *EventCatchupService) catchUpOnSettlementEvents(
+	ctx context.Context,
+	settlementService *SettlementService,
+	contractAddress common.Address,
+	fromBlock, toBlock uint64,
+	opName string,
+) error {
 	// Use a chain-specific block range - smaller for Ethereum mainnet
 	var maxBlockRange uint64
 	if settlementService.chainID == 1 { // Ethereum mainnet
@@ -1666,36 +1727,78 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(ctx context.Context, set
 }
 
 // pollZetachainEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
-func (s *EventCatchupService) pollZetachainEvents(ctx context.Context, intentService *IntentService, contractAddress common.Address, blockInterval int64) {
+func (s *EventCatchupService) pollZetachainEvents(
+	ctx context.Context,
+	intentService *IntentService,
+	contractAddress common.Address,
+	blockInterval int64,
+) {
 	// Use the generic polling function with health reporting
-	s.pollChainEvents(ctx, "intent", 7000, intentService.client, contractAddress,
-		[]common.Hash{intentService.abi.Events[IntentInitiatedEventName].ID, intentService.abi.Events[IntentInitiatedWithCallEventName].ID},
+	s.pollChainEvents(
+		ctx,
+		eventTypeIntent,
+		7000,
+		intentService.client,
+		contractAddress,
+		[]common.Hash{
+			intentService.abi.Events[IntentInitiatedEventName].ID,
+			intentService.abi.Events[IntentInitiatedWithCallEventName].ID,
+		},
 		intentService.processLog,
 		func(blockNum uint64) { s.UpdateIntentProgress(7000, blockNum) },
 		blockInterval,
-		intentService) // Pass intent service for health reporting
+		intentService,
+	) // Pass intent service for health reporting
 }
 
 // pollZetachainFulfillmentEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
-func (s *EventCatchupService) pollZetachainFulfillmentEvents(ctx context.Context, fulfillmentService *FulfillmentService, contractAddress common.Address, blockInterval int64) {
+func (s *EventCatchupService) pollZetachainFulfillmentEvents(
+	ctx context.Context,
+	fulfillmentService *FulfillmentService,
+	contractAddress common.Address,
+	blockInterval int64,
+) {
 	// Use the generic polling function
-	s.pollChainEvents(ctx, "fulfillment", 7000, fulfillmentService.client, contractAddress,
-		[]common.Hash{fulfillmentService.abi.Events[IntentFulfilledEventName].ID, fulfillmentService.abi.Events[IntentFulfilledWithCallEventName].ID},
+	s.pollChainEvents(
+		ctx,
+		"fulfillment",
+		7000,
+		fulfillmentService.client,
+		contractAddress,
+		[]common.Hash{
+			fulfillmentService.abi.Events[IntentFulfilledEventName].ID,
+			fulfillmentService.abi.Events[IntentFulfilledWithCallEventName].ID,
+		},
 		fulfillmentService.processLog,
 		func(blockNum uint64) { s.UpdateFulfillmentProgress(7000, blockNum) },
 		blockInterval,
-		nil) // No health reporting for fulfillment services yet
+		nil,
+	) // No health reporting for fulfillment services yet
 }
 
 // pollZetachainSettlementEvents polls for events on ZetaChain at regular intervals instead of using WebSocket subscription
-func (s *EventCatchupService) pollZetachainSettlementEvents(ctx context.Context, settlementService *SettlementService, contractAddress common.Address, blockInterval int64) {
+func (s *EventCatchupService) pollZetachainSettlementEvents(
+	ctx context.Context,
+	settlementService *SettlementService,
+	contractAddress common.Address,
+	blockInterval int64,
+) {
 	// Use the generic polling function
-	s.pollChainEvents(ctx, "settlement", 7000, settlementService.client, contractAddress,
-		[]common.Hash{settlementService.abi.Events[IntentSettledEventName].ID, settlementService.abi.Events[IntentSettledWithCallEventName].ID},
+	s.pollChainEvents(
+		ctx,
+		"settlement",
+		7000,
+		settlementService.client,
+		contractAddress,
+		[]common.Hash{
+			settlementService.abi.Events[IntentSettledEventName].ID,
+			settlementService.abi.Events[IntentSettledWithCallEventName].ID,
+		},
 		settlementService.processLog,
 		func(blockNum uint64) { s.UpdateSettlementProgress(7000, blockNum) },
 		blockInterval,
-		nil) // No health reporting for settlement services yet
+		nil,
+	) // No health reporting for settlement services yet
 }
 
 // pollChainEvents is a generic function to poll for blockchain events
@@ -1745,7 +1848,7 @@ func (s *EventCatchupService) pollChainEvents(
 			s.mu.Lock()
 			var lastProcessedBlock uint64
 			switch eventType {
-			case "intent":
+			case eventTypeIntent:
 				lastProcessedBlock = s.intentProgress[chainID]
 			case "fulfillment":
 				lastProcessedBlock = s.fulfillmentProgress[chainID]
@@ -1787,14 +1890,14 @@ func (s *EventCatchupService) pollChainEvents(
 					Int("max_attempts", maxRetries).
 					Msg("CRITICAL: Failed to get current block for ZetaChain after retries. Skipping this polling cycle.")
 				// Report unhealthy polling if we have an intent service to report to
-				if intentService != nil && eventType == "intent" {
+				if intentService != nil && eventType == eventTypeIntent {
 					intentService.UpdatePollingHealth(false)
 				}
 				continue
 			}
 
 			// Report healthy polling if we successfully got the current block
-			if intentService != nil && eventType == "intent" {
+			if intentService != nil && eventType == eventTypeIntent {
 				intentService.UpdatePollingHealth(true)
 			}
 
@@ -1979,7 +2082,8 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 			for chainID, intentService := range s.intentServices {
 				// Skip health check for ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info().Msg("ZetaChain intent service using polling mechanism - skipping subscription check")
+					s.logger.Info().
+						Msg("ZetaChain intent service using polling mechanism - skipping subscription check")
 					continue
 				}
 
@@ -2016,7 +2120,8 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 			for chainID, fulfillmentService := range s.fulfillmentServices {
 				// Skip health check for ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info().Msg("ZetaChain fulfillment service using polling mechanism - skipping subscription check")
+					s.logger.Info().
+						Msg("ZetaChain fulfillment service using polling mechanism - skipping subscription check")
 					continue
 				}
 
@@ -2053,7 +2158,8 @@ func (s *EventCatchupService) StartSubscriptionSupervisor(ctx context.Context, c
 			for chainID, settlementService := range s.settlementServices {
 				// Skip health check for ZetaChain as it's using polling
 				if chainID == zetaChainID {
-					s.logger.Info().Msg("ZetaChain settlement service using polling mechanism - skipping subscription check")
+					s.logger.Info().
+						Msg("ZetaChain settlement service using polling mechanism - skipping subscription check")
 					continue
 				}
 

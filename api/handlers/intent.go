@@ -18,7 +18,13 @@ import (
 type IntentServiceInterface interface {
 	GetIntent(ctx context.Context, id string) (*models.Intent, error)
 	ListIntents(ctx context.Context) ([]*models.Intent, error)
-	CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string) (*models.Intent, error)
+	CreateIntent(
+		ctx context.Context,
+		id string,
+		sourceChain uint64,
+		destinationChain uint64,
+		token, amount, recipient, sender, intentFee string,
+	) (*models.Intent, error)
 	GetIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error)
 	GetIntentsByRecipient(ctx context.Context, recipient string) ([]*models.Intent, error)
 }
@@ -106,7 +112,10 @@ func GetIntent(c *gin.Context) {
 	// Get the intent service for the source chain
 	service, ok := intentServices[intent.SourceChain]
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("no intent service for chain %d", intent.SourceChain)})
+		c.JSON(
+			http.StatusInternalServerError,
+			gin.H{"error": fmt.Sprintf("no intent service for chain %d", intent.SourceChain)},
+		)
 		return
 	}
 

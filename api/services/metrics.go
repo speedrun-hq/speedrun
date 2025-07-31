@@ -339,7 +339,8 @@ func (m *MetricsService) UpdateMetrics() {
 			}
 
 			if !metrics.LastHealthCheck.IsZero() {
-				m.lastHealthCheckTimestamp.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.LastHealthCheck.Unix()))
+				m.lastHealthCheckTimestamp.WithLabelValues(chainIDStr, chainName).
+					Set(float64(metrics.LastHealthCheck.Unix()))
 			}
 		}
 	}

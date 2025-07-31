@@ -12,10 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rs/zerolog"
-
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/speedrun-hq/speedrun/api/services"
@@ -205,7 +204,17 @@ func (s *Server) CreateIntent(c *gin.Context) {
 		return
 	}
 
-	intent, err := s.intentService.CreateIntent(c.Request.Context(), req.ID, req.SourceChain, req.DestinationChain, req.Token, req.Amount, req.Recipient, req.Sender, req.IntentFee)
+	intent, err := s.intentService.CreateIntent(
+		c.Request.Context(),
+		req.ID,
+		req.SourceChain,
+		req.DestinationChain,
+		req.Token,
+		req.Amount,
+		req.Recipient,
+		req.Sender,
+		req.IntentFee,
+	)
 	if err != nil {
 		// Check if it's a validation error
 		if strings.Contains(err.Error(), "invalid") {
@@ -299,7 +308,7 @@ func (s *Server) ListIntents(c *gin.Context) {
 // CreateFulfillmentRequest represents the request body for creating a fulfillment
 type CreateFulfillmentRequest struct {
 	IntentID string `json:"intent_id" binding:"required"`
-	TxHash   string `json:"tx_hash" binding:"required"`
+	TxHash   string `json:"tx_hash"   binding:"required"`
 }
 
 // CreateFulfillment handles the creation of a new fulfillment
@@ -399,7 +408,12 @@ func (s *Server) GetIntentsBySender(c *gin.Context) {
 	}
 
 	// Get intents with pagination using optimized method
-	intents, totalCount, err := s.db.ListIntentsBySenderPaginatedOptimized(c.Request.Context(), sender, pageInt, pageSizeInt)
+	intents, totalCount, err := s.db.ListIntentsBySenderPaginatedOptimized(
+		c.Request.Context(),
+		sender,
+		pageInt,
+		pageSizeInt,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -448,7 +462,12 @@ func (s *Server) GetIntentsByRecipient(c *gin.Context) {
 	}
 
 	// Get intents with pagination using optimized method
-	intents, totalCount, err := s.db.ListIntentsByRecipientPaginatedOptimized(c.Request.Context(), recipient, pageInt, pageSizeInt)
+	intents, totalCount, err := s.db.ListIntentsByRecipientPaginatedOptimized(
+		c.Request.Context(),
+		recipient,
+		pageInt,
+		pageSizeInt,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

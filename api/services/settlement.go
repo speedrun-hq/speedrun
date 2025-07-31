@@ -140,7 +140,13 @@ func (s *SettlementService) StartListening(ctx context.Context, contractAddress 
 	return nil
 }
 
-func (s *SettlementService) processEventLogs(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string, contractAddress common.Address) {
+func (s *SettlementService) processEventLogs(
+	ctx context.Context,
+	sub ethereum.Subscription,
+	logs chan types.Log,
+	subID string,
+	contractAddress common.Address,
+) {
 	defer func() {
 		sub.Unsubscribe()
 		// Remove the subscription from the map when done
@@ -322,7 +328,11 @@ func (s *SettlementService) processLog(ctx context.Context, vLog types.Log) erro
 
 func (s *SettlementService) validateLog(vLog types.Log) error {
 	if len(vLog.Topics) < IntentSettledRequiredTopics {
-		return fmt.Errorf("invalid log: expected at least %d topics, got %d", IntentSettledRequiredTopics, len(vLog.Topics))
+		return fmt.Errorf(
+			"invalid log: expected at least %d topics, got %d",
+			IntentSettledRequiredTopics,
+			len(vLog.Topics),
+		)
 	}
 
 	// Check if the event signature matches one of our expected event types

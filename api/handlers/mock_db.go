@@ -144,7 +144,11 @@ func (m *MockDatabase) ListIntentsBySender(ctx context.Context, senderAddress st
 }
 
 // Add pagination methods
-func (m *MockDatabase) ListIntentsPaginated(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+func (m *MockDatabase) ListIntentsPaginated(
+	ctx context.Context,
+	page, pageSize int,
+	status string,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, page, pageSize, status)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -152,7 +156,10 @@ func (m *MockDatabase) ListIntentsPaginated(ctx context.Context, page, pageSize 
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListFulfillmentsPaginated(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+func (m *MockDatabase) ListFulfillmentsPaginated(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Fulfillment, int, error) {
 	args := m.Called(ctx, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -160,7 +167,10 @@ func (m *MockDatabase) ListFulfillmentsPaginated(ctx context.Context, page, page
 	return args.Get(0).([]*models.Fulfillment), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListSettlementsPaginated(ctx context.Context, page, pageSize int) ([]*models.Settlement, int, error) {
+func (m *MockDatabase) ListSettlementsPaginated(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Settlement, int, error) {
 	args := m.Called(ctx, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -168,7 +178,11 @@ func (m *MockDatabase) ListSettlementsPaginated(ctx context.Context, page, pageS
 	return args.Get(0).([]*models.Settlement), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListIntentsBySenderPaginated(ctx context.Context, senderAddress string, page, pageSize int) ([]*models.Intent, int, error) {
+func (m *MockDatabase) ListIntentsBySenderPaginated(
+	ctx context.Context,
+	senderAddress string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, senderAddress, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -176,7 +190,11 @@ func (m *MockDatabase) ListIntentsBySenderPaginated(ctx context.Context, senderA
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListIntentsByRecipientPaginated(ctx context.Context, recipientAddress string, page, pageSize int) ([]*models.Intent, int, error) {
+func (m *MockDatabase) ListIntentsByRecipientPaginated(
+	ctx context.Context,
+	recipientAddress string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, recipientAddress, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -185,7 +203,11 @@ func (m *MockDatabase) ListIntentsByRecipientPaginated(ctx context.Context, reci
 }
 
 // Implement optimized methods
-func (m *MockDatabase) ListIntentsPaginatedOptimized(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+func (m *MockDatabase) ListIntentsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+	status string,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, page, pageSize, status)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -193,7 +215,11 @@ func (m *MockDatabase) ListIntentsPaginatedOptimized(ctx context.Context, page, 
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListIntentsBySenderPaginatedOptimized(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
+func (m *MockDatabase) ListIntentsBySenderPaginatedOptimized(
+	ctx context.Context,
+	sender string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, sender, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -201,7 +227,11 @@ func (m *MockDatabase) ListIntentsBySenderPaginatedOptimized(ctx context.Context
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListIntentsByRecipientPaginatedOptimized(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
+func (m *MockDatabase) ListIntentsByRecipientPaginatedOptimized(
+	ctx context.Context,
+	recipient string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, recipient, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -209,7 +239,10 @@ func (m *MockDatabase) ListIntentsByRecipientPaginatedOptimized(ctx context.Cont
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListFulfillmentsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+func (m *MockDatabase) ListFulfillmentsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Fulfillment, int, error) {
 	args := m.Called(ctx, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -217,7 +250,10 @@ func (m *MockDatabase) ListFulfillmentsPaginatedOptimized(ctx context.Context, p
 	return args.Get(0).([]*models.Fulfillment), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListSettlementsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Settlement, int, error) {
+func (m *MockDatabase) ListSettlementsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Settlement, int, error) {
 	args := m.Called(ctx, page, pageSize)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
@@ -225,7 +261,13 @@ func (m *MockDatabase) ListSettlementsPaginatedOptimized(ctx context.Context, pa
 	return args.Get(0).([]*models.Settlement), args.Int(1), args.Error(2)
 }
 
-func (m *MockDatabase) ListIntentsKeysetPaginated(ctx context.Context, lastTimestamp time.Time, lastID string, pageSize int, status string) ([]*models.Intent, bool, error) {
+func (m *MockDatabase) ListIntentsKeysetPaginated(
+	ctx context.Context,
+	lastTimestamp time.Time,
+	lastID string,
+	pageSize int,
+	status string,
+) ([]*models.Intent, bool, error) {
 	args := m.Called(ctx, lastTimestamp, lastID, pageSize, status)
 	if args.Get(0) == nil {
 		return nil, args.Bool(1), args.Error(2)

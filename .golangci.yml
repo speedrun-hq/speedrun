@@ -1,0 +1,81 @@
+# Reference:
+# https://github.com/golangci/golangci-lint/blob/a25cd63879d2252bcee283c5aca0c737ff6ff801/.golangci.reference.yml
+version: "2"
+
+run:
+  go: "1.23"
+  timeout: 30m
+  tests: false
+
+# https://golangci-lint.run/usage/formatters
+formatters:
+  enable: [gci, gofmt, goimports, golines]
+  settings:
+    # Gci controls Go package import order and makes it always deterministic
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/zeta-chain/node)
+
+    golines:
+      max-len: 120
+
+  exclusions:
+    generated: strict
+    paths:
+      - ".*_test\\.go$"
+      - ".*\\.pb\\.go$"
+      - .git
+      - .github
+      - .idea
+      - .vscode
+      - ./frontend
+      - ./documentation
+
+# https://golangci-lint.run/usage/linters
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - dogsled
+    - errcheck
+    - goconst
+    - govet
+    - ineffassign
+    - misspell
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+    - whitespace
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt:.*
+        - io/ioutil:^Read.*,
+        - github.com/spf13/cobra:MarkFlagRequired
+        - github.com/spf13/viper:BindPFlag
+    gocyclo:
+      min-complexity: 11
+    govet:
+      disable:
+        - composites
+  exclusions:
+    generated: strict
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+
+    paths:
+      - ".*\\.pb\\.go$"
+      - .git
+      - .github
+      - .idea
+      - .vscode
+      - ./frontend
+      - ./documentation
+
+    rules: []

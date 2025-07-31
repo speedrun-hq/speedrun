@@ -42,6 +42,9 @@ deps: ## Download dependencies for both API and frontend
 	cd frontend && npm install
 	npm install concurrently
 
+fmt: ## Format code
+	@golangci-lint fmt
+
 lint: ## Run linters for both API and frontend
 	cd api && golangci-lint run
 	cd frontend && npm run lint

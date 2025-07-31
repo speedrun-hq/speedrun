@@ -77,8 +77,11 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		Port:                    getEnvOrDefault("PORT", "8080"),
-		DatabaseURL:             getEnvOrDefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/speedrun?sslmode=disable"),
+		Port: getEnvOrDefault("PORT", "8080"),
+		DatabaseURL: getEnvOrDefault(
+			"DATABASE_URL",
+			"postgresql://postgres:postgres@localhost:5432/speedrun?sslmode=disable",
+		),
 		SupportedChains:         supportedChains,
 		ChainConfigs:            chainConfigs,
 		IntentFulfilledEventABI: IntentFulfilledEventABI,
