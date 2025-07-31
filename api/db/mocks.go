@@ -198,6 +198,16 @@ func (m *MockDB) UpdateLastProcessedBlock(ctx context.Context, chainID uint64, b
 	return args.Error(0)
 }
 
+func (m *MockDB) GetPeriodicCatchupBlock(ctx context.Context, chainID uint64) (uint64, error) {
+	args := m.Called(ctx, chainID)
+	return args.Get(0).(uint64), args.Error(1)
+}
+
+func (m *MockDB) UpdatePeriodicCatchupBlock(ctx context.Context, chainID uint64, blockNumber uint64) error {
+	args := m.Called(ctx, chainID, blockNumber)
+	return args.Error(0)
+}
+
 func (m *MockDB) InitDB(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)

@@ -237,3 +237,13 @@ func (m *MockDatabase) PrepareStatements(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
 }
+
+func (m *MockDatabase) GetPeriodicCatchupBlock(ctx context.Context, chainID uint64) (uint64, error) {
+	args := m.Called(ctx, chainID)
+	return args.Get(0).(uint64), args.Error(1)
+}
+
+func (m *MockDatabase) UpdatePeriodicCatchupBlock(ctx context.Context, chainID uint64, blockNumber uint64) error {
+	args := m.Called(ctx, chainID, blockNumber)
+	return args.Error(0)
+}

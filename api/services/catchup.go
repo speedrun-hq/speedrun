@@ -45,6 +45,15 @@ const (
 	// EthereumMaxBlockRange is the maximum block range for Ethereum chains
 	// NOTE: Smaller range for Ethereum mainnet (chain ID 1) since it has higher transaction density
 	EthereumMaxBlockRange = uint64(1000)
+
+	// PeriodicCatchupInterval is how often to run periodic catchup operations
+	PeriodicCatchupInterval = 30 * time.Minute
+
+	// PeriodicCatchupTimeout is the maximum time allowed for a periodic catchup operation
+	PeriodicCatchupTimeout = 15 * time.Minute
+
+	// PeriodicCatchupLookbackBlocks is how many blocks to look back for missed events
+	PeriodicCatchupLookbackBlocks = uint64(1000)
 )
 
 // EventCatchupService coordinates the catch-up process between intent and fulfillment services
@@ -60,6 +69,17 @@ type EventCatchupService struct {
 	activeCatchups      map[string]bool   // Track active catchup operations
 	catchupMu           sync.Mutex        // Mutex for the activeCatchups map
 	logger              logger.Logger
+
+	// Periodic catchup tracking - tracks the last block processed by periodic catchup
+	periodicCatchupProgress map[uint64]uint64 // chainID -> last block processed by periodic catchup
+	periodicCatchupMu       sync.Mutex        // Mutex for periodic catchup progress
+
+	// Failure tracking for exponential backoff
+	periodicCatchupFailures map[uint64]int // chainID -> consecutive failure count
+	periodicCatchupMu2      sync.Mutex     // Mutex for failure tracking
+
+	// Metrics service for monitoring
+	metricsService *MetricsService
 
 	// Goroutine tracking
 	activeGoroutines int32 // Counter for active goroutines
@@ -79,22 +99,26 @@ func NewEventCatchupService(
 	settlementServices map[uint64]*SettlementService,
 	db db.Database,
 	logger logger.Logger,
+	metricsService *MetricsService,
 ) *EventCatchupService {
 	// Create cleanup context
 	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
 
 	return &EventCatchupService{
-		intentServices:      intentServices,
-		fulfillmentServices: fulfillmentServices,
-		settlementServices:  settlementServices,
-		db:                  db,
-		intentProgress:      make(map[uint64]uint64),
-		fulfillmentProgress: make(map[uint64]uint64),
-		settlementProgress:  make(map[uint64]uint64),
-		activeCatchups:      make(map[string]bool),
-		logger:              logger,
-		cleanupCtx:          cleanupCtx,
-		cleanupCancel:       cleanupCancel,
+		intentServices:          intentServices,
+		fulfillmentServices:     fulfillmentServices,
+		settlementServices:      settlementServices,
+		db:                      db,
+		intentProgress:          make(map[uint64]uint64),
+		fulfillmentProgress:     make(map[uint64]uint64),
+		settlementProgress:      make(map[uint64]uint64),
+		activeCatchups:          make(map[string]bool),
+		periodicCatchupProgress: make(map[uint64]uint64),
+		periodicCatchupFailures: make(map[uint64]int),
+		metricsService:          metricsService,
+		logger:                  logger,
+		cleanupCtx:              cleanupCtx,
+		cleanupCancel:           cleanupCancel,
 	}
 }
 
@@ -822,6 +846,486 @@ func (s *EventCatchupService) StartLiveEventListeners(ctx context.Context, cfg *
 	return nil
 }
 
+// StartPeriodicCatchup starts a timer-based periodic catchup service that runs alongside live listeners
+// to detect any missed events while the service is running
+func (s *EventCatchupService) StartPeriodicCatchup(ctx context.Context, cfg *config.Config) {
+	interval := time.Duration(cfg.PeriodicCatchupInterval) * time.Minute
+	s.logger.Notice("Starting periodic catchup service with interval of %v", interval)
+
+	// Start the periodic catchup goroutine
+	s.StartGoroutine("periodic-catchup", func() {
+		s.runPeriodicCatchup(ctx, cfg)
+	})
+}
+
+// runPeriodicCatchup runs the periodic catchup operations on a timer
+func (s *EventCatchupService) runPeriodicCatchup(ctx context.Context, cfg *config.Config) {
+	interval := time.Duration(cfg.PeriodicCatchupInterval) * time.Minute
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Run initial catchup after a short delay to allow live listeners to start
+	// Use a shorter delay if there are no services configured (like in tests)
+	var initialDelay time.Duration
+	if len(s.intentServices) == 0 {
+		initialDelay = 1 * time.Second // Short delay for tests
+	} else {
+		initialDelay = 5 * time.Minute // Normal delay for production
+	}
+	s.logger.Info("Scheduling initial periodic catchup in %v", initialDelay)
+
+	initialTimer := time.NewTimer(initialDelay)
+	defer initialTimer.Stop()
+
+	// Wait for initial delay or context cancellation
+	select {
+	case <-initialTimer.C:
+		s.logger.Info("Running initial periodic catchup")
+		s.performPeriodicCatchup(ctx, cfg)
+	case <-ctx.Done():
+		s.logger.Debug("Context cancelled during initial delay, stopping periodic catchup")
+		return
+	}
+
+	// Continue with regular periodic catchup
+	for {
+		select {
+		case <-ticker.C:
+			s.logger.Info("Running scheduled periodic catchup")
+			s.performPeriodicCatchup(ctx, cfg)
+		case <-ctx.Done():
+			s.logger.Debug("Context cancelled, stopping periodic catchup")
+			return
+		}
+	}
+}
+
+// performPeriodicCatchup performs a single periodic catchup operation
+func (s *EventCatchupService) performPeriodicCatchup(ctx context.Context, cfg *config.Config) {
+	// Create a context with timeout for the entire periodic catchup operation
+	timeout := time.Duration(cfg.PeriodicCatchupTimeout) * time.Minute
+	catchupCtx, catchupCancel := context.WithTimeout(ctx, timeout)
+	defer catchupCancel()
+
+	s.logger.Info("Starting periodic catchup operation with timeout of %v", timeout)
+
+	// Initialize periodic catchup progress for all chains if not already set
+	s.periodicCatchupMu.Lock()
+	for chainID := range s.intentServices {
+		if _, exists := s.periodicCatchupProgress[chainID]; !exists {
+			// Load the last processed block from the database as starting point
+			lastBlock, err := s.LoadPeriodicCatchupProgress(catchupCtx, chainID)
+			if err != nil {
+				s.logger.ErrorWithChain(chainID, "Failed to load periodic catchup progress from DB: %v", err)
+				// Use a default starting block if we can't get from DB
+				s.periodicCatchupProgress[chainID] = cfg.ChainConfigs[chainID].DefaultBlock
+				s.logger.InfoWithChain(chainID, "Using default block %d for periodic catchup", cfg.ChainConfigs[chainID].DefaultBlock)
+			} else {
+				s.logger.InfoWithChain(chainID, "Initialized periodic catchup progress to block %d", lastBlock)
+			}
+		}
+	}
+	s.periodicCatchupMu.Unlock()
+
+	// Get current block numbers for all chains
+	currentBlocks := make(map[uint64]uint64)
+	for chainID, intentService := range s.intentServices {
+		blockCtx, cancel := context.WithTimeout(catchupCtx, 30*time.Second)
+		currentBlock, err := intentService.client.BlockNumber(blockCtx)
+		cancel()
+
+		if err != nil {
+			s.logger.ErrorWithChain(chainID, "Failed to get current block number for periodic catchup: %v", err)
+			continue
+		}
+		currentBlocks[chainID] = currentBlock
+	}
+
+	// Track any errors that occur during periodic catchup
+	var catchupErrors []error
+
+	// Perform intent periodic catchup
+	if err := s.runPeriodicIntentCatchup(catchupCtx, cfg, currentBlocks); err != nil {
+		catchupErrors = append(catchupErrors, fmt.Errorf("periodic intent catchup failed: %v", err))
+		s.logger.Error("Periodic intent catchup encountered errors: %v", err)
+	} else {
+		s.logger.Info("Periodic intent catchup completed successfully")
+	}
+
+	// Perform fulfillment periodic catchup
+	if err := s.runPeriodicFulfillmentCatchup(catchupCtx, cfg, currentBlocks); err != nil {
+		catchupErrors = append(catchupErrors, fmt.Errorf("periodic fulfillment catchup failed: %v", err))
+		s.logger.Error("Periodic fulfillment catchup encountered errors: %v", err)
+	} else {
+		s.logger.Info("Periodic fulfillment catchup completed successfully")
+	}
+
+	// Perform settlement periodic catchup
+	if err := s.runPeriodicSettlementCatchup(catchupCtx, cfg, currentBlocks); err != nil {
+		catchupErrors = append(catchupErrors, fmt.Errorf("periodic settlement catchup failed: %v", err))
+		s.logger.Error("Periodic settlement catchup encountered errors: %v", err)
+	} else {
+		s.logger.Info("Periodic settlement catchup completed successfully")
+	}
+
+	// Log results
+	if len(catchupErrors) > 0 {
+		s.logger.Error("Periodic catchup completed with %d errors:", len(catchupErrors))
+		for i, err := range catchupErrors {
+			s.logger.Error("Periodic catchup error %d: %v", i+1, err)
+		}
+	} else {
+		s.logger.Info("Periodic catchup completed successfully with no errors")
+	}
+}
+
+// runPeriodicIntentCatchup performs periodic catchup for intent events
+func (s *EventCatchupService) runPeriodicIntentCatchup(ctx context.Context, cfg *config.Config, currentBlocks map[uint64]uint64) error {
+	var intentWg sync.WaitGroup
+	intentErrors := make(chan error, len(s.intentServices))
+
+	// Track number of chains that need catchup
+	chainsToProcess := 0
+
+	// Start intent catch-up for all chains in parallel
+	for chainID, intentService := range s.intentServices {
+		// Check if we should skip this chain due to recent failures
+		if s.ShouldSkipPeriodicCatchup(chainID) {
+			continue
+		}
+
+		// Check if we have current block information for this chain
+		currentBlock, exists := currentBlocks[chainID]
+		if !exists {
+			s.logger.ErrorWithChain(chainID, "No current block information available for periodic catchup, skipping")
+			s.RecordPeriodicCatchupFailure(chainID)
+			continue
+		}
+
+		// Get the last block processed by periodic catchup
+		lastBlock := s.GetPeriodicCatchupProgress(chainID)
+
+		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+		// Only process if we have blocks to catch up on
+		if lastBlock >= currentBlock {
+			s.logger.DebugWithChain(chainID, "No missed intent events to process in periodic catchup (last: %d, current: %d)", lastBlock, currentBlock)
+			continue
+		}
+
+		// Use the last processed block as the starting point for periodic catchup
+		startBlock := lastBlock
+		s.logger.InfoWithChain(chainID, "Periodic catchup: Scanning from block %d to %d", startBlock+1, currentBlock)
+
+		chainsToProcess++
+		intentWg.Add(1)
+
+		// Use a descriptive operation name
+		opName := fmt.Sprintf("periodic_intent_catchup_chain_%d", chainID)
+		s.trackCatchupOperation(opName)
+
+		go func(chainID uint64, intentService *IntentService, startBlock, currentBlock uint64, opName string) {
+			defer intentWg.Done()
+			defer s.untrackCatchupOperation(opName)
+
+			startTime := time.Now()
+			s.logger.InfoWithChain(chainID, "Starting periodic intent event catch-up (blocks %d to %d)",
+				startBlock+1, currentBlock)
+
+			// Create a timeout context for this specific chain's catchup
+			timeout := time.Duration(cfg.PeriodicCatchupTimeout) * time.Minute
+			chainCtx, chainCancel := context.WithTimeout(ctx, timeout)
+			defer chainCancel()
+
+			// Track events found and processed for metrics
+			var eventsFound, eventsProcessed int
+
+			if err := s.catchUpOnIntentEvents(chainCtx, intentService, contractAddress, startBlock, currentBlock, opName); err != nil {
+				intentErrors <- fmt.Errorf("failed to catch up on periodic intent events for chain %d: %v", chainID, err)
+				s.logger.ErrorWithChain(chainID, "Periodic intent catchup failed: %v", err)
+				s.RecordPeriodicCatchupFailure(chainID)
+
+				// Record failure metrics
+				if s.metricsService != nil {
+					s.metricsService.RecordPeriodicCatchupFailure(chainID, "intent")
+				}
+				return
+			}
+
+			// Only update progress if the catchup operation succeeded
+			s.UpdatePeriodicCatchupProgress(chainID, currentBlock)
+
+			// Persist progress to database
+			if err := s.SavePeriodicCatchupProgress(chainCtx, chainID, currentBlock); err != nil {
+				s.logger.ErrorWithChain(chainID, "Failed to save periodic catchup progress: %v", err)
+				// Don't fail the entire operation if DB save fails, but log the error
+			}
+
+			// Record success to reset failure count
+			s.RecordPeriodicCatchupSuccess(chainID)
+
+			// Record success metrics
+			duration := time.Since(startTime)
+			if s.metricsService != nil {
+				s.metricsService.RecordPeriodicCatchupSuccess(chainID, "intent", duration, eventsFound, eventsProcessed)
+			}
+
+			s.logger.InfoWithChain(chainID, "Completed periodic intent event catch-up, updated progress to block %d", currentBlock)
+		}(chainID, intentService, startBlock, currentBlock, opName)
+	}
+
+	// If there are no chains to process, we can return early
+	if chainsToProcess == 0 {
+		s.logger.Debug("No periodic intent catchup needed for any chain")
+		return nil
+	}
+
+	// Create a separate goroutine to wait for all work to complete and close the error channel
+	done := make(chan struct{})
+	go func() {
+		intentWg.Wait()
+		close(intentErrors)
+		close(done)
+	}()
+
+	// Wait for either completion or timeout
+	var errs []error
+	timeout := time.Duration(cfg.PeriodicCatchupTimeout) * time.Minute
+	select {
+	case <-done:
+		// Process any errors that were collected
+		for err := range intentErrors {
+			if err != nil {
+				errs = append(errs, err)
+				s.logger.Error("Periodic intent catchup error: %v", err)
+			}
+		}
+	case <-ctx.Done():
+		return fmt.Errorf("periodic intent catchup timed out after %v", timeout)
+	}
+
+	// Return combined errors if any
+	if len(errs) > 0 {
+		return fmt.Errorf("periodic intent catchup completed with %d errors", len(errs))
+	}
+
+	return nil
+}
+
+// runPeriodicFulfillmentCatchup performs periodic catchup for fulfillment events
+func (s *EventCatchupService) runPeriodicFulfillmentCatchup(ctx context.Context, cfg *config.Config, currentBlocks map[uint64]uint64) error {
+	var fulfillmentWg sync.WaitGroup
+	fulfillmentErrors := make(chan error, len(s.fulfillmentServices))
+
+	// Track number of chains that need catchup
+	chainsToProcess := 0
+
+	for chainID, fulfillmentService := range s.fulfillmentServices {
+		// Check if we have current block information for this chain
+		currentBlock, exists := currentBlocks[chainID]
+		if !exists {
+			s.logger.ErrorWithChain(chainID, "No current block information available for periodic catchup, skipping")
+			continue
+		}
+
+		// Get the last block processed by periodic catchup
+		lastBlock := s.GetPeriodicCatchupProgress(chainID)
+
+		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+		// Only process if we have blocks to catch up on
+		if lastBlock >= currentBlock {
+			s.logger.DebugWithChain(chainID, "No missed fulfillment events to process in periodic catchup (last: %d, current: %d)", lastBlock, currentBlock)
+			continue
+		}
+
+		// Use the last processed block as the starting point for periodic catchup
+		startBlock := lastBlock
+		s.logger.InfoWithChain(chainID, "Periodic catchup: Scanning from block %d to %d", startBlock+1, currentBlock)
+
+		chainsToProcess++
+		fulfillmentWg.Add(1)
+
+		// Use a descriptive operation name
+		opName := fmt.Sprintf("periodic_fulfillment_catchup_chain_%d", chainID)
+		s.trackCatchupOperation(opName)
+
+		go func(chainID uint64, fulfillmentService *FulfillmentService, startBlock, currentBlock uint64, opName string) {
+			defer fulfillmentWg.Done()
+			defer s.untrackCatchupOperation(opName)
+
+			s.logger.InfoWithChain(chainID, "Starting periodic fulfillment event catch-up (blocks %d to %d)",
+				startBlock+1, currentBlock)
+
+			// Create a timeout context for this specific chain's catchup
+			timeout := time.Duration(cfg.PeriodicCatchupTimeout) * time.Minute
+			chainCtx, chainCancel := context.WithTimeout(ctx, timeout)
+			defer chainCancel()
+
+			if err := s.catchUpOnFulfillmentEvents(chainCtx, fulfillmentService, contractAddress, startBlock, currentBlock, opName); err != nil {
+				fulfillmentErrors <- fmt.Errorf("failed to catch up on periodic fulfillment events for chain %d: %v", chainID, err)
+				s.logger.ErrorWithChain(chainID, "Periodic fulfillment catchup failed: %v", err)
+				return
+			}
+
+			// Only update progress if the catchup operation succeeded
+			s.UpdatePeriodicCatchupProgress(chainID, currentBlock)
+
+			// Persist progress to database
+			if err := s.SavePeriodicCatchupProgress(chainCtx, chainID, currentBlock); err != nil {
+				s.logger.ErrorWithChain(chainID, "Failed to save periodic catchup progress: %v", err)
+				// Don't fail the entire operation if DB save fails, but log the error
+			}
+
+			s.logger.InfoWithChain(chainID, "Completed periodic fulfillment event catch-up, updated progress to block %d", currentBlock)
+		}(chainID, fulfillmentService, startBlock, currentBlock, opName)
+	}
+
+	// If there are no chains to process, we can return early
+	if chainsToProcess == 0 {
+		s.logger.Debug("No periodic fulfillment catchup needed for any chain")
+		return nil
+	}
+
+	// Create a separate goroutine to wait for all work to complete and close the error channel
+	done := make(chan struct{})
+	go func() {
+		fulfillmentWg.Wait()
+		close(fulfillmentErrors)
+		close(done)
+	}()
+
+	// Wait for either completion or timeout
+	var errs []error
+	timeout := time.Duration(cfg.PeriodicCatchupTimeout) * time.Minute
+	select {
+	case <-done:
+		// Process any errors that were collected
+		for err := range fulfillmentErrors {
+			if err != nil {
+				errs = append(errs, err)
+				s.logger.Error("Periodic fulfillment catchup error: %v", err)
+			}
+		}
+	case <-ctx.Done():
+		return fmt.Errorf("periodic fulfillment catchup timed out after %v", timeout)
+	}
+
+	// Return combined errors if any
+	if len(errs) > 0 {
+		return fmt.Errorf("periodic fulfillment catchup completed with %d errors", len(errs))
+	}
+
+	return nil
+}
+
+// runPeriodicSettlementCatchup performs periodic catchup for settlement events
+func (s *EventCatchupService) runPeriodicSettlementCatchup(ctx context.Context, cfg *config.Config, currentBlocks map[uint64]uint64) error {
+	var settlementWg sync.WaitGroup
+	settlementErrors := make(chan error, len(s.settlementServices))
+
+	// Track number of chains that need catchup
+	chainsToProcess := 0
+
+	for chainID, settlementService := range s.settlementServices {
+		// Check if we have current block information for this chain
+		currentBlock, exists := currentBlocks[chainID]
+		if !exists {
+			s.logger.ErrorWithChain(chainID, "No current block information available for periodic catchup, skipping")
+			continue
+		}
+
+		// Get the last block processed by periodic catchup
+		lastBlock := s.GetPeriodicCatchupProgress(chainID)
+
+		contractAddress := common.HexToAddress(cfg.ChainConfigs[chainID].ContractAddr)
+
+		// Only process if we have blocks to catch up on
+		if lastBlock >= currentBlock {
+			s.logger.DebugWithChain(chainID, "No missed settlement events to process in periodic catchup (last: %d, current: %d)", lastBlock, currentBlock)
+			continue
+		}
+
+		// Use the last processed block as the starting point for periodic catchup
+		startBlock := lastBlock
+		s.logger.InfoWithChain(chainID, "Periodic catchup: Scanning from block %d to %d", startBlock+1, currentBlock)
+
+		chainsToProcess++
+		settlementWg.Add(1)
+
+		// Use a descriptive operation name
+		opName := fmt.Sprintf("periodic_settlement_catchup_chain_%d", chainID)
+		s.trackCatchupOperation(opName)
+
+		go func(chainID uint64, settlementService *SettlementService, startBlock, currentBlock uint64, opName string) {
+			defer settlementWg.Done()
+			defer s.untrackCatchupOperation(opName)
+
+			s.logger.InfoWithChain(chainID, "Starting periodic settlement event catch-up (blocks %d to %d)",
+				startBlock+1, currentBlock)
+
+			// Create a timeout context for this specific chain's catchup
+			timeout := time.Duration(cfg.PeriodicCatchupTimeout) * time.Minute
+			chainCtx, chainCancel := context.WithTimeout(ctx, timeout)
+			defer chainCancel()
+
+			if err := s.catchUpOnSettlementEvents(chainCtx, settlementService, contractAddress, startBlock, currentBlock, opName); err != nil {
+				settlementErrors <- fmt.Errorf("failed to catch up on periodic settlement events for chain %d: %v", chainID, err)
+				s.logger.ErrorWithChain(chainID, "Periodic settlement catchup failed: %v", err)
+				return
+			}
+
+			// Only update progress if the catchup operation succeeded
+			s.UpdatePeriodicCatchupProgress(chainID, currentBlock)
+
+			// Persist progress to database
+			if err := s.SavePeriodicCatchupProgress(chainCtx, chainID, currentBlock); err != nil {
+				s.logger.ErrorWithChain(chainID, "Failed to save periodic catchup progress: %v", err)
+				// Don't fail the entire operation if DB save fails, but log the error
+			}
+
+			s.logger.InfoWithChain(chainID, "Completed periodic settlement event catch-up, updated progress to block %d", currentBlock)
+		}(chainID, settlementService, startBlock, currentBlock, opName)
+	}
+
+	// If there are no chains to process, we can return early
+	if chainsToProcess == 0 {
+		s.logger.Debug("No periodic settlement catchup needed for any chain")
+		return nil
+	}
+
+	// Create a separate goroutine to wait for all work to complete and close the error channel
+	done := make(chan struct{})
+	go func() {
+		settlementWg.Wait()
+		close(settlementErrors)
+		close(done)
+	}()
+
+	// Wait for either completion or timeout
+	var errs []error
+	timeout := time.Duration(cfg.PeriodicCatchupTimeout) * time.Minute
+	select {
+	case <-done:
+		// Process any errors that were collected
+		for err := range settlementErrors {
+			if err != nil {
+				errs = append(errs, err)
+				s.logger.Error("Periodic settlement catchup error: %v", err)
+			}
+		}
+	case <-ctx.Done():
+		return fmt.Errorf("periodic settlement catchup timed out after %v", timeout)
+	}
+
+	// Return combined errors if any
+	if len(errs) > 0 {
+		return fmt.Errorf("periodic settlement catchup completed with %d errors", len(errs))
+	}
+
+	return nil
+}
+
 // UpdateIntentProgress updates the progress of an intent service
 func (s *EventCatchupService) UpdateIntentProgress(chainID, blockNumber uint64) {
 	s.mu.Lock()
@@ -841,6 +1345,155 @@ func (s *EventCatchupService) UpdateSettlementProgress(chainID, blockNumber uint
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.settlementProgress[chainID] = blockNumber
+}
+
+// UpdatePeriodicCatchupProgress updates the progress of periodic catchup for a chain
+func (s *EventCatchupService) UpdatePeriodicCatchupProgress(chainID, blockNumber uint64) {
+	s.periodicCatchupMu.Lock()
+	defer s.periodicCatchupMu.Unlock()
+	s.periodicCatchupProgress[chainID] = blockNumber
+	s.logger.Debug("Updated periodic catchup progress for chain %d to block %d", chainID, blockNumber)
+}
+
+// GetPeriodicCatchupProgress gets the last block processed by periodic catchup for a chain
+func (s *EventCatchupService) GetPeriodicCatchupProgress(chainID uint64) uint64 {
+	s.periodicCatchupMu.Lock()
+	defer s.periodicCatchupMu.Unlock()
+	return s.periodicCatchupProgress[chainID]
+}
+
+// SavePeriodicCatchupProgress persists the periodic catchup progress to the database
+func (s *EventCatchupService) SavePeriodicCatchupProgress(ctx context.Context, chainID, blockNumber uint64) error {
+	// Use a timeout for the database operation
+	dbCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Retry logic for database operations
+	maxRetries := 3
+	baseDelay := 1 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err := s.db.UpdatePeriodicCatchupBlock(dbCtx, chainID, blockNumber)
+		if err == nil {
+			s.logger.DebugWithChain(chainID, "Persisted periodic catchup progress to DB: block %d", blockNumber)
+			return nil
+		}
+
+		s.logger.ErrorWithChain(chainID, "Failed to persist periodic catchup progress to DB (attempt %d/%d): %v", attempt, maxRetries, err)
+
+		if attempt < maxRetries {
+			// Exponential backoff
+			delay := baseDelay * time.Duration(attempt)
+			select {
+			case <-time.After(delay):
+				continue
+			case <-dbCtx.Done():
+				return fmt.Errorf("context cancelled while retrying database operation: %v", dbCtx.Err())
+			}
+		}
+	}
+
+	return fmt.Errorf("failed to persist periodic catchup progress after %d attempts", maxRetries)
+}
+
+// LoadPeriodicCatchupProgress loads the periodic catchup progress from the database
+func (s *EventCatchupService) LoadPeriodicCatchupProgress(ctx context.Context, chainID uint64) (uint64, error) {
+	// Use a timeout for the database operation
+	dbCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	lastBlock, err := s.db.GetPeriodicCatchupBlock(dbCtx, chainID)
+	if err != nil {
+		return 0, err
+	}
+
+	s.periodicCatchupMu.Lock()
+	s.periodicCatchupProgress[chainID] = lastBlock
+	s.periodicCatchupMu.Unlock()
+
+	s.logger.DebugWithChain(chainID, "Loaded periodic catchup progress from DB: block %d", lastBlock)
+	return lastBlock, nil
+}
+
+// RecordPeriodicCatchupFailure records a failure for a chain to implement exponential backoff
+func (s *EventCatchupService) RecordPeriodicCatchupFailure(chainID uint64) {
+	s.periodicCatchupMu2.Lock()
+	defer s.periodicCatchupMu2.Unlock()
+	s.periodicCatchupFailures[chainID]++
+	s.logger.InfoWithChain(chainID, "WARNING: Periodic catchup failure recorded (consecutive failures: %d)", s.periodicCatchupFailures[chainID])
+
+	// Update metrics if available
+	if s.metricsService != nil {
+		s.metricsService.UpdatePeriodicCatchupFailureCount(chainID, s.periodicCatchupFailures[chainID])
+	}
+}
+
+// RecordPeriodicCatchupSuccess resets the failure count for a chain
+func (s *EventCatchupService) RecordPeriodicCatchupSuccess(chainID uint64) {
+	s.periodicCatchupMu2.Lock()
+	defer s.periodicCatchupMu2.Unlock()
+	if s.periodicCatchupFailures[chainID] > 0 {
+		s.logger.InfoWithChain(chainID, "Periodic catchup succeeded, resetting failure count from %d", s.periodicCatchupFailures[chainID])
+		s.periodicCatchupFailures[chainID] = 0
+
+		// Update metrics if available
+		if s.metricsService != nil {
+			s.metricsService.UpdatePeriodicCatchupFailureCount(chainID, 0)
+		}
+	}
+}
+
+// ShouldSkipPeriodicCatchup determines if a chain should be skipped due to recent failures
+func (s *EventCatchupService) ShouldSkipPeriodicCatchup(chainID uint64) bool {
+	s.periodicCatchupMu2.Lock()
+	defer s.periodicCatchupMu2.Unlock()
+
+	failureCount := s.periodicCatchupFailures[chainID]
+	if failureCount == 0 {
+		return false
+	}
+
+	// Exponential backoff: skip if we have 2 or more consecutive failures
+	// This gives the chain time to recover from temporary issues
+	if failureCount >= 2 {
+		s.logger.InfoWithChain(chainID, "WARNING: Skipping periodic catchup due to %d consecutive failures", failureCount)
+		return true
+	}
+
+	return false
+}
+
+// GetPeriodicCatchupHealth returns health information for periodic catchup
+func (s *EventCatchupService) GetPeriodicCatchupHealth() map[string]interface{} {
+	s.periodicCatchupMu2.Lock()
+	defer s.periodicCatchupMu2.Unlock()
+
+	health := make(map[string]interface{})
+	chainHealth := make(map[string]interface{})
+
+	for chainID, failureCount := range s.periodicCatchupFailures {
+		chainIDStr := fmt.Sprintf("%d", chainID)
+		chainHealth[chainIDStr] = map[string]interface{}{
+			"consecutive_failures": failureCount,
+			"is_healthy":           failureCount < 2,
+			"last_failure_time":    time.Now().Add(-time.Duration(failureCount) * time.Hour), // Approximate
+		}
+	}
+
+	health["chains"] = chainHealth
+	health["total_chains"] = len(s.periodicCatchupFailures)
+	health["healthy_chains"] = func() int {
+		count := 0
+		for _, failureCount := range s.periodicCatchupFailures {
+			if failureCount < 2 {
+				count++
+			}
+		}
+		return count
+	}()
+	health["timestamp"] = time.Now()
+
+	return health
 }
 
 // hasEventsInBlockRange needs to check for both standard and call event signatures

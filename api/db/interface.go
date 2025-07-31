@@ -58,6 +58,10 @@ type Database interface {
 	GetLastProcessedBlock(ctx context.Context, chainID uint64) (uint64, error)
 	UpdateLastProcessedBlock(ctx context.Context, chainID uint64, blockNumber uint64) error
 
+	// Periodic catchup block tracking operations
+	GetPeriodicCatchupBlock(ctx context.Context, chainID uint64) (uint64, error)
+	UpdatePeriodicCatchupBlock(ctx context.Context, chainID uint64, blockNumber uint64) error
+
 	// Database initialization
 	InitDB(ctx context.Context) error
 }

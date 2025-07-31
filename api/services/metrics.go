@@ -27,6 +27,15 @@ type MetricsService struct {
 	timeSinceLastEvent       *prometheus.GaugeVec
 	lastHealthCheckTimestamp *prometheus.GaugeVec
 
+	// Periodic catchup metrics
+	periodicCatchupSuccessTotal    *prometheus.CounterVec
+	periodicCatchupFailureTotal    *prometheus.CounterVec
+	periodicCatchupDuration        *prometheus.HistogramVec
+	periodicCatchupLastRun         *prometheus.GaugeVec
+	periodicCatchupEventsFound     *prometheus.CounterVec
+	periodicCatchupEventsProcessed *prometheus.CounterVec
+	periodicCatchupFailureCount    *prometheus.GaugeVec
+
 	// Service references
 	intentServices      map[uint64]*IntentService
 	fulfillmentServices map[uint64]*FulfillmentService
@@ -130,6 +139,64 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 		[]string{"chain_id", "chain_name"},
 	)
 
+	// Periodic catchup metrics
+	periodicCatchupSuccessTotal := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "speedrun_periodic_catchup_success_total",
+			Help: "Total number of successful periodic catchup operations per chain",
+		},
+		[]string{"chain_id", "chain_name", "event_type"},
+	)
+
+	periodicCatchupFailureTotal := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "speedrun_periodic_catchup_failure_total",
+			Help: "Total number of failed periodic catchup operations per chain",
+		},
+		[]string{"chain_id", "chain_name", "event_type"},
+	)
+
+	periodicCatchupDuration := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "speedrun_periodic_catchup_duration_seconds",
+			Help:    "Duration of periodic catchup operations per chain",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"chain_id", "chain_name", "event_type"},
+	)
+
+	periodicCatchupLastRun := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "speedrun_periodic_catchup_last_run_timestamp",
+			Help: "Timestamp of the last periodic catchup run per chain",
+		},
+		[]string{"chain_id", "chain_name", "event_type"},
+	)
+
+	periodicCatchupEventsFound := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "speedrun_periodic_catchup_events_found_total",
+			Help: "Total number of events found during periodic catchup per chain",
+		},
+		[]string{"chain_id", "chain_name", "event_type"},
+	)
+
+	periodicCatchupEventsProcessed := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "speedrun_periodic_catchup_events_processed_total",
+			Help: "Total number of events processed during periodic catchup per chain",
+		},
+		[]string{"chain_id", "chain_name", "event_type"},
+	)
+
+	periodicCatchupFailureCount := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "speedrun_periodic_catchup_failure_count",
+			Help: "Current consecutive failure count for periodic catchup per chain",
+		},
+		[]string{"chain_id", "chain_name"},
+	)
+
 	// Register metrics
 	registry.MustRegister(intentServicesUp)
 	registry.MustRegister(activeGoroutines)
@@ -142,24 +209,38 @@ func NewMetricsService(logger logger.Logger) *MetricsService {
 	registry.MustRegister(lastEventTimestamp)
 	registry.MustRegister(timeSinceLastEvent)
 	registry.MustRegister(lastHealthCheckTimestamp)
+	registry.MustRegister(periodicCatchupSuccessTotal)
+	registry.MustRegister(periodicCatchupFailureTotal)
+	registry.MustRegister(periodicCatchupDuration)
+	registry.MustRegister(periodicCatchupLastRun)
+	registry.MustRegister(periodicCatchupEventsFound)
+	registry.MustRegister(periodicCatchupEventsProcessed)
+	registry.MustRegister(periodicCatchupFailureCount)
 
 	return &MetricsService{
-		intentServicesUp:         intentServicesUp,
-		activeGoroutines:         activeGoroutines,
-		serviceGoroutines:        serviceGoroutines,
-		subscriptionCount:        subscriptionCount,
-		eventsProcessedTotal:     eventsProcessedTotal,
-		eventsSkippedTotal:       eventsSkippedTotal,
-		processingErrorsTotal:    processingErrorsTotal,
-		reconnectionCount:        reconnectionCount,
-		lastEventTimestamp:       lastEventTimestamp,
-		timeSinceLastEvent:       timeSinceLastEvent,
-		lastHealthCheckTimestamp: lastHealthCheckTimestamp,
-		intentServices:           make(map[uint64]*IntentService),
-		fulfillmentServices:      make(map[uint64]*FulfillmentService),
-		settlementServices:       make(map[uint64]*SettlementService),
-		logger:                   logger,
-		registry:                 registry,
+		intentServicesUp:               intentServicesUp,
+		activeGoroutines:               activeGoroutines,
+		serviceGoroutines:              serviceGoroutines,
+		subscriptionCount:              subscriptionCount,
+		eventsProcessedTotal:           eventsProcessedTotal,
+		eventsSkippedTotal:             eventsSkippedTotal,
+		processingErrorsTotal:          processingErrorsTotal,
+		reconnectionCount:              reconnectionCount,
+		lastEventTimestamp:             lastEventTimestamp,
+		timeSinceLastEvent:             timeSinceLastEvent,
+		lastHealthCheckTimestamp:       lastHealthCheckTimestamp,
+		periodicCatchupSuccessTotal:    periodicCatchupSuccessTotal,
+		periodicCatchupFailureTotal:    periodicCatchupFailureTotal,
+		periodicCatchupDuration:        periodicCatchupDuration,
+		periodicCatchupLastRun:         periodicCatchupLastRun,
+		periodicCatchupEventsFound:     periodicCatchupEventsFound,
+		periodicCatchupEventsProcessed: periodicCatchupEventsProcessed,
+		periodicCatchupFailureCount:    periodicCatchupFailureCount,
+		intentServices:                 make(map[uint64]*IntentService),
+		fulfillmentServices:            make(map[uint64]*FulfillmentService),
+		settlementServices:             make(map[uint64]*SettlementService),
+		logger:                         logger,
+		registry:                       registry,
 	}
 }
 
@@ -464,4 +545,37 @@ func (m *MetricsService) GetMetricsSummary() map[string]interface{} {
 	summary["timestamp"] = time.Now()
 
 	return summary
+}
+
+// RecordPeriodicCatchupSuccess records a successful periodic catchup operation
+func (m *MetricsService) RecordPeriodicCatchupSuccess(chainID uint64, eventType string, duration time.Duration, eventsFound, eventsProcessed int) {
+	chainName := m.GetChainName(chainID)
+	chainIDStr := fmt.Sprintf("%d", chainID)
+
+	m.periodicCatchupSuccessTotal.WithLabelValues(chainIDStr, chainName, eventType).Inc()
+	m.periodicCatchupDuration.WithLabelValues(chainIDStr, chainName, eventType).Observe(duration.Seconds())
+	m.periodicCatchupLastRun.WithLabelValues(chainIDStr, chainName, eventType).Set(float64(time.Now().Unix()))
+
+	if eventsFound > 0 {
+		m.periodicCatchupEventsFound.WithLabelValues(chainIDStr, chainName, eventType).Add(float64(eventsFound))
+	}
+	if eventsProcessed > 0 {
+		m.periodicCatchupEventsProcessed.WithLabelValues(chainIDStr, chainName, eventType).Add(float64(eventsProcessed))
+	}
+}
+
+// RecordPeriodicCatchupFailure records a failed periodic catchup operation
+func (m *MetricsService) RecordPeriodicCatchupFailure(chainID uint64, eventType string) {
+	chainName := m.GetChainName(chainID)
+	chainIDStr := fmt.Sprintf("%d", chainID)
+
+	m.periodicCatchupFailureTotal.WithLabelValues(chainIDStr, chainName, eventType).Inc()
+}
+
+// UpdatePeriodicCatchupFailureCount updates the current failure count for a chain
+func (m *MetricsService) UpdatePeriodicCatchupFailureCount(chainID uint64, failureCount int) {
+	chainName := m.GetChainName(chainID)
+	chainIDStr := fmt.Sprintf("%d", chainID)
+
+	m.periodicCatchupFailureCount.WithLabelValues(chainIDStr, chainName).Set(float64(failureCount))
 }

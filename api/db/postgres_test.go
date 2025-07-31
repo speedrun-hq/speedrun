@@ -311,3 +311,56 @@ func TestUpdateLastProcessedBlock(t *testing.T) {
 	// Verify expectations were met
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestPeriodicCatchupBlockOperations(t *testing.T) {
+	// Skip if no database connection is available
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	// Create a test database connection
+	db, err := NewPostgresDB("postgresql://postgres:postgres@localhost:5432/speedrun_test?sslmode=disable")
+	if err != nil {
+		t.Skipf("Skipping test - no database connection: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	chainID := uint64(1)
+
+	// Test initial state - should return 0 and create a record
+	block, err := db.GetPeriodicCatchupBlock(ctx, chainID)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), block)
+
+	// Test updating the block
+	testBlock := uint64(12345)
+	err = db.UpdatePeriodicCatchupBlock(ctx, chainID, testBlock)
+	require.NoError(t, err)
+
+	// Test retrieving the updated block
+	block, err = db.GetPeriodicCatchupBlock(ctx, chainID)
+	require.NoError(t, err)
+	assert.Equal(t, testBlock, block)
+
+	// Test updating to a higher block number
+	higherBlock := uint64(54321)
+	err = db.UpdatePeriodicCatchupBlock(ctx, chainID, higherBlock)
+	require.NoError(t, err)
+
+	// Test retrieving the higher block
+	block, err = db.GetPeriodicCatchupBlock(ctx, chainID)
+	require.NoError(t, err)
+	assert.Equal(t, higherBlock, block)
+
+	// Test with a different chain ID
+	chainID2 := uint64(2)
+	block2, err := db.GetPeriodicCatchupBlock(ctx, chainID2)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), block2)
+
+	// Verify the first chain still has the correct value
+	block, err = db.GetPeriodicCatchupBlock(ctx, chainID)
+	require.NoError(t, err)
+	assert.Equal(t, higherBlock, block)
+}

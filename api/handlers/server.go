@@ -24,27 +24,30 @@ import (
 
 // Server handles HTTP requests
 type Server struct {
-	fulfillmentService *services.FulfillmentService
-	intentService      *services.IntentService
-	metricsService     *services.MetricsService
-	db                 db.Database
-	logger             logger.Logger
+	fulfillmentService  *services.FulfillmentService
+	intentService       *services.IntentService
+	eventCatchupService *services.EventCatchupService
+	metricsService      *services.MetricsService
+	db                  db.Database
+	logger              logger.Logger
 }
 
 // NewServer creates a new HTTP server
 func NewServer(
 	fulfillmentService *services.FulfillmentService,
 	intentService *services.IntentService,
+	eventCatchupService *services.EventCatchupService,
 	metricsService *services.MetricsService,
 	database db.Database,
 	logger logger.Logger,
 ) *Server {
 	return &Server{
-		fulfillmentService: fulfillmentService,
-		intentService:      intentService,
-		metricsService:     metricsService,
-		db:                 database,
-		logger:             logger,
+		fulfillmentService:  fulfillmentService,
+		intentService:       intentService,
+		eventCatchupService: eventCatchupService,
+		metricsService:      metricsService,
+		db:                  database,
+		logger:              logger,
 	}
 }
 
@@ -128,6 +131,20 @@ func (s *Server) Start(addr string) error {
 		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 		})
+	})
+
+	// Periodic catchup health check
+	router.GET("/health/periodic-catchup", func(c *gin.Context) {
+		if s.eventCatchupService == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "unavailable",
+				"error":  "Event catchup service not available",
+			})
+			return
+		}
+
+		health := s.eventCatchupService.GetPeriodicCatchupHealth()
+		c.JSON(http.StatusOK, health)
 	})
 
 	// Prometheus metrics endpoint

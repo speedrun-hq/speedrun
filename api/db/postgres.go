@@ -527,6 +527,48 @@ func (p *PostgresDB) UpdateLastProcessedBlock(ctx context.Context, chainID uint6
 	return nil
 }
 
+// GetPeriodicCatchupBlock gets the last block processed by periodic catchup for a chain
+func (p *PostgresDB) GetPeriodicCatchupBlock(ctx context.Context, chainID uint64) (uint64, error) {
+	query := `
+		SELECT block_number
+		FROM periodic_catchup_blocks
+		WHERE chain_id = $1
+	`
+
+	var blockNumber uint64
+	err := p.db.QueryRowContext(ctx, query, chainID).Scan(&blockNumber)
+	if errors.Is(err, sql.ErrNoRows) {
+		// If no record exists, create one with a default value of 0
+		err = p.UpdatePeriodicCatchupBlock(ctx, chainID, 0)
+		if err != nil {
+			return 0, fmt.Errorf("failed to create default periodic catchup block: %v", err)
+		}
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to get periodic catchup block: %v", err)
+	}
+	return blockNumber, nil
+}
+
+// UpdatePeriodicCatchupBlock updates the last block processed by periodic catchup for a chain
+func (p *PostgresDB) UpdatePeriodicCatchupBlock(ctx context.Context, chainID uint64, blockNumber uint64) error {
+	query := `
+		INSERT INTO periodic_catchup_blocks (chain_id, block_number, last_catchup_at, updated_at)
+		VALUES ($1, $2, NOW(), NOW())
+		ON CONFLICT (chain_id) DO UPDATE
+		SET block_number = $2,
+			last_catchup_at = NOW(),
+			updated_at = NOW()
+	`
+
+	_, err := p.db.ExecContext(ctx, query, chainID, blockNumber)
+	if err != nil {
+		return fmt.Errorf("failed to update periodic catchup block: %v", err)
+	}
+	return nil
+}
+
 // ListIntentsBySender retrieves all intents for a specific sender address
 func (p *PostgresDB) ListIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error) {
 	query := `

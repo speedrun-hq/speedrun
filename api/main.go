@@ -86,6 +86,7 @@ func main() {
 		settlementServices,
 		database,
 		lg,
+		metricsService,
 	)
 
 	// Register EventCatchupService with metrics service
@@ -95,6 +96,10 @@ func main() {
 	if err != nil {
 		lg.Error("Failed to start event catchup service error: %v", err)
 	}
+
+	// Start periodic catchup service to detect missed events while running
+	eventCatchupService.StartPeriodicCatchup(ctx, cfg)
+	lg.Info("Started periodic catchup service to detect missed events")
 
 	// Start subscription supervisor to monitor and restart services if needed
 	eventCatchupService.StartGoroutine("subscription-supervisor", func() {
@@ -126,7 +131,7 @@ func main() {
 	fulfillmentService := fulfillmentServices[firstChainID]
 
 	// Create and start the server
-	server := handlers.NewServer(fulfillmentService, intentService, metricsService, database, lg)
+	server := handlers.NewServer(fulfillmentService, intentService, eventCatchupService, metricsService, database, lg)
 
 	// Set up graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())

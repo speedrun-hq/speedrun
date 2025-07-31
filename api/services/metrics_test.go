@@ -163,6 +163,7 @@ func TestMetricsService_ServiceSpecificGoroutineMetrics(t *testing.T) {
 		map[uint64]*SettlementService{1: settlementService},
 		mockDB,
 		logger,
+		metricsService,
 	)
 
 	// Register all services

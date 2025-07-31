@@ -130,6 +130,14 @@ func (m *mockSettlementDB) ListIntentsKeysetPaginated(ctx context.Context, lastT
 }
 func (m *mockSettlementDB) PrepareStatements(ctx context.Context) error { return nil }
 
+func (m *mockSettlementDB) GetPeriodicCatchupBlock(ctx context.Context, chainID uint64) (uint64, error) {
+	return 0, nil
+}
+
+func (m *mockSettlementDB) UpdatePeriodicCatchupBlock(ctx context.Context, chainID uint64, blockNumber uint64) error {
+	return nil
+}
+
 func TestSettlementService_Shutdown(t *testing.T) {
 	// Create mock database
 	mockDB := &mockSettlementDB{}

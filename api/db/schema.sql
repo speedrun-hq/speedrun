@@ -52,6 +52,14 @@ CREATE TABLE IF NOT EXISTS last_processed_blocks (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create periodic_catchup_blocks table to track periodic catchup progress
+CREATE TABLE IF NOT EXISTS periodic_catchup_blocks (
+    chain_id BIGINT PRIMARY KEY,
+    block_number BIGINT NOT NULL,
+    last_catchup_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_intents_status ON intents(status);
 CREATE INDEX IF NOT EXISTS idx_fulfillments_id ON fulfillments(id);

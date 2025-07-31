@@ -31,6 +31,10 @@ type Config struct {
 	IntentFulfilledEventABI string
 	IntentInitiatedEventABI string
 	IntentSettledEventABI   string
+	// Periodic catchup configuration
+	PeriodicCatchupInterval       int64 // in minutes
+	PeriodicCatchupTimeout        int64 // in minutes
+	PeriodicCatchupLookbackBlocks uint64
 }
 
 // LoadConfig loads configuration from environment variables
@@ -84,6 +88,10 @@ func LoadConfig() (*Config, error) {
 		IntentFulfilledEventABI: IntentFulfilledEventABI,
 		IntentInitiatedEventABI: IntentInitiatedEventABI,
 		IntentSettledEventABI:   IntentSettledEventABI,
+		// Periodic catchup configuration with defaults
+		PeriodicCatchupInterval:       int64(getEnvIntOrDefault("PERIODIC_CATCHUP_INTERVAL_MINUTES", 30)),
+		PeriodicCatchupTimeout:        int64(getEnvIntOrDefault("PERIODIC_CATCHUP_TIMEOUT_MINUTES", 15)),
+		PeriodicCatchupLookbackBlocks: getEnvUint64OrDefault("PERIODIC_CATCHUP_LOOKBACK_BLOCKS", 1000),
 	}, nil
 }
 
