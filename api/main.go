@@ -2,65 +2,65 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+	"github.com/speedrun-hq/speedrun/api/clients/evm"
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/handlers"
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/services"
 )
 
 func main() {
-	// Create logger
-	lg := logger.NewStdLogger(true, logger.DebugLevel)
+	flags := parseFlags()
+	log := logging.New(os.Stdout, flags.LogLevel, flags.LogJSON)
 
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatal().Err(err).Msg("Failed to load config")
 	}
 
+	ctx := context.Background()
+
 	// Initialize database
-	lg.Notice("Initializing database connection...")
+	log.Info().Msg("Initializing database connection")
 	database, err := db.NewPostgresDB(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Fatal().Err(err).Msg("Failed to initialize database")
 	}
+
 	defer func() {
 		if err := database.Close(); err != nil {
-			lg.Error("failed to close database: %v", err)
+			log.Error().Err(err).Msg("Failed to close database")
 		}
 	}()
 
-	lg.Notice("Database connection established successfully")
+	log.Info().Msg("Database connection established successfully")
 
 	// Initialize Ethereum clients
-	clients, err := createEthereumClients(cfg, lg)
+	clients, err := evm.ResolveClientsFromConfig(ctx, *cfg, log)
 	if err != nil {
-		log.Fatalf("Failed to initialize Ethereum clients: %v", err)
+		log.Fatal().Err(err).Msg("Failed to initialize Ethereum clients")
 	}
 
 	// Create services for all chains
-	intentServices, fulfillmentServices, settlementServices, err := createServices(clients, database, cfg, lg)
+	intentServices, fulfillmentServices, settlementServices, err := createServices(clients, database, cfg, log)
 	if err != nil {
-		log.Fatalf("Failed to create services: %v", err)
+		log.Fatal().Err(err).Msg("Failed to create services")
 	}
 
-	// Start event listeners for each chain
-	ctx := context.Background()
-
 	// Create metrics service
-	metricsService := services.NewMetricsService(lg)
+	metricsService := services.NewMetricsService(log)
 
 	// Register all services with the metrics service
 	for chainID, intentService := range intentServices {
@@ -77,7 +77,7 @@ func main() {
 
 	// Start the metrics updater
 	metricsService.StartMetricsUpdater(ctx)
-	lg.Info("Started Prometheus metrics service")
+	log.Info().Msg("Started Prometheus metrics service")
 
 	// Create event catchup service for this chain
 	eventCatchupService := services.NewEventCatchupService(
@@ -85,7 +85,7 @@ func main() {
 		fulfillmentServices,
 		settlementServices,
 		database,
-		lg,
+		log,
 	)
 
 	// Register EventCatchupService with metrics service
@@ -93,26 +93,34 @@ func main() {
 
 	err = eventCatchupService.StartListening(ctx)
 	if err != nil {
-		lg.Error("Failed to start event catchup service error: %v", err)
+		log.Error().Err(err).Msg("Failed to start event catchup service")
 	}
 
 	// Start subscription supervisor to monitor and restart services if needed
 	eventCatchupService.StartGoroutine("subscription-supervisor", func() {
 		eventCatchupService.StartSubscriptionSupervisor(ctx, cfg)
 	})
-	lg.Info("Started subscription supervisor to monitor service health")
+	log.Info().Msg("Started subscription supervisor to monitor service health")
 
 	// Perform a simple diagnostic check on clients
-	lg.Info("Performing basic diagnostic checks on clients...")
+	log.Info().Msg("Performing basic diagnostic checks on clients...")
+
 	for chainID, client := range clients {
 		// Test getting the latest block number as a diagnostic
-		ctxTest, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctxTest, cancel := context.WithTimeout(ctx, 10*time.Second)
 		blockNum, err := client.BlockNumber(ctxTest)
+
 		if err != nil {
-			lg.Error("Client for chain %d failed basic diagnosis: %v", chainID, err)
-		} else {
-			lg.Notice("Client for chain %d is functioning - current block: %d", chainID, blockNum)
+			log.Error().Err(err).Uint64(logging.FieldChain, chainID).Msg("Client failed basic diagnosis")
+			cancel()
+			continue
 		}
+
+		log.Info().
+			Uint64(logging.FieldChain, chainID).
+			Uint64(logging.FieldBlock, blockNum).
+			Msg("Client is functioning")
+
 		cancel()
 	}
 
@@ -126,10 +134,10 @@ func main() {
 	fulfillmentService := fulfillmentServices[firstChainID]
 
 	// Create and start the server
-	server := handlers.NewServer(fulfillmentService, intentService, metricsService, database, lg)
+	server := handlers.NewServer(fulfillmentService, intentService, metricsService, database, log)
 
 	// Set up graceful shutdown
-	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	shutdownCtx, shutdownCancel := context.WithCancel(ctx)
 	defer shutdownCancel()
 
 	// Set up signal handling for graceful shutdown
@@ -138,18 +146,22 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		if err := server.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil {
-			lg.Error("Server error: %v", err)
-			shutdownCancel() // Signal shutdown on server error
+		addr := fmt.Sprintf(":%s", cfg.Port)
+
+		if err := server.Start(addr); err != nil {
+			log.Error().Err(err).Str("addr", addr).Msg("Server error")
+
+			// Signal shutdown on server error
+			shutdownCancel()
 		}
 	}()
 
 	// Wait for shutdown signal
 	select {
 	case <-sigChan:
-		lg.Notice("Shutdown signal received, cleaning up services...")
+		log.Info().Msg("Shutdown signal received, cleaning up services...")
 	case <-shutdownCtx.Done():
-		lg.Notice("Shutdown context cancelled, cleaning up services...")
+		log.Info().Msg("Shutdown context cancelled, cleaning up services...")
 	}
 
 	// Shutdown all services gracefully
@@ -157,193 +169,49 @@ func main() {
 	var shutdownErrors []error
 
 	// Shutdown event catchup service
-	lg.Info("Shutting down event catchup service...")
+	log.Info().Msg("Shutting down event catchup service...")
 	if err := eventCatchupService.Shutdown(shutdownTimeout); err != nil {
-		shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to shutdown event catchup service: %v", err))
+		err = errors.Wrap(err, "failed to shutdown event catchup service")
+		shutdownErrors = append(shutdownErrors, err)
 	}
 
 	// Shutdown intent services
 	for chainID, intentService := range intentServices {
-		lg.Info("Shutting down intent service for chain %d...", chainID)
+		log.Info().Uint64(logging.FieldChain, chainID).Msg("Shutting down intent service")
 		if err := intentService.Shutdown(shutdownTimeout); err != nil {
-			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to shutdown intent service for chain %d: %v", chainID, err))
+			err = errors.Wrap(err, "failed to shutdown intent service")
+			shutdownErrors = append(shutdownErrors, err)
 		}
 	}
 
 	// Shutdown fulfillment services
 	for chainID, fulfillmentService := range fulfillmentServices {
-		lg.Info("Shutting down fulfillment service for chain %d...", chainID)
+		log.Info().Uint64(logging.FieldChain, chainID).Msg("Shutting down fulfillment service")
 		if err := fulfillmentService.Shutdown(shutdownTimeout); err != nil {
-			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to shutdown fulfillment service for chain %d: %v", chainID, err))
+			err = errors.Wrap(err, "failed to shutdown fulfillment service")
+			shutdownErrors = append(shutdownErrors, err)
 		}
 	}
 
 	// Shutdown settlement services
 	for chainID, settlementService := range settlementServices {
-		lg.Info("Shutting down settlement service for chain %d...", chainID)
+		log.Info().Uint64(logging.FieldChain, chainID).Msg("Shutting down settlement service")
 		if err := settlementService.Shutdown(shutdownTimeout); err != nil {
-			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to shutdown settlement service for chain %d: %v", chainID, err))
+			err = errors.Wrap(err, "failed to shutdown settlement service")
+			shutdownErrors = append(shutdownErrors, err)
 		}
 	}
 
 	// Log any shutdown errors
 	if len(shutdownErrors) > 0 {
-		lg.Error("Encountered %d errors during shutdown:", len(shutdownErrors))
+		log.Error().Int("errors_count", len(shutdownErrors)).Msg("Encountered errors during shutdown")
 		for _, err := range shutdownErrors {
-			lg.Error("  - %v", err)
+			log.Error().Err(err).Msg("Error during shutdown")
 		}
-	} else {
-		lg.Notice("All services shut down successfully")
-	}
-}
-
-// createEthereumClients creates and returns a map of Ethereum clients for each chain
-func createEthereumClients(cfg *config.Config, logger logger.Logger) (map[uint64]*ethclient.Client, error) {
-	clients := make(map[uint64]*ethclient.Client)
-	for chainID, chainConfig := range cfg.ChainConfigs {
-		var client *ethclient.Client
-		var err error
-
-		// Check if this is a WebSocket URL or HTTP URL
-		isWebSocket := strings.HasPrefix(chainConfig.RPCURL, "wss://") || strings.HasPrefix(chainConfig.RPCURL, "ws://")
-
-		// Force HTTP for Zetachain regardless of URL type
-		// TDOO: support testnet
-		if chainID == 7000 { // ZetaChain
-			if isWebSocket {
-				logger.Info("NOTE: For ZetaChain (ID: %d), forcing HTTP connection instead of WebSocket", chainID)
-				// Convert WebSocket URL to HTTP if necessary
-				httpURL := chainConfig.RPCURL
-				httpURL = strings.Replace(httpURL, "wss://", "https://", 1)
-				httpURL = strings.Replace(httpURL, "ws://", "http://", 1)
-
-				client, err = ethclient.Dial(httpURL)
-				if err != nil {
-					return nil, fmt.Errorf("failed to connect to ZetaChain with HTTP: %v", err)
-				}
-				logger.Info("Successfully connected to ZetaChain using HTTP")
-			} else {
-				// Already HTTP URL
-				client, err = ethclient.Dial(chainConfig.RPCURL)
-				if err != nil {
-					return nil, fmt.Errorf("failed to connect to ZetaChain: %v", err)
-				}
-			}
-		} else {
-			// For other chains, use normal logic
-			logger.Info("Creating client for chain %d with RPC URL %s (WebSocket: %v)",
-				chainID, maskRPCURL(chainConfig.RPCURL), isWebSocket)
-
-			if isWebSocket {
-				// Use WebSocket connection for subscriptions
-				rpcClient, err := rpc.DialWebsocket(context.Background(), chainConfig.RPCURL, "")
-				if err != nil {
-					return nil, fmt.Errorf("failed to create WebSocket RPC client for chain %d: %v", chainID, err)
-				}
-				client = ethclient.NewClient(rpcClient)
-				logger.Info("Successfully created WebSocket client for chain %d", chainID)
-
-				// Verify that the websocket connection supports subscriptions
-				if err := verifyWebsocketSubscription(client, chainID, logger); err != nil {
-					// TODO: consider failing here
-					logger.Error("WebSocket connection for chain %d failed subscription test: %v", chainID, err)
-					logger.Error("CRITICAL: Check your RPC provider. Some 'WebSocket' endpoints do not properly support subscriptions!")
-				} else {
-					logger.Debug("SUCCESS: WebSocket connection for chain %d verified - subscriptions are working", chainID)
-				}
-			} else {
-				// For HTTP connections, emit a warning that subscriptions might not work
-				logger.Info("WARNING: Using HTTP RPC URL for chain %d. Real-time subscriptions may not work. Consider using a WebSocket URL instead.", chainID)
-				client, err = ethclient.Dial(chainConfig.RPCURL)
-				if err != nil {
-					return nil, fmt.Errorf("failed to connect to chain %d: %v", chainID, err)
-				}
-			}
-		}
-
-		// Verify client is working by getting the current block number
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		blockNumber, err := client.BlockNumber(ctx)
-		cancel()
-
-		if err != nil {
-			logger.Error("WARNING: Could not get block number for chain %d: %v", chainID, err)
-		} else {
-			logger.Info("Client for chain %d connected successfully. Current block: %d", chainID, blockNumber)
-		}
-
-		clients[chainID] = client
-	}
-	return clients, nil
-}
-
-// verifyWebsocketSubscription tests if a client supports subscriptions by attempting to subscribe to new heads
-func verifyWebsocketSubscription(client *ethclient.Client, chainID uint64, logger logger.Logger) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	// Create a channel to receive headers
-	headers := make(chan *types.Header)
-
-	// Try to subscribe to new heads - this only works with websocket connections
-	sub, err := client.SubscribeNewHead(ctx, headers)
-	if err != nil {
-		return fmt.Errorf("subscription test failed: %v", err)
+		return
 	}
 
-	// Create a channel to signal when we've received a header or timed out
-	received := make(chan bool, 1)
-
-	// Set up a timeout for receiving the first header
-	timeout := time.After(10 * time.Second)
-
-	// Start a goroutine to receive headers
-	go func() {
-		select {
-		case header := <-headers:
-			logger.DebugWithChain(chainID, "Received new block header: number=%d, hash=%s",
-				header.Number.Uint64(), header.Hash().Hex())
-			received <- true
-		case err := <-sub.Err():
-			logger.DebugWithChain(chainID, "Subscription error: %v", err)
-			received <- false
-		case <-timeout:
-			logger.DebugWithChain(chainID, "Timed out waiting for header")
-			received <- false
-		}
-	}()
-
-	// Wait for the result
-	result := <-received
-
-	// Clean up
-	sub.Unsubscribe()
-
-	if !result {
-		return fmt.Errorf("did not receive block header within timeout")
-	}
-
-	return nil
-}
-
-// maskRPCURL masks an RPC URL to avoid logging sensitive information
-func maskRPCURL(url string) string {
-	// If URL contains API key as query parameter or path segment, mask it
-	if strings.Contains(url, "api-key=") {
-		return strings.Split(url, "api-key=")[0] + "api-key=***"
-	}
-	if strings.Contains(url, "apikey=") {
-		return strings.Split(url, "apikey=")[0] + "apikey=***"
-	}
-
-	// If URL contains API key as part of the path, mask that too
-	parts := strings.Split(url, "/")
-	if len(parts) > 3 {
-		// Keep protocol and domain, mask the rest
-		return parts[0] + "//" + parts[2] + "/***"
-	}
-
-	return url
+	log.Info().Msg("All services shut down successfully")
 }
 
 // createServices creates and returns the intent and fulfillment services for each chain
@@ -351,7 +219,7 @@ func createServices(
 	clients map[uint64]*ethclient.Client,
 	db db.Database,
 	cfg *config.Config,
-	logger logger.Logger,
+	logger zerolog.Logger,
 ) (
 	map[uint64]*services.IntentService,
 	map[uint64]*services.FulfillmentService,
@@ -410,4 +278,38 @@ func createServices(
 	}
 
 	return intentServices, fulfillmentServices, settlementServices, nil
+}
+
+type flagSet struct {
+	LogJSON  bool
+	LogLevel zerolog.Level
+}
+
+func parseFlags() flagSet {
+	var (
+		logJSON        bool
+		logLevel       string
+		logLevelParsed zerolog.Level
+	)
+
+	flag.BoolVar(&logJSON, "log-json", false, "Output logs in JSON format")
+	flag.StringVar(&logLevel, "log-level", "info", "Set log level (debug, info, warn, error)")
+
+	flag.Parse()
+
+	switch logLevel {
+	case "debug":
+		logLevelParsed = zerolog.DebugLevel
+	case "warn":
+		logLevelParsed = zerolog.WarnLevel
+	case "error":
+		logLevelParsed = zerolog.ErrorLevel
+	default:
+		logLevelParsed = zerolog.InfoLevel
+	}
+
+	return flagSet{
+		LogJSON:  logJSON,
+		LogLevel: logLevelParsed,
+	}
 }

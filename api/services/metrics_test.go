@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMetricsService_GoroutineTracking(t *testing.T) {
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create metrics service
 	metricsService := NewMetricsService(logger)
@@ -115,7 +115,7 @@ func TestMetricsService_GoroutineTracking(t *testing.T) {
 
 func TestMetricsService_ServiceSpecificGoroutineMetrics(t *testing.T) {
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create metrics service
 	metricsService := NewMetricsService(logger)

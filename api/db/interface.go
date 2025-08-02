@@ -28,16 +28,34 @@ type Database interface {
 	ListIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error)
 	ListIntentsBySenderPaginated(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error)
 	ListIntentsByRecipient(ctx context.Context, recipient string) ([]*models.Intent, error)
-	ListIntentsByRecipientPaginated(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error)
+	ListIntentsByRecipientPaginated(
+		ctx context.Context,
+		recipient string,
+		page, pageSize int,
+	) ([]*models.Intent, int, error)
 	UpdateIntentStatus(ctx context.Context, id string, status models.IntentStatus) error
 
 	// Optimized intent operations
 	ListIntentsPaginatedOptimized(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error)
-	ListIntentsBySenderPaginatedOptimized(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error)
-	ListIntentsByRecipientPaginatedOptimized(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error)
+	ListIntentsBySenderPaginatedOptimized(
+		ctx context.Context,
+		sender string,
+		page, pageSize int,
+	) ([]*models.Intent, int, error)
+	ListIntentsByRecipientPaginatedOptimized(
+		ctx context.Context,
+		recipient string,
+		page, pageSize int,
+	) ([]*models.Intent, int, error)
 
 	// Keyset pagination
-	ListIntentsKeysetPaginated(ctx context.Context, lastTimestamp time.Time, lastID string, pageSize int, status string) ([]*models.Intent, bool, error)
+	ListIntentsKeysetPaginated(
+		ctx context.Context,
+		lastTimestamp time.Time,
+		lastID string,
+		pageSize int,
+		status string,
+	) ([]*models.Intent, bool, error)
 
 	// Fulfillment operations
 	CreateFulfillment(ctx context.Context, fulfillment *models.Fulfillment) error

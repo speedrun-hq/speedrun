@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/stretchr/testify/assert"
 )
@@ -135,7 +135,7 @@ func TestSettlementService_Shutdown(t *testing.T) {
 	mockDB := &mockSettlementDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewSettlementService(
@@ -169,7 +169,7 @@ func TestSettlementService_StartListening_Shutdown(t *testing.T) {
 	mockDB := &mockSettlementDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewSettlementService(
@@ -197,7 +197,7 @@ func TestSettlementService_GoroutineCleanup(t *testing.T) {
 	mockDB := &mockSettlementDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewSettlementService(
@@ -235,7 +235,7 @@ func TestSettlementService_ShutdownTimeout(t *testing.T) {
 	mockDB := &mockSettlementDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewSettlementService(

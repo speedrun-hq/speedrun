@@ -12,7 +12,7 @@ import (
 
 // IntentInitiatedEvent represents the event emitted when a new intent is created
 type IntentInitiatedEvent struct {
-	IntentID    string   `json:"intentId" gorm:"primaryKey"`
+	IntentID    string   `json:"intentId"    gorm:"primaryKey"`
 	Asset       string   `json:"asset"`  // ERC20 token address
 	Amount      *big.Int `json:"amount"` // Amount to receive on target chain
 	TargetChain uint64   `json:"targetChain"`

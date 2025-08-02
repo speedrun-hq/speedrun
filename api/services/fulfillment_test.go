@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/stretchr/testify/assert"
 )
@@ -125,7 +125,7 @@ func TestFulfillmentService_Shutdown(t *testing.T) {
 	mockDB := &mockDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewFulfillmentService(
@@ -159,7 +159,7 @@ func TestFulfillmentService_StartListening_Shutdown(t *testing.T) {
 	mockDB := &mockDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewFulfillmentService(
@@ -187,7 +187,7 @@ func TestFulfillmentService_GoroutineCleanup(t *testing.T) {
 	mockDB := &mockDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewFulfillmentService(
@@ -225,7 +225,7 @@ func TestFulfillmentService_ShutdownTimeout(t *testing.T) {
 	mockDB := &mockDB{}
 
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create service
 	service, err := NewFulfillmentService(

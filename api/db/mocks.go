@@ -65,12 +65,20 @@ func (m *MockDB) ListIntents(ctx context.Context) ([]*models.Intent, error) {
 	return args.Get(0).([]*models.Intent), args.Error(1)
 }
 
-func (m *MockDB) ListIntentsPaginated(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+func (m *MockDB) ListIntentsPaginated(
+	ctx context.Context,
+	page, pageSize int,
+	status string,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, page, pageSize, status)
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDB) ListIntentsPaginatedOptimized(ctx context.Context, page, pageSize int, status string) ([]*models.Intent, int, error) {
+func (m *MockDB) ListIntentsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+	status string,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, page, pageSize, status)
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
@@ -83,12 +91,20 @@ func (m *MockDB) ListIntentsBySender(ctx context.Context, sender string) ([]*mod
 	return args.Get(0).([]*models.Intent), args.Error(1)
 }
 
-func (m *MockDB) ListIntentsBySenderPaginated(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
+func (m *MockDB) ListIntentsBySenderPaginated(
+	ctx context.Context,
+	sender string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, sender, page, pageSize)
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDB) ListIntentsBySenderPaginatedOptimized(ctx context.Context, sender string, page, pageSize int) ([]*models.Intent, int, error) {
+func (m *MockDB) ListIntentsBySenderPaginatedOptimized(
+	ctx context.Context,
+	sender string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, sender, page, pageSize)
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
@@ -101,17 +117,31 @@ func (m *MockDB) ListIntentsByRecipient(ctx context.Context, recipient string) (
 	return args.Get(0).([]*models.Intent), args.Error(1)
 }
 
-func (m *MockDB) ListIntentsByRecipientPaginated(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
+func (m *MockDB) ListIntentsByRecipientPaginated(
+	ctx context.Context,
+	recipient string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, recipient, page, pageSize)
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDB) ListIntentsByRecipientPaginatedOptimized(ctx context.Context, recipient string, page, pageSize int) ([]*models.Intent, int, error) {
+func (m *MockDB) ListIntentsByRecipientPaginatedOptimized(
+	ctx context.Context,
+	recipient string,
+	page, pageSize int,
+) ([]*models.Intent, int, error) {
 	args := m.Called(ctx, recipient, page, pageSize)
 	return args.Get(0).([]*models.Intent), args.Int(1), args.Error(2)
 }
 
-func (m *MockDB) ListIntentsKeysetPaginated(ctx context.Context, lastTimestamp time.Time, lastID string, pageSize int, status string) ([]*models.Intent, bool, error) {
+func (m *MockDB) ListIntentsKeysetPaginated(
+	ctx context.Context,
+	lastTimestamp time.Time,
+	lastID string,
+	pageSize int,
+	status string,
+) ([]*models.Intent, bool, error) {
 	args := m.Called(ctx, lastTimestamp, lastID, pageSize, status)
 	return args.Get(0).([]*models.Intent), args.Bool(1), args.Error(2)
 }
@@ -142,12 +172,18 @@ func (m *MockDB) ListFulfillments(ctx context.Context) ([]*models.Fulfillment, e
 	return args.Get(0).([]*models.Fulfillment), args.Error(1)
 }
 
-func (m *MockDB) ListFulfillmentsPaginated(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+func (m *MockDB) ListFulfillmentsPaginated(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Fulfillment, int, error) {
 	args := m.Called(ctx, page, pageSize)
 	return args.Get(0).([]*models.Fulfillment), args.Int(1), args.Error(2)
 }
 
-func (m *MockDB) ListFulfillmentsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Fulfillment, int, error) {
+func (m *MockDB) ListFulfillmentsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Fulfillment, int, error) {
 	args := m.Called(ctx, page, pageSize)
 	return args.Get(0).([]*models.Fulfillment), args.Int(1), args.Error(2)
 }
@@ -183,7 +219,10 @@ func (m *MockDB) ListSettlementsPaginated(ctx context.Context, page, pageSize in
 	return args.Get(0).([]*models.Settlement), args.Int(1), args.Error(2)
 }
 
-func (m *MockDB) ListSettlementsPaginatedOptimized(ctx context.Context, page, pageSize int) ([]*models.Settlement, int, error) {
+func (m *MockDB) ListSettlementsPaginatedOptimized(
+	ctx context.Context,
+	page, pageSize int,
+) ([]*models.Settlement, int, error) {
 	args := m.Called(ctx, page, pageSize)
 	return args.Get(0).([]*models.Settlement), args.Int(1), args.Error(2)
 }

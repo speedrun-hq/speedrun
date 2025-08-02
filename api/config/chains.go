@@ -3,12 +3,15 @@ package config
 import "fmt"
 
 const (
+	ZetachainMainnetChainID = 7000
+)
+
+const (
 	ethereumMainnetChainID  = 1
 	bscMainnetChainID       = 56
 	polygonMainnetChainID   = 137
 	arbitrumMainnetChainID  = 42161
 	baseMainnetChainID      = 8453
-	zetachainMainnetChainID = 7000
 	avalancheMainnetChainID = 43114
 
 	ethereumSepoliaChainID  = 11155111
@@ -37,7 +40,7 @@ var intentAddressByChain = map[uint64]string{
 	polygonMainnetChainID:   "0x4017717c550E4B6E61048D412a718D6A8078d264",
 	arbitrumMainnetChainID:  "0xD6B0E2a8D115cCA2823c5F80F8416644F3970dD2",
 	baseMainnetChainID:      "0x999fce149FD078DCFaa2C681e060e00F528552f4",
-	zetachainMainnetChainID: "0x986e2db1aF08688dD3C9311016026daD15969e09",
+	ZetachainMainnetChainID: "0x986e2db1aF08688dD3C9311016026daD15969e09",
 	avalancheMainnetChainID: "0x9a22A7d337aF1801BEEcDBE7f4f04BbD09F9E5bb",
 }
 
@@ -48,7 +51,7 @@ func chainNameFromID(chainID uint64) (string, error) {
 		return arbitrumName, nil
 	case baseMainnetChainID, baseSepoliaChainID:
 		return baseName, nil
-	case zetachainMainnetChainID, zetachainTestnetChainID:
+	case ZetachainMainnetChainID, zetachainTestnetChainID:
 		return zetachainName, nil
 	case polygonMainnetChainID, polygonAmoyChainID:
 		return polygonName, nil

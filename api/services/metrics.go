@@ -9,7 +9,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/rs/zerolog"
+	"github.com/speedrun-hq/speedrun/api/logging"
 )
 
 // MetricsService handles Prometheus metrics collection and exposition
@@ -33,12 +34,12 @@ type MetricsService struct {
 	settlementServices  map[uint64]*SettlementService
 	eventCatchupService *EventCatchupService
 	mu                  sync.RWMutex
-	logger              logger.Logger
+	logger              zerolog.Logger
 	registry            *prometheus.Registry
 }
 
 // NewMetricsService creates a new metrics service
-func NewMetricsService(logger logger.Logger) *MetricsService {
+func NewMetricsService(logger zerolog.Logger) *MetricsService {
 	registry := prometheus.NewRegistry()
 
 	// Create metrics
@@ -169,7 +170,7 @@ func (m *MetricsService) RegisterIntentService(chainID uint64, service *IntentSe
 	defer m.mu.Unlock()
 
 	m.intentServices[chainID] = service
-	m.logger.Info("Registered intent service for chain %d in metrics collector", chainID)
+	m.logger.Info().Uint64(logging.FieldChain, chainID).Msg("Registered intent service for metrics collector")
 }
 
 // RegisterFulfillmentService registers a fulfillment service for metrics collection
@@ -178,7 +179,7 @@ func (m *MetricsService) RegisterFulfillmentService(chainID uint64, service *Ful
 	defer m.mu.Unlock()
 
 	m.fulfillmentServices[chainID] = service
-	m.logger.Info("Registered fulfillment service for chain %d in metrics collector", chainID)
+	m.logger.Info().Uint64(logging.FieldChain, chainID).Msg("Registered fulfillment service for metrics collector")
 }
 
 // RegisterSettlementService registers a settlement service for metrics collection
@@ -187,7 +188,7 @@ func (m *MetricsService) RegisterSettlementService(chainID uint64, service *Sett
 	defer m.mu.Unlock()
 
 	m.settlementServices[chainID] = service
-	m.logger.Info("Registered settlement service for chain %d in metrics collector", chainID)
+	m.logger.Info().Uint64(logging.FieldChain, chainID).Msg("Registered settlement service for metrics collector")
 }
 
 // RegisterEventCatchupService registers the event catchup service for metrics collection
@@ -196,7 +197,7 @@ func (m *MetricsService) RegisterEventCatchupService(service *EventCatchupServic
 	defer m.mu.Unlock()
 
 	m.eventCatchupService = service
-	m.logger.Info("Registered event catchup service in metrics collector")
+	m.logger.Info().Msg("Registered event catchup service in metrics collector")
 }
 
 // UnregisterIntentService removes an intent service from metrics collection
@@ -205,7 +206,7 @@ func (m *MetricsService) UnregisterIntentService(chainID uint64) {
 	defer m.mu.Unlock()
 
 	delete(m.intentServices, chainID)
-	m.logger.Info("Unregistered intent service for chain %d from metrics collector", chainID)
+	m.logger.Info().Uint64(logging.FieldChain, chainID).Msg("Unregistered intent service from metrics collector")
 }
 
 // GetChainName returns a human-readable chain name for metrics labels
@@ -338,7 +339,8 @@ func (m *MetricsService) UpdateMetrics() {
 			}
 
 			if !metrics.LastHealthCheck.IsZero() {
-				m.lastHealthCheckTimestamp.WithLabelValues(chainIDStr, chainName).Set(float64(metrics.LastHealthCheck.Unix()))
+				m.lastHealthCheckTimestamp.WithLabelValues(chainIDStr, chainName).
+					Set(float64(metrics.LastHealthCheck.Unix()))
 			}
 		}
 	}
@@ -350,14 +352,14 @@ func (m *MetricsService) StartMetricsUpdater(ctx context.Context) {
 		ticker := time.NewTicker(15 * time.Second) // Update every 15 seconds
 		defer ticker.Stop()
 
-		m.logger.Info("Started Prometheus metrics updater")
+		m.logger.Info().Msg("Started Prometheus metrics updater")
 
 		for {
 			select {
 			case <-ticker.C:
 				m.UpdateMetrics()
 			case <-ctx.Done():
-				m.logger.Info("Stopped Prometheus metrics updater")
+				m.logger.Info().Msg("Stopped Prometheus metrics updater")
 				return
 			}
 		}

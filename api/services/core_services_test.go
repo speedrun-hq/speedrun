@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/speedrun-hq/speedrun/api/logger"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCoreServices_GoroutineTracking(t *testing.T) {
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create mock database
 	mockDB := &mockDB{}
@@ -141,7 +141,7 @@ func TestCoreServices_GoroutineTracking(t *testing.T) {
 
 func TestCoreServices_NoGoroutineLeaks(t *testing.T) {
 	// Create logger
-	logger := logger.NewStdLogger(false, logger.InfoLevel)
+	logger := logging.NewTesting(t)
 
 	// Create mock database
 	mockDB := &mockDB{}

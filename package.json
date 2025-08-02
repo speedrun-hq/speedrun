@@ -2,7 +2,7 @@
   "dependencies": {
     "@uniswap/v3-core": "^1.0.1",
     "@uniswap/v3-periphery": "^1.4.3",
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.2.0"
   },
   "devDependencies": {
     "prettier": "^3.5.3"

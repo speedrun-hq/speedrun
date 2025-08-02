@@ -11,14 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/speedrun-hq/speedrun/api/logger"
-
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/db"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/speedrun-hq/speedrun/api/utils"
 )
@@ -66,7 +66,7 @@ type IntentService struct {
 	activeGoroutines int32      // Counter for active goroutines
 	errChannel       chan error // Channel for collecting errors from goroutines
 	mu               sync.Mutex // Mutex for thread-safe operations
-	logger           logger.Logger
+	logger           zerolog.Logger
 
 	// Metrics tracking
 	eventsProcessed   int64     // Total events processed
@@ -100,7 +100,7 @@ func NewIntentService(
 	db db.Database,
 	intentInitiatedEventABI string,
 	chainID uint64,
-	logger logger.Logger,
+	logger zerolog.Logger,
 ) (*IntentService, error) {
 	// Parse the contract ABI
 	parsedABI, err := abi.JSON(strings.NewReader(intentInitiatedEventABI))
@@ -124,7 +124,7 @@ func NewIntentService(
 		chainID:        chainID,
 		subs:           make(map[string]ethereum.Subscription),
 		errChannel:     errChan,
-		logger:         logger,
+		logger:         logger.With().Uint64(logging.FieldChain, chainID).Logger(),
 		startTime:      time.Now(),
 		isZetaChain:    isZetaChain,
 		pollingHealthy: isZetaChain, // ZetaChain starts as healthy (polling assumed working)
@@ -162,7 +162,7 @@ func (s *IntentService) IsHealthy() bool {
 
 		// During startup, be lenient
 		if isStartingUp {
-			s.logger.DebugWithChain(s.chainID, "ZetaChain service starting up (grace period): HTTP polling assumed healthy")
+			s.logger.Debug().Msg("ZetaChain service starting up (grace period): HTTP polling assumed healthy")
 			isHealthy = true
 		} else {
 			// Check if polling health has been verified recently (within 10 minutes)
@@ -171,9 +171,11 @@ func (s *IntentService) IsHealthy() bool {
 
 			if !isHealthy {
 				if pollingStale {
-					s.logger.DebugWithChain(s.chainID, "ZetaChain polling health stale (last check: %v ago)", time.Since(s.lastPollingCheck))
+					s.logger.Debug().
+						Dur("time_since_last_check", time.Since(s.lastPollingCheck)).
+						Msg("ZetaChain polling health stale")
 				} else {
-					s.logger.DebugWithChain(s.chainID, "ZetaChain polling unhealthy")
+					s.logger.Debug().Msg("ZetaChain polling unhealthy")
 				}
 			}
 		}
@@ -186,16 +188,21 @@ func (s *IntentService) IsHealthy() bool {
 
 		// During startup, be more lenient
 		if isStartingUp {
-			s.logger.DebugWithChain(s.chainID, "Service starting up (grace period): activeGoroutines=%d, subscriptions=%d",
-				activeGoroutines, subscriptionCount)
+			s.logger.Debug().
+				Int32("active_goroutines", activeGoroutines).
+				Int("subscriptions", subscriptionCount).
+				Msg("Service starting up (grace period)")
 			isHealthy = true
 		}
 
 		// Add debug logging when service is unhealthy
 		if !isHealthy {
 			timeSinceStart := time.Since(s.startTime)
-			s.logger.DebugWithChain(s.chainID, "Service unhealthy (running %v): activeGoroutines=%d (need >=3), subscriptions=%d (need >=1)",
-				timeSinceStart, activeGoroutines, subscriptionCount)
+			s.logger.Debug().
+				Dur("time_since_start", timeSinceStart).
+				Int32("active_goroutines", activeGoroutines).
+				Int("subscriptions", subscriptionCount).
+				Msg("Service unhealthy")
 		}
 	}
 
@@ -221,9 +228,9 @@ func (s *IntentService) UpdatePollingHealth(healthy bool) {
 	s.mu.Unlock()
 
 	if healthy {
-		s.logger.DebugWithChain(s.chainID, "ZetaChain polling health updated: healthy")
+		s.logger.Debug().Msg("ZetaChain polling health updated: healthy")
 	} else {
-		s.logger.DebugWithChain(s.chainID, "ZetaChain polling health updated: unhealthy")
+		s.logger.Debug().Msg("ZetaChain polling health updated: unhealthy")
 	}
 }
 
@@ -307,7 +314,7 @@ func (s *IntentService) GetMetrics() ServiceMetrics {
 }
 
 // RestartSubscription restarts a subscription for a given contract address
-func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress common.Address) error {
+func (s *IntentService) RestartSubscription(_ context.Context, contractAddress common.Address) error {
 	subID := contractAddress.Hex()
 
 	// Unsubscribe existing subscription if it exists
@@ -315,7 +322,9 @@ func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress
 	if existingSub, exists := s.subs[subID]; exists {
 		existingSub.Unsubscribe()
 		delete(s.subs, subID)
-		s.logger.InfoWithChain(s.chainID, "Unsubscribed existing subscription for restart: %s", subID)
+		s.logger.Info().
+			Str("subscription_id", subID).
+			Msg("Unsubscribed existing subscription for restart")
 	}
 	s.mu.Unlock()
 
@@ -325,11 +334,15 @@ func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress
 	// Signal the subscription goroutine to restart
 	select {
 	case s.restartSignal <- struct{}{}:
-		s.logger.InfoWithChain(s.chainID, "Restart signal sent for contract %s (reconnection #%d)",
-			contractAddress.Hex(), atomic.LoadInt64(&s.reconnectionCount))
+		s.logger.Info().
+			Str("contract", contractAddress.Hex()).
+			Int64("reconnection_count", atomic.LoadInt64(&s.reconnectionCount)).
+			Msg("Restart signal sent")
 	default:
 		// Channel is full, restart signal already pending
-		s.logger.DebugWithChain(s.chainID, "Restart signal already pending for contract %s", contractAddress.Hex())
+		s.logger.Debug().
+			Str("contract", contractAddress.Hex()).
+			Msg("Restart signal already pending")
 	}
 
 	return nil
@@ -337,7 +350,7 @@ func (s *IntentService) RestartSubscription(ctx context.Context, contractAddress
 
 // Restart properly restarts the service by shutting down existing goroutines and starting new ones
 func (s *IntentService) Restart(ctx context.Context, contractAddress common.Address) error {
-	s.logger.InfoWithChain(s.chainID, "Restarting intent service...")
+	s.logger.Info().Uint64(logging.FieldChain, s.chainID).Msg("Restarting intent service...")
 
 	// Check if service is shutdown
 	if s.IsShutdown() {
@@ -356,9 +369,9 @@ func (s *IntentService) Restart(ctx context.Context, contractAddress common.Addr
 
 	select {
 	case <-done:
-		s.logger.DebugWithChain(s.chainID, "Existing goroutines stopped successfully")
+		s.logger.Debug().Uint64(logging.FieldChain, s.chainID).Msg("Existing goroutines stopped successfully")
 	case <-time.After(5 * time.Second):
-		s.logger.InfoWithChain(s.chainID, "Timeout waiting for existing goroutines to stop")
+		s.logger.Info().Uint64(logging.FieldChain, s.chainID).Msg("Timeout waiting for existing goroutines to stop")
 	}
 
 	// Unsubscribe from all subscriptions
@@ -388,15 +401,19 @@ func (s *IntentService) StartHealthMonitor(ctx context.Context, contractAddress 
 			// Check if service is healthy
 			if !s.IsHealthy() {
 				consecutiveFailures++
-				s.logger.InfoWithChain(s.chainID, "Health check failed (%d/%d): activeGoroutines=%d, subscriptions=%d",
-					consecutiveFailures, maxConsecutiveFailures, s.ActiveGoroutines(), s.GetSubscriptionCount())
+				s.logger.Info().
+					Int("consecutive_failures", consecutiveFailures).
+					Int("max_failures", maxConsecutiveFailures).
+					Int32("active_goroutines", s.ActiveGoroutines()).
+					Int("subscriptions", s.GetSubscriptionCount()).
+					Msg("Health check failed")
 
 				if consecutiveFailures >= maxConsecutiveFailures {
-					s.logger.InfoWithChain(s.chainID, "Service appears unhealthy, attempting restart")
+					s.logger.Info().Msg("Service appears unhealthy, attempting restart")
 
 					// Attempt to restart the subscription
 					if err := s.RestartSubscription(ctx, contractAddress); err != nil {
-						s.logger.ErrorWithChain(s.chainID, "Failed to restart subscription: %v", err)
+						s.logger.Error().Err(err).Msg("Failed to restart subscription")
 					} else {
 						consecutiveFailures = 0 // Reset counter on successful restart
 					}
@@ -404,12 +421,12 @@ func (s *IntentService) StartHealthMonitor(ctx context.Context, contractAddress 
 			} else {
 				// Service is healthy, reset failure counter
 				if consecutiveFailures > 0 {
-					s.logger.InfoWithChain(s.chainID, "Service health restored")
+					s.logger.Info().Msg("Service health restored")
 					consecutiveFailures = 0
 				}
 			}
 		case <-ctx.Done():
-			s.logger.DebugWithChain(s.chainID, "Health monitor shutting down")
+			s.logger.Debug().Msg("Health monitor shutting down")
 			return
 		}
 	}
@@ -433,17 +450,24 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 	// Check if service is already running - prevent multiple starts
 	activeGoroutines := atomic.LoadInt32(&s.activeGoroutines)
 	if activeGoroutines > 0 {
-		s.logger.InfoWithChain(s.chainID, "Service already running with %d goroutines, skipping start", activeGoroutines)
+		s.logger.Info().
+			Int32("active_goroutines", activeGoroutines).
+			Msg("Service already running, skipping start")
 		return nil
 	}
 
 	// Check if the client is using a websocket connection, which is needed for subscriptions
 	clientType := reflect.TypeOf(s.client).String()
 	isWebsocket := strings.Contains(strings.ToLower(clientType), "websocket")
-	s.logger.Info("Intent service using client type: %s, is websocket: %v", clientType, isWebsocket)
+	s.logger.Info().
+		Str("client_type", clientType).
+		Bool("is_websocket", isWebsocket).
+		Msg("Intent service client type")
 
 	if !isWebsocket {
-		s.logger.Info("WARNING: Intent service may not receive real-time events because client type is %s, not websocket", clientType)
+		s.logger.Warn().
+			Str("client_type", clientType).
+			Msg("Intent service may not receive real-time events because client is not websocket")
 	}
 
 	// Get current block number as a starting point to avoid processing old events
@@ -451,9 +475,11 @@ func (s *IntentService) StartListening(ctx context.Context, contractAddress comm
 	latestBlock, err := s.client.BlockNumber(startBlockCtx)
 	cancel()
 	if err != nil {
-		s.logger.Info("WARNING: Failed to get current block number: %v, will listen to all new blocks", err)
+		s.logger.Warn().Err(err).Msg("Failed to get current block number, will listen to all new blocks")
 	} else {
-		s.logger.Notice("Starting intent event subscription from block %d", latestBlock)
+		s.logger.Info().
+			Uint64(logging.FieldBlock, latestBlock).
+			Msg("Starting intent event subscription from block")
 	}
 
 	// Start a goroutine to monitor the error channel
@@ -479,16 +505,20 @@ func (s *IntentService) monitorErrors(ctx context.Context) {
 	for {
 		select {
 		case err := <-s.errChannel:
-			s.logger.Error("Error in IntentService goroutine: %v", err)
+			s.logger.Error().Err(err).Msg("Error in IntentService goroutine")
 		case <-ctx.Done():
-			s.logger.DebugWithChain(s.chainID, "Error monitor shutting down")
+			s.logger.Debug().Msg("Error monitor shutting down")
 			return
 		}
 	}
 }
 
 // startSubscriptionWithReconnection handles the subscription lifecycle with automatic reconnection
-func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, contractAddress common.Address, startBlock uint64) {
+func (s *IntentService) startSubscriptionWithReconnection(
+	ctx context.Context,
+	contractAddress common.Address,
+	startBlock uint64,
+) {
 	subID := contractAddress.Hex()
 
 	// Retry configuration
@@ -499,10 +529,10 @@ func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, c
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		select {
 		case <-ctx.Done():
-			s.logger.DebugWithChain(s.chainID, "Context cancelled, stopping subscription attempts")
+			s.logger.Debug().Msg("Context cancelled, stopping subscription attempts")
 			return
 		case <-s.restartSignal:
-			s.logger.InfoWithChain(s.chainID, "Restart signal received, restarting subscription")
+			s.logger.Info().Msg("Restart signal received, restarting subscription")
 			// Reset attempt counter for restart
 			attempt = 0
 			// Get current block for restart
@@ -510,10 +540,12 @@ func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, c
 			currentBlock, err := s.client.BlockNumber(blockCtx)
 			cancel()
 			if err != nil {
-				s.logger.InfoWithChain(s.chainID, "WARNING: Failed to get current block for restart: %v, using existing startBlock", err)
+				s.logger.Warn().Err(err).Msg("Failed to get current block for restart, using existing startBlock")
 			} else {
 				startBlock = currentBlock
-				s.logger.InfoWithChain(s.chainID, "Restarting subscription from current block %d", startBlock)
+				s.logger.Info().
+					Uint64("start_block", startBlock).
+					Msg("Restarting subscription from current block")
 			}
 			// Continue to create new subscription
 		default:
@@ -526,13 +558,17 @@ func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, c
 		}
 
 		if attempt > 0 {
-			s.logger.InfoWithChain(s.chainID, "Retrying subscription attempt %d/%d after %v", attempt+1, maxRetries, delay)
+			s.logger.Info().
+				Int("attempt", attempt+1).
+				Int("max_retries", maxRetries).
+				Dur("delay", delay).
+				Msg("Retrying subscription attempt")
 			select {
 			case <-time.After(delay):
 			case <-ctx.Done():
 				return
 			case <-s.restartSignal:
-				s.logger.InfoWithChain(s.chainID, "Restart signal received during delay, restarting immediately")
+				s.logger.Info().Msg("Restart signal received during delay, restarting immediately")
 				attempt = 0
 				continue
 			}
@@ -546,7 +582,11 @@ func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, c
 		}
 
 		// Log the error
-		s.logger.ErrorWithChain(s.chainID, "Subscription failed (attempt %d/%d): %v", attempt+1, maxRetries, err)
+		s.logger.Error().
+			Int("attempt", attempt+1).
+			Int("max_retries", maxRetries).
+			Err(err).
+			Msg("Subscription failed")
 
 		// If this is a context cancellation, don't retry
 		if ctx.Err() != nil {
@@ -556,11 +596,18 @@ func (s *IntentService) startSubscriptionWithReconnection(ctx context.Context, c
 
 	// If we get here, all retries failed
 	s.errChannel <- fmt.Errorf("failed to establish stable subscription after %d attempts", maxRetries)
-	s.logger.ErrorWithChain(s.chainID, "CRITICAL: Unable to establish stable subscription after %d attempts", maxRetries)
+	s.logger.Error().
+		Int("max_attempts", maxRetries).
+		Msg("CRITICAL: Unable to establish stable subscription")
 }
 
 // createAndRunSubscription creates a new subscription and runs the event processing loop
-func (s *IntentService) createAndRunSubscription(ctx context.Context, contractAddress common.Address, subID string, startBlock uint64) error {
+func (s *IntentService) createAndRunSubscription(
+	ctx context.Context,
+	contractAddress common.Address,
+	subID string,
+	startBlock uint64,
+) error {
 	// Configure the filter query for events
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
@@ -578,8 +625,11 @@ func (s *IntentService) createAndRunSubscription(ctx context.Context, contractAd
 	}
 
 	// Log the full query details for debugging
-	s.logger.Debug("Intent subscription filter query: Addresses=%v, Topics=%v, FromBlock=%v",
-		query.Addresses, query.Topics, query.FromBlock)
+	s.logger.Debug().
+		Interface("addresses", query.Addresses).
+		Interface("topics", query.Topics).
+		Interface("from_block", query.FromBlock).
+		Msg("Intent subscription filter query")
 
 	// Create a new logs channel for this subscription
 	logs := make(chan types.Log, DefaultLogsChannelBuffer) // Buffer to prevent blocking
@@ -595,7 +645,9 @@ func (s *IntentService) createAndRunSubscription(ctx context.Context, contractAd
 	s.subs[subID] = sub
 	s.mu.Unlock()
 
-	s.logger.InfoWithChain(s.chainID, "Successfully subscribed to intent events for contract %s", contractAddress.Hex())
+	s.logger.Info().
+		Str("contract", contractAddress.Hex()).
+		Msg("Successfully subscribed to intent events")
 
 	// Run the event processing loop
 	err = s.runEventProcessingLoop(ctx, sub, logs, subID)
@@ -614,8 +666,15 @@ func (s *IntentService) createAndRunSubscription(ctx context.Context, contractAd
 }
 
 // runEventProcessingLoop runs the main event processing loop for a subscription
-func (s *IntentService) runEventProcessingLoop(ctx context.Context, sub ethereum.Subscription, logs chan types.Log, subID string) error {
-	s.logger.InfoWithChain(s.chainID, "Starting event log processing, subscription %s", subID)
+func (s *IntentService) runEventProcessingLoop(
+	ctx context.Context,
+	sub ethereum.Subscription,
+	logs chan types.Log,
+	subID string,
+) error {
+	s.logger.Info().
+		Str("subscription_id", subID).
+		Msg("Starting event log processing")
 
 	// Use a ticker to periodically check system health
 	healthTicker := time.NewTicker(HealthTickerInterval)
@@ -632,17 +691,26 @@ func (s *IntentService) runEventProcessingLoop(ctx context.Context, sub ethereum
 		select {
 		case err := <-sub.Err():
 			if err != nil {
-				s.logger.ErrorWithChain(s.chainID, "Subscription %s error: %v", subID, err)
+				s.logger.Error().
+					Str("subscription_id", subID).
+					Err(err).
+					Msg("Subscription error")
 				return fmt.Errorf("subscription error: %v", err)
 			}
 		case vLog, ok := <-logs:
 			if !ok {
-				s.logger.ErrorWithChain(s.chainID, "Log channel closed for subscription %s", subID)
+				s.logger.Error().
+					Str("subscription_id", subID).
+					Msg("Log channel closed")
 				return fmt.Errorf("log channel closed")
 			}
 
 			eventCount++
-			s.logger.InfoWithChain(s.chainID, "EVENT RECEIVED: Block %d, TxHash %s, Topics: %v", vLog.BlockNumber, vLog.TxHash.Hex(), len(vLog.Topics))
+			s.logger.Info().
+				Uint64(logging.FieldBlock, vLog.BlockNumber).
+				Str("tx_hash", vLog.TxHash.Hex()).
+				Int("topics", len(vLog.Topics)).
+				Msg("EVENT RECEIVED")
 
 			// Process the log with timeout to prevent processing for too long
 			logCtx, logCancel := context.WithTimeout(ctx, DefaultLogTimeout)
@@ -654,20 +722,33 @@ func (s *IntentService) runEventProcessingLoop(ctx context.Context, sub ethereum
 			if err != nil {
 				atomic.AddInt64(&s.processingErrors, 1)
 				s.errChannel <- fmt.Errorf("error processing log: %v", err)
-				s.logger.ErrorWithChain(s.chainID, "Failed to process log, subscription %s: %v", subID, err)
+				s.logger.Error().
+					Str("subscription_id", subID).
+					Err(err).
+					Msg("Failed to process log")
 			} else {
-				s.logger.InfoWithChain(s.chainID, "Successfully processed event from block %d, tx %s (took %v)", vLog.BlockNumber, vLog.TxHash.Hex(), processingTime)
+				s.logger.Info().
+					Uint64(logging.FieldBlock, vLog.BlockNumber).
+					Str("tx_hash", vLog.TxHash.Hex()).
+					Dur("processing_time", processingTime).
+					Msg("Successfully processed event")
 			}
 		case <-healthTicker.C:
 			// Log system health information
-			s.logger.DebugWithChain(s.chainID, "IntentService health: activeGoroutines=%d, events_processed=%d",
-				s.ActiveGoroutines(), eventCount)
+			s.logger.Debug().
+				Int32("active_goroutines", s.ActiveGoroutines()).
+				Int("events_processed", eventCount).
+				Msg("IntentService health")
 		case <-debugTicker.C:
 			// Extra debugging info
-			s.logger.DebugWithChain(s.chainID, "Intent subscription %s still active, processed %d events so far",
-				subID, eventCount)
+			s.logger.Debug().
+				Str("subscription_id", subID).
+				Int("events_processed", eventCount).
+				Msg("Intent subscription still active")
 		case <-ctx.Done():
-			s.logger.DebugWithChain(s.chainID, "Context cancelled, stopping event processing, subscription %s", subID)
+			s.logger.Debug().
+				Str("subscription_id", subID).
+				Msg("Context cancelled, stopping event processing")
 			return nil // Normal termination
 		}
 	}
@@ -685,8 +766,11 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	defer func() {
 		logLatency := time.Since(logStart)
 		if logLatency > 1*time.Second {
-			s.logger.Debug("SLOW LOG PROCESSING: Chain %d, Block %d, TxHash %s took %v",
-				s.chainID, vLog.BlockNumber, vLog.TxHash.Hex(), logLatency)
+			s.logger.Debug().
+				Uint64(logging.FieldBlock, vLog.BlockNumber).
+				Str("tx_hash", vLog.TxHash.Hex()).
+				Dur("latency", logLatency).
+				Msg("SLOW LOG PROCESSING")
 		}
 	}()
 
@@ -715,7 +799,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		if err == nil {
 			client = sourceClient
 		} else {
-			s.logger.Debug("Warning: Failed to get source chain client: %v, using default client", err)
+			s.logger.Warn().Err(err).Msg("Failed to get source chain client, using default client")
 		}
 	}
 
@@ -725,14 +809,16 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	intentCancel()
 
 	if err != nil {
-		s.logger.Debug("Warning: Failed to get block timestamp: %v", err)
+		s.logger.Warn().Err(err).Msg("Failed to get block timestamp")
 		// Continue with what we have
 	}
 
 	// Add a warning log if the chain IDs don't match and we're using the default client
 	if intent.SourceChain != s.chainID && client == s.client {
-		s.logger.Debug("Warning: Using client for chain %d to fetch timestamp for intent event on chain %d",
-			s.chainID, intent.SourceChain)
+		s.logger.Warn().
+			Uint64("service_chain", s.chainID).
+			Uint64("source_chain", intent.SourceChain).
+			Msg("Using client for different chain to fetch timestamp for intent event")
 	}
 
 	// Check if intent already exists - set a timeout
@@ -747,7 +833,9 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	// Skip if intent already exists
 	if existingIntent != nil {
 		atomic.AddInt64(&s.eventsSkipped, 1)
-		s.logger.Debug("Skipped duplicate intent: %s", intent.ID)
+		s.logger.Debug().
+			Str("intent_id", intent.ID).
+			Msg("Skipped duplicate intent")
 		return nil
 	}
 
@@ -760,7 +848,9 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		// Skip if intent already exists
 		if strings.Contains(err.Error(), "duplicate key") {
 			atomic.AddInt64(&s.eventsSkipped, 1)
-			s.logger.Debug("Skipped duplicate intent during creation: %s", intent.ID)
+			s.logger.Debug().
+				Str("intent_id", intent.ID).
+				Msg("Skipped duplicate intent during creation")
 			return nil
 		}
 		atomic.AddInt64(&s.processingErrors, 1)
@@ -773,14 +863,21 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	s.lastEventTime = time.Now()
 	s.mu.Unlock()
 
-	s.logger.Info("Successfully processed and stored intent: %s", intent.ID)
+	s.logger.Info().
+		Str("intent_id", intent.ID).
+		Msg("Successfully processed and stored intent")
 	return nil
 }
 
 // validateLog checks if the log has the required structure and data.
 func (s *IntentService) validateLog(vLog types.Log) error {
-	s.logger.Debug("Validating log: BlockNum=%d, TxHash=%s, Address=%s, Topics=%d, DataSize=%d bytes",
-		vLog.BlockNumber, vLog.TxHash.Hex(), vLog.Address.Hex(), len(vLog.Topics), len(vLog.Data))
+	s.logger.Debug().
+		Uint64(logging.FieldBlock, vLog.BlockNumber).
+		Str("tx_hash", vLog.TxHash.Hex()).
+		Str("address", vLog.Address.Hex()).
+		Int("topics", len(vLog.Topics)).
+		Int("data_size", len(vLog.Data)).
+		Msg("Validating log")
 
 	if len(vLog.Topics) == 0 {
 		return fmt.Errorf("invalid log: no topics found")
@@ -795,14 +892,25 @@ func (s *IntentService) validateLog(vLog types.Log) error {
 		isStandard := expectedSig == actualSig
 		isCall := expectedCallSig == actualSig
 
-		s.logger.Debug("Event signature check - Expected Standard: %s, Expected Call: %s, Got: %s, Match Standard: %v, Match Call: %v",
-			expectedSig, expectedCallSig, actualSig, isStandard, isCall)
+		s.logger.Debug().
+			Str("expected_standard", expectedSig).
+			Str("expected_call", expectedCallSig).
+			Str("actual", actualSig).
+			Bool("match_standard", isStandard).
+			Bool("match_call", isCall).
+			Msg("Event signature check")
 	}
 
 	if len(vLog.Topics) < IntentInitiatedRequiredTopics {
-		s.logger.Error("Invalid log: expected at least %d topics, got %d",
-			IntentInitiatedRequiredTopics, len(vLog.Topics))
-		return fmt.Errorf("invalid log: expected at least %d topics, got %d", IntentInitiatedRequiredTopics, len(vLog.Topics))
+		s.logger.Error().
+			Int("required_topics", IntentInitiatedRequiredTopics).
+			Int("got_topics", len(vLog.Topics)).
+			Msg("Invalid log: insufficient topics")
+		return fmt.Errorf(
+			"invalid log: expected at least %d topics, got %d",
+			IntentInitiatedRequiredTopics,
+			len(vLog.Topics),
+		)
 	}
 
 	// Validate event signature - now check for both event types
@@ -810,21 +918,28 @@ func (s *IntentService) validateLog(vLog types.Log) error {
 	expectedCallSig := s.abi.Events[IntentInitiatedWithCallEventName].ID
 
 	if vLog.Topics[0] != expectedStandardSig && vLog.Topics[0] != expectedCallSig {
-		s.logger.Error("Invalid event signature - Expected Standard: %s, Expected Call: %s, Got: %s",
-			expectedStandardSig.Hex(), expectedCallSig.Hex(), vLog.Topics[0].Hex())
+		s.logger.Error().
+			Str("expected_standard", expectedStandardSig.Hex()).
+			Str("expected_call", expectedCallSig.Hex()).
+			Str("got", vLog.Topics[0].Hex()).
+			Msg("Invalid event signature")
 		return fmt.Errorf("invalid event signature: expected %s or %s, got %s",
 			expectedStandardSig.Hex(), expectedCallSig.Hex(), vLog.Topics[0].Hex())
 	}
 
-	s.logger.Debug("Log validation passed - BlockNum=%d, TxHash=%s",
-		vLog.BlockNumber, vLog.TxHash.Hex())
+	s.logger.Debug().
+		Uint64(logging.FieldBlock, vLog.BlockNumber).
+		Str("tx_hash", vLog.TxHash.Hex()).
+		Msg("Log validation passed")
 	return nil
 }
 
 // extractEventData extracts and validates the event data from the log.
 func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*models.IntentInitiatedEvent, error) {
-	s.logger.Debug("Extracting event data from log: BlockNum=%d, TxHash=%s",
-		vLog.BlockNumber, vLog.TxHash.Hex())
+	s.logger.Debug().
+		Uint64(logging.FieldBlock, vLog.BlockNumber).
+		Str("tx_hash", vLog.TxHash.Hex()).
+		Msg("Extracting event data from log")
 
 	event := &models.IntentInitiatedEvent{
 		BlockNumber: vLog.BlockNumber,
@@ -833,7 +948,9 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 
 	// Parse indexed parameters from topics
 	if len(vLog.Topics) < 3 {
-		s.logger.Error("Invalid log: expected at least 3 topics, got %d", len(vLog.Topics))
+		s.logger.Error().
+			Int("got_topics", len(vLog.Topics)).
+			Msg("Invalid log: expected at least 3 topics")
 		return nil, fmt.Errorf("invalid log: expected at least 3 topics, got %d", len(vLog.Topics))
 	}
 
@@ -843,12 +960,14 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	event.IntentID = vLog.Topics[1].Hex()
 	event.Asset = common.HexToAddress(vLog.Topics[2].Hex()).Hex()
 
-	s.logger.Debug("Extracted indexed parameters - IntentID: %s, Asset: %s",
-		event.IntentID, event.Asset)
+	s.logger.Debug().
+		Str("intent_id", event.IntentID).
+		Str("asset", event.Asset).
+		Msg("Extracted indexed parameters")
 
 	// Parse non-indexed parameters from data
 	if len(vLog.Data) == 0 {
-		s.logger.Error("Log data is empty, cannot unpack parameters")
+		s.logger.Error().Msg("Log data is empty, cannot unpack parameters")
 		return nil, fmt.Errorf("event data is empty")
 	}
 
@@ -857,26 +976,32 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	switch eventTopic := vLog.Topics[0]; eventTopic {
 	case s.abi.Events[IntentInitiatedEventName].ID:
 		eventName = IntentInitiatedEventName
-		s.logger.Debug("Processing standard intent event")
+		s.logger.Debug().Msg("Processing standard intent event")
 	case s.abi.Events[IntentInitiatedWithCallEventName].ID:
 		eventName = IntentInitiatedWithCallEventName
-		s.logger.Debug("Processing intent with call event")
+		s.logger.Debug().Msg("Processing intent with call event")
 		event.IsCall = true
 	default:
-		s.logger.Error("Unknown event signature: %s", eventTopic.Hex())
+		s.logger.Error().
+			Str("event_signature", eventTopic.Hex()).
+			Msg("Unknown event signature")
 		return nil, fmt.Errorf("unknown event signature: %s", eventTopic.Hex())
 	}
 
-	s.logger.Debug("Unpacking event data (%d bytes) using ABI for %s",
-		len(vLog.Data), eventName)
+	s.logger.Debug().
+		Int("data_size", len(vLog.Data)).
+		Str("event_name", eventName).
+		Msg("Unpacking event data using ABI")
 
 	unpacked, err := s.abi.Unpack(eventName, vLog.Data)
 	if err != nil {
-		s.logger.Error("Failed to unpack event data: %v", err)
+		s.logger.Error().Err(err).Msg("Failed to unpack event data")
 		return nil, fmt.Errorf("failed to unpack event data: %v", err)
 	}
 
-	s.logger.Debug("Unpacked %d fields from event data", len(unpacked))
+	s.logger.Debug().
+		Int("field_count", len(unpacked)).
+		Msg("Unpacked fields from event data")
 
 	// Check minimum field requirements based on event type
 	requiredFields := IntentInitiatedRequiredFields
@@ -885,13 +1010,15 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	}
 
 	if len(unpacked) < requiredFields {
-		s.logger.Error("Invalid event data: expected %d fields, got %d",
-			requiredFields, len(unpacked))
+		s.logger.Error().
+			Int("required_fields", requiredFields).
+			Int("got_fields", len(unpacked)).
+			Msg("Invalid event data: insufficient fields")
 		return nil, fmt.Errorf("invalid event data: expected %d fields, got %d", requiredFields, len(unpacked))
 	}
 
 	if err := s.validateEventFields(unpacked, event); err != nil {
-		s.logger.Error("Failed to validate event fields: %v", err)
+		s.logger.Error().Err(err).Msg("Failed to validate event fields")
 		return nil, err
 	}
 
@@ -899,10 +1026,12 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	txCtx, txCancel := context.WithTimeout(ctx, DefaultRPCTimeout)
 	defer txCancel()
 
-	s.logger.Debug("Fetching transaction %s to extract sender", vLog.TxHash.Hex())
+	s.logger.Debug().
+		Str("tx_hash", vLog.TxHash.Hex()).
+		Msg("Fetching transaction to extract sender")
 	tx, _, err := s.client.TransactionByHash(txCtx, vLog.TxHash)
 	if err != nil {
-		s.logger.Error("Failed to get transaction: %v", err)
+		s.logger.Error().Err(err).Msg("Failed to get transaction")
 		return nil, fmt.Errorf("failed to get transaction: %v", err)
 	}
 
@@ -910,14 +1039,18 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	signer := types.LatestSignerForChainID(big.NewInt(int64(s.chainID)))
 	sender, err := signer.Sender(tx)
 	if err != nil {
-		s.logger.Error("Failed to get sender address: %v", err)
+		s.logger.Error().Err(err).Msg("Failed to get sender address")
 		return nil, fmt.Errorf("failed to get sender address: %v", err)
 	}
 
 	event.Sender = sender.Hex()
-	s.logger.Debug("Extracted sender: %s", event.Sender)
+	s.logger.Debug().
+		Str("sender", event.Sender).
+		Msg("Extracted sender")
 
-	s.logger.Debug("Successfully extracted all event data for intent %s", event.IntentID)
+	s.logger.Debug().
+		Str("intent_id", event.IntentID).
+		Msg("Successfully extracted all event data for intent")
 	return event, nil
 }
 
@@ -925,14 +1058,22 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 func (s *IntentService) validateEventFields(unpacked []interface{}, event *models.IntentInitiatedEvent) error {
 	var ok bool
 
-	s.logger.Debug("Validating event fields (%d values)", len(unpacked))
+	s.logger.Debug().
+		Int("value_count", len(unpacked)).
+		Msg("Validating event fields")
 
 	// Log the types of unpacked values for debugging
 	for i, val := range unpacked {
 		if val == nil {
-			s.logger.Debug("Field %d is nil", i)
+			s.logger.Debug().
+				Int("field_index", i).
+				Msg("Field is nil")
 		} else {
-			s.logger.Debug("Field %d type: %T, value: %v", i, val, val)
+			s.logger.Debug().
+				Int("field_index", i).
+				Str("type", fmt.Sprintf("%T", val)).
+				Interface("value", val).
+				Msg("Field type and value")
 		}
 	}
 
@@ -990,7 +1131,9 @@ func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Inten
 		// Check if the error is "not found"
 		if strings.Contains(err.Error(), "not found") {
 			// Try to check on-chain via RPC if this intent exists
-			s.logger.Error("Intent not found in database, attempting to check on-chain for intent %s", id)
+			s.logger.Error().
+				Str("intent_id", id).
+				Msg("Intent not found in database, attempting to check on-chain")
 
 			// Here you would typically query the blockchain or other sources
 			// For now, we're just improving error logging
@@ -998,13 +1141,18 @@ func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Inten
 		}
 
 		// Log detailed error for debugging
-		s.logger.Error("ERROR: Failed to get intent %s from database: %v", id, err)
+		s.logger.Error().
+			Str("intent_id", id).
+			Err(err).
+			Msg("Failed to get intent from database")
 
 		return nil, fmt.Errorf("error retrieving intent: %v", err)
 	}
 
 	// Log success
-	s.logger.Debug("Successfully retrieved intent %s from database", id)
+	s.logger.Debug().
+		Str("intent_id", id).
+		Msg("Successfully retrieved intent from database")
 	return intent, nil
 }
 
@@ -1037,7 +1185,14 @@ func (s *IntentService) GetIntentsByRecipient(ctx context.Context, recipient str
 }
 
 // CreateIntent creates a new intent
-func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string, timestamp ...time.Time) (*models.Intent, error) {
+func (s *IntentService) CreateIntent(
+	ctx context.Context,
+	id string,
+	sourceChain uint64,
+	destinationChain uint64,
+	token, amount, recipient, sender, intentFee string,
+	timestamp ...time.Time,
+) (*models.Intent, error) {
 	// Validate chain IDs
 	if err := utils.ValidateChain(sourceChain); err != nil {
 		return nil, fmt.Errorf("invalid source chain: %v", err)
@@ -1102,7 +1257,15 @@ func (s *IntentService) CreateIntent(ctx context.Context, id string, sourceChain
 }
 
 // CreateCallIntent creates a new intent with call data
-func (s *IntentService) CreateCallIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string, callData string, timestamp ...time.Time) (*models.Intent, error) {
+func (s *IntentService) CreateCallIntent(
+	ctx context.Context,
+	id string,
+	sourceChain uint64,
+	destinationChain uint64,
+	token, amount, recipient, sender, intentFee string,
+	callData string,
+	timestamp ...time.Time,
+) (*models.Intent, error) {
 	// Validate chain IDs
 	if err := utils.ValidateChain(sourceChain); err != nil {
 		return nil, fmt.Errorf("invalid source chain: %v", err)
@@ -1173,12 +1336,15 @@ func (s *IntentService) UnsubscribeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.logger.Debug("Unsubscribing from all intent subscriptions for chain %d (%d active subscriptions)",
-		s.chainID, len(s.subs))
+	s.logger.Debug().
+		Int("active_subscriptions", len(s.subs)).
+		Msg("Unsubscribing from all intent subscriptions")
 
 	for id, sub := range s.subs {
 		sub.Unsubscribe()
-		s.logger.Debug("Unsubscribed from intent subscription %s on chain %d", id, s.chainID)
+		s.logger.Debug().
+			Str("subscription_id", id).
+			Msg("Unsubscribed from intent subscription")
 		delete(s.subs, id)
 	}
 }
@@ -1209,7 +1375,7 @@ func (s *IntentService) Shutdown(timeout time.Duration) error {
 	s.isShutdown = true
 	s.shutdownMu.Unlock()
 
-	s.logger.InfoWithChain(s.chainID, "Shutting down IntentService...")
+	s.logger.Info().Msg("Shutting down IntentService...")
 
 	// Cancel the cleanup context to signal all goroutines to stop
 	s.cleanupCancel()
@@ -1229,10 +1395,12 @@ func (s *IntentService) Shutdown(timeout time.Duration) error {
 
 	select {
 	case <-done:
-		s.logger.InfoWithChain(s.chainID, "IntentService shutdown completed successfully")
+		s.logger.Info().Msg("IntentService shutdown completed successfully")
 		return nil
 	case <-time.After(timeout):
-		s.logger.ErrorWithChain(s.chainID, "IntentService shutdown timed out after %v", timeout)
+		s.logger.Error().
+			Dur("timeout", timeout).
+			Msg("IntentService shutdown timed out")
 		return fmt.Errorf("shutdown timed out after %v", timeout)
 	}
 }
@@ -1249,7 +1417,9 @@ func (s *IntentService) startGoroutine(name string, fn func()) {
 	s.shutdownMu.RLock()
 	if s.isShutdown {
 		s.shutdownMu.RUnlock()
-		s.logger.DebugWithChain(s.chainID, "Cannot start goroutine %s: service is shutdown", name)
+		s.logger.Debug().
+			Str("goroutine_name", name).
+			Msg("Cannot start goroutine: service is shutdown")
 		return
 	}
 	s.shutdownMu.RUnlock()
@@ -1266,7 +1436,11 @@ func (s *IntentService) startGoroutine(name string, fn func()) {
 			if r := recover(); r != nil {
 				err := fmt.Errorf("panic in goroutine %s: %v\nstack: %s", name, r, debug.Stack())
 				s.errChannel <- err
-				s.logger.Error("CRITICAL: %v", err)
+				s.logger.Error().
+					Str("goroutine_name", name).
+					Any("panic", r).
+					Str("stack", string(debug.Stack())).
+					Msg("CRITICAL: Panic in goroutine")
 			}
 		}()
 

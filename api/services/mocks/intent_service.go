@@ -44,7 +44,13 @@ func (m *MockIntentService) GetIntentsByRecipient(ctx context.Context, recipient
 	return args.Get(0).([]*models.Intent), args.Error(1)
 }
 
-func (m *MockIntentService) CreateIntent(ctx context.Context, id string, sourceChain uint64, destinationChain uint64, token, amount, recipient, sender, intentFee string) (*models.Intent, error) {
+func (m *MockIntentService) CreateIntent(
+	ctx context.Context,
+	id string,
+	sourceChain uint64,
+	destinationChain uint64,
+	token, amount, recipient, sender, intentFee string,
+) (*models.Intent, error) {
 	args := m.Called(ctx, id, sourceChain, destinationChain, token, amount, recipient, sender, intentFee)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
