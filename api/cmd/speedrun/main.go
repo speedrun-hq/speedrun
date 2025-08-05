@@ -20,6 +20,10 @@ import (
 	"github.com/speedrun-hq/speedrun/api/services"
 )
 
+const (
+	shutdownTimeout = 30 * time.Second
+)
+
 func main() {
 	flags := parseFlags()
 	log := logging.New(os.Stdout, flags.LogLevel, flags.LogJSON)
@@ -105,25 +109,6 @@ func main() {
 	// Perform a simple diagnostic check on clients
 	log.Info().Msg("Performing basic diagnostic checks on clients...")
 
-	for chainID, client := range clients {
-		// Test getting the latest block number as a diagnostic
-		ctxTest, cancel := context.WithTimeout(ctx, 10*time.Second)
-		blockNum, err := client.BlockNumber(ctxTest)
-
-		if err != nil {
-			log.Error().Err(err).Uint64(logging.FieldChain, chainID).Msg("Client failed basic diagnosis")
-			cancel()
-			continue
-		}
-
-		log.Info().
-			Uint64(logging.FieldChain, chainID).
-			Uint64(logging.FieldBlock, blockNum).
-			Msg("Client is functioning")
-
-		cancel()
-	}
-
 	// Get the first chain's services for the HTTP server
 	firstChainID := uint64(0)
 	for chainID := range intentServices {
@@ -165,7 +150,6 @@ func main() {
 	}
 
 	// Shutdown all services gracefully
-	shutdownTimeout := 30 * time.Second
 	var shutdownErrors []error
 
 	// Shutdown event catchup service

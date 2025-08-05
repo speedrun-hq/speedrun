@@ -1,6 +1,5 @@
 # Binary names
 BINARY_NAME=speedrun
-API_BINARY_PATH=api/$(BINARY_NAME)
 
 # Build flags
 # -w: Omits DWARF symbol table information from the binary, reducing its size
@@ -17,9 +16,11 @@ help: ## List of commands
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo "\nUsage: make <command>"
 
-build: ## Build both API and frontend
-	cd api && $(GO_BUILD) -o $(BINARY_NAME) .
+build: build-api ## Build both API and frontend
 	cd frontend && npm run build
+
+build-api: ## Build the API server
+	cd api && $(GO_BUILD) -o build/$(BINARY_NAME) cmd/speedrun/main.go
 
 clean: ## Clean build files and dependencies
 	cd api && go clean
@@ -31,9 +32,8 @@ test: ## Run tests for both API and frontend
 	cd api && go test -v ./...
 	cd frontend && npm test
 
-run-api: ## Run the API server
-	cd api && $(GO_BUILD) -o $(BINARY_NAME) .
-	cd api && ./$(BINARY_NAME)
+run-api: build-api ## Run the API server
+	./api/build/$(BINARY_NAME)
 
 deps: ## Download dependencies for both API and frontend
 	cd api && go get ./...
@@ -48,9 +48,6 @@ fmt: ## Format code
 lint: ## Run linters for both API and frontend
 	cd api && golangci-lint run
 	cd frontend && npm run lint
-
-migrate: ## Run database migrations
-	cd api && go build -o $(BINARY_NAME) .
 
 docker-db-start: ## Start Docker database
 	$(DOCKER_COMPOSE) up -d postgres
@@ -71,4 +68,4 @@ start-all: docker-db-start ## Start all services with Docker database
 	GO_ENV=production npx concurrently "cd frontend && npm run dev" "cd api && go run main.go"
 
 .PHONY: help build clean test run-api deps lint fmt
-.PHONY: migrate docker-db-start docker-db-stop docker-db-logs docker-db-clean start-all
+.PHONY: docker-db-start docker-db-stop docker-db-logs docker-db-clean start-all
