@@ -49,6 +49,7 @@ type IntentService interface {
 		sourceChain uint64,
 		destinationChain uint64,
 		token, amount, recipient, sender, intentFee string,
+		timestamp ...time.Time,
 	) (*models.Intent, error)
 	GetIntentsBySender(ctx context.Context, sender string) ([]*models.Intent, error)
 	GetIntentsByRecipient(ctx context.Context, recipient string) ([]*models.Intent, error)

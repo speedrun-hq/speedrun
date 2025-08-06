@@ -13,11 +13,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/clients/evm"
+	"github.com/speedrun-hq/speedrun/api/cmd/speedrun/httpjson"
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/db"
-	"github.com/speedrun-hq/speedrun/api/handlers"
+	"github.com/speedrun-hq/speedrun/api/http"
 	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/services"
+	"github.com/speedrun-hq/speedrun/api/utils"
 )
 
 const (
@@ -106,48 +108,32 @@ func main() {
 	})
 	log.Info().Msg("Started subscription supervisor to monitor service health")
 
-	// Perform a simple diagnostic check on clients
-	log.Info().Msg("Performing basic diagnostic checks on clients...")
-
-	// Get the first chain's services for the HTTP server
-	firstChainID := uint64(0)
-	for chainID := range intentServices {
-		firstChainID = chainID
-		break
-	}
-	intentService := intentServices[firstChainID]
-	fulfillmentService := fulfillmentServices[firstChainID]
-
 	// Create and start the server
-	server := handlers.NewServer(fulfillmentService, intentService, metricsService, database, log)
+	server := httpjson.New(httpjson.Config{
+		Addr:           fmt.Sprintf(":%s", cfg.Port),
+		AllowedOrigins: os.Getenv("ALLOWED_ORIGINS"),
+		Logger:         log,
+		LogRequests:    true,
+		Dependencies: httpjson.Dependencies{
+			Database:            database,
+			IntentServices:      utils.MapMap(intentServices, castIntentsMap),
+			FulfillmentServices: utils.MapMap(fulfillmentServices, castFulfillmentServicesMap),
+			Metrics:             metricsService,
+		},
+	})
 
-	// Set up graceful shutdown
-	shutdownCtx, shutdownCancel := context.WithCancel(ctx)
-	defer shutdownCancel()
+	serverShutdown := http.StartAsync(server, log)
 
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start server in a goroutine
-	go func() {
-		addr := fmt.Sprintf(":%s", cfg.Port)
-
-		if err := server.Start(addr); err != nil {
-			log.Error().Err(err).Str("addr", addr).Msg("Server error")
-
-			// Signal shutdown on server error
-			shutdownCancel()
-		}
-	}()
-
 	// Wait for shutdown signal
-	select {
-	case <-sigChan:
-		log.Info().Msg("Shutdown signal received, cleaning up services...")
-	case <-shutdownCtx.Done():
-		log.Info().Msg("Shutdown context cancelled, cleaning up services...")
-	}
+	<-sigChan
+	log.Info().Msg("Shutdown signal received, cleaning up services...")
+
+	// Shutdown HTTP server first
+	serverShutdown(ctx)
 
 	// Shutdown all services gracefully
 	var shutdownErrors []error
@@ -296,4 +282,12 @@ func parseFlags() flagSet {
 		LogJSON:  logJSON,
 		LogLevel: logLevelParsed,
 	}
+}
+
+func castIntentsMap(_ uint64, v *services.IntentService) httpjson.IntentService {
+	return httpjson.IntentService(v)
+}
+
+func castFulfillmentServicesMap(_ uint64, v *services.FulfillmentService) httpjson.FulfillmentService {
+	return httpjson.FulfillmentService(v)
 }
