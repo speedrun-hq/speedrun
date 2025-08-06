@@ -47,7 +47,12 @@ func logRequest(e *zerolog.Event, c *gin.Context, latency time.Duration) *zerolo
 		Str("http.ua", c.Request.UserAgent())
 }
 
+// CORS. Allowed origins should be comma separated. Empty string is treated as `*` wildcard.
 func CORS(allowedOrigins string) gin.HandlerFunc {
+	if allowedOrigins == "" {
+		allowedOrigins = "*"
+	}
+
 	config := cors.DefaultConfig()
 	config.AllowOrigins = strings.Split(allowedOrigins, ",")
 	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}

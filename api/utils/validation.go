@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/speedrun-hq/speedrun/api/config"
 	"github.com/speedrun-hq/speedrun/api/models"
@@ -22,6 +23,7 @@ var (
 	bytes32Regex = regexp.MustCompile(`^0x[a-fA-F0-9]{64}$`)
 
 	// Config instance for validation
+	mu  sync.Mutex
 	cfg *config.Config
 
 	addressPattern = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
@@ -29,6 +31,9 @@ var (
 
 // Initialize sets up the validation package with configuration
 func Initialize(c *config.Config) {
+	mu.Lock()
+	defer mu.Unlock()
+
 	cfg = c
 }
 

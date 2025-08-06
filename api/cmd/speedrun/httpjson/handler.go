@@ -69,13 +69,9 @@ var (
 )
 
 func New(cfg Config) *http.Server {
-	cfg.Logger = cfg.Logger.With().Str(logging.FieldModule, "api").Logger()
-
-	h := newHandler(gin.New(), cfg)
-
 	return &http.Server{
 		Addr:    cfg.Addr,
-		Handler: h,
+		Handler: newHandler(cfg, gin.New()),
 
 		// Time to read the request headers/body
 		ReadTimeout: 15 * time.Second,
@@ -88,11 +84,11 @@ func New(cfg Config) *http.Server {
 	}
 }
 
-func newHandler(router *gin.Engine, cfg Config) *handler {
+func newHandler(cfg Config, router *gin.Engine) *handler {
 	h := &handler{
 		Engine: router,
 		deps:   cfg.Dependencies,
-		logger: cfg.Logger,
+		logger: cfg.Logger.With().Str(logging.FieldModule, "api").Logger(),
 	}
 
 	logLevel := zerolog.DebugLevel
