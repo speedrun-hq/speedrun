@@ -33,6 +33,8 @@ type testSuite struct {
 }
 
 func newTestSuite(t *testing.T) *testSuite {
+	gin.SetMode(gin.TestMode)
+
 	var (
 		ctx      = context.Background()
 		logger   = logging.NewTesting(t)
@@ -60,7 +62,6 @@ func newTestSuite(t *testing.T) *testSuite {
 
 	// Create handler
 	h := newHandler(cfg, router)
-
 	// Run test server
 	server := httptest.NewServer(h)
 	t.Cleanup(server.Close)
@@ -166,11 +167,11 @@ func TestHandler(t *testing.T) {
 		// ASSERT
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		resContainsJSON(t, resp, "status", "ok")
+		assertResponseContainsJSON(t, resp, "status", "ok")
 	})
 }
 
-func resContainsJSON(t *testing.T, res *gentleman.Response, path string, contains string) {
+func assertResponseContainsJSON(t *testing.T, res *gentleman.Response, path string, contains string) {
 	r := gjson.GetBytes(res.Bytes(), path)
 
 	assert.Contains(t, r.String(), contains, res.String())
