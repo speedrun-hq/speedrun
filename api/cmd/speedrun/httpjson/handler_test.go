@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,8 +32,12 @@ type testSuite struct {
 	Logger zerolog.Logger
 }
 
+var once sync.Once
+
 func newTestSuite(t *testing.T) *testSuite {
-	gin.SetMode(gin.TestMode)
+	once.Do(func() {
+		gin.SetMode(gin.TestMode)
+	})
 
 	var (
 		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
