@@ -2,11 +2,12 @@ package httpjson
 
 import (
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	web "github.com/speedrun-hq/speedrun/api/http"
+	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/speedrun-hq/speedrun/api/utils"
 )
@@ -22,47 +23,44 @@ func (h *handler) setupIntentRoutes(rg *gin.RouterGroup) {
 }
 
 func (h *handler) createIntent(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var req models.CreateIntentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		web.ErrBadRequest(c, errors.Wrap(err, "unable to parse json"))
+		web.ErrBadRequest(c, errors.Wrap(err, "invalid request"))
 		return
 	}
 
-	if err := utils.ValidateIntentRequest(&req); err != nil {
-		web.ErrBadRequest(c, errors.Wrap(err, "invalid intent"))
+	service, err := h.resolveIntentService(req.SourceChain)
+	if err != nil {
+		web.ErrBadRequest(c, err)
 		return
 	}
 
-	// When creating intents through the API, we use the current time
-	// For blockchain events, the block timestamp will be used instead
-	now := time.Now()
+	intent, err := service.CreateIntent(
+		ctx,
+		req.ID,
+		req.SourceChain,
+		req.DestinationChain,
+		req.Token,
+		req.Amount,
+		req.Recipient,
+		req.Sender,
+		req.IntentFee,
+	)
 
-	// Create intent
-	intent := &models.Intent{
-		ID:               req.ID,
-		SourceChain:      req.SourceChain,
-		DestinationChain: req.DestinationChain,
-		Token:            req.Token,
-		Amount:           req.Amount,
-		Recipient:        req.Recipient,
-		Sender:           req.Sender,
-		IntentFee:        req.IntentFee,
-		Status:           models.IntentStatusPending,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
+	if err != nil {
+		// "check if it's a validation error" (ported code)
+		if strings.Contains(err.Error(), "invalid") {
+			web.ErrBadRequest(c, err)
+			return
+		}
 
-	if err := h.deps.Database.CreateIntent(c.Request.Context(), intent); err != nil {
-		h.logger.Error().Err(err).Any("intent", intent).Msg("Unable to create intent")
-
-		// note: this error might expose sensitive information
-		// ideally it should become `switch{} + errors.Is(...)` with predefined error messages
-		web.ErrInternalServerError(c, errors.Wrap(err, "unable to store intent"))
+		web.ErrInternalServerError(c, err)
 		return
 	}
 
-	// Return response
-	c.JSON(http.StatusCreated, intent.ToResponse())
+	c.JSON(http.StatusCreated, intent)
 }
 
 func (h *handler) getIntent(c *gin.Context) {
@@ -74,31 +72,37 @@ func (h *handler) getIntent(c *gin.Context) {
 		return
 	}
 
-	// todo: refactor to have only ONE service call,
-	// todo: the logic should be hidden under the service layer!
+	h.logger.Debug().Str(logging.FieldIntent, id).Msg("GetIntent request received")
 
-	// Get the intent from the database first
-	intent, err := h.deps.Database.GetIntent(ctx, id)
-	if err != nil {
-		web.ErrNotFound(c, errors.Wrap(ErrNotFound, "intent"))
+	if !utils.ValidateBytes32(id) {
+		h.logger.Debug().Str(logging.FieldIntent, id).Msg("Invalid intent ID format")
+		web.ErrBadRequest(c, errors.Wrap(ErrParamRequired, "intent id"))
 		return
 	}
 
-	service, err := h.resolveIntentService(intent.SourceChain)
+	service, err := h.resolveFirstIntentService()
 	if err != nil {
 		web.ErrBadRequest(c, err)
 		return
 	}
 
-	// Get the intent from the service to get any updates
-	updatedIntent, err := service.GetIntent(ctx, id)
+	intent, err := service.GetIntent(ctx, id)
 	if err != nil {
-		// if not found in service, return the database version
-		c.JSON(http.StatusOK, intent.ToResponse())
+		h.logger.Debug().Err(err).Str(logging.FieldIntent, id).Msgf("Error getting intent")
+
+		// "check if it's a not found error" (ported code)
+		if strings.Contains(err.Error(), "not found") {
+			web.ErrNotFound(c, errors.Wrap(ErrNotFound, "intent"))
+			return
+		}
+
+		web.ErrInternalServerError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, updatedIntent.ToResponse())
+	h.logger.Debug().Str(logging.FieldIntent, id).Msg("Successfully retrieved intent")
+
+	c.JSON(http.StatusOK, intent)
 }
 
 func (h *handler) listIntents(c *gin.Context) {
@@ -137,15 +141,14 @@ func (h *handler) getIntentsBySender(c *gin.Context) {
 		return
 	}
 
-	pag, err := resolvePagination(c)
-	if err != nil {
-		web.ErrBadRequest(c, err)
+	if !utils.IsValidAddress(sender) {
+		web.ErrBadRequest(c, errors.New("invalid sender address format"))
 		return
 	}
 
-	// Validate address format
-	if !utils.IsValidAddress(sender) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sender address format"})
+	pag, err := resolvePagination(c)
+	if err != nil {
+		web.ErrBadRequest(c, err)
 		return
 	}
 
@@ -161,7 +164,6 @@ func (h *handler) getIntentsBySender(c *gin.Context) {
 		return
 	}
 
-	// Convert to response format
 	response := make([]*models.IntentResponse, 0, len(intents))
 	for _, intent := range intents {
 		response = append(response, intent.ToResponse())
@@ -179,19 +181,17 @@ func (h *handler) getIntentsByRecipient(c *gin.Context) {
 		return
 	}
 
+	if !utils.IsValidAddress(recipient) {
+		web.ErrBadRequest(c, errors.New("invalid recipient address format"))
+		return
+	}
+
 	pag, err := resolvePagination(c)
 	if err != nil {
 		web.ErrBadRequest(c, err)
 		return
 	}
 
-	// Validate address format
-	if !utils.IsValidAddress(recipient) {
-		web.ErrBadRequest(c, errors.New("invalid recipient address format"))
-		return
-	}
-
-	// Get intents with pagination using optimized method
 	intents, totalCount, err := h.deps.Database.ListIntentsByRecipientPaginatedOptimized(
 		ctx,
 		recipient,
@@ -204,7 +204,6 @@ func (h *handler) getIntentsByRecipient(c *gin.Context) {
 		return
 	}
 
-	// Convert to response format
 	response := make([]*models.IntentResponse, 0, len(intents))
 	for _, intent := range intents {
 		response = append(response, intent.ToResponse())
@@ -222,4 +221,13 @@ func (h *handler) resolveIntentService(chainID uint64) (IntentService, error) {
 	}
 
 	return s, nil
+}
+
+// just resolve any intent service.
+func (h *handler) resolveFirstIntentService() (IntentService, error) {
+	for _, s := range h.deps.IntentServices {
+		return s, nil
+	}
+
+	return nil, errors.Wrap(ErrNotFound, "intent service")
 }

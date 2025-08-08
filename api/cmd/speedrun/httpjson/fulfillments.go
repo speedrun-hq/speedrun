@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 	web "github.com/speedrun-hq/speedrun/api/http"
 	"github.com/speedrun-hq/speedrun/api/models"
-	"github.com/speedrun-hq/speedrun/api/utils"
 )
 
 func (h *handler) setupFulfillmentRoutes(rg *gin.RouterGroup) {
@@ -18,52 +17,33 @@ func (h *handler) setupFulfillmentRoutes(rg *gin.RouterGroup) {
 	ff.GET("", h.listFulfillments)
 }
 
+// CreateFulfillmentRequest represents the request body for creating a fulfillment
+type CreateFulfillmentRequest struct {
+	IntentID string `json:"intent_id" binding:"required"`
+	TxHash   string `json:"tx_hash"   binding:"required"`
+}
+
 func (h *handler) createFulfillment(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var req models.CreateFulfillmentRequest
+	var req CreateFulfillmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		web.ErrBadRequest(c, errors.Wrap(err, "invalid request"))
 		return
 	}
 
-	// Validate request
-	if err := utils.ValidateFulfillmentRequest(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Check if service exists for the chain
-	service, err := h.resolveFulfillmentService(req.ChainID)
+	service, err := h.resolveFirstFulfillmentService()
 	if err != nil {
 		web.ErrBadRequest(c, err)
-		return
 	}
 
-	// Create fulfillment in service
-	err = service.CreateFulfillment(ctx, req.ID, req.TxHash)
+	err = service.CreateFulfillment(ctx, req.IntentID, req.TxHash)
 	if err != nil {
-		web.ErrInternalServerError(c, errors.Wrap(err, "unable to create fulfillment"))
+		web.ErrInternalServerError(c, err)
 		return
 	}
 
-	// todo: refactor to have only ONE service call,
-	// todo: the logic should be hidden under the service layer!
-
-	// Create fulfillment in database
-	fulfillment := &models.Fulfillment{
-		ID:     req.ID,
-		TxHash: req.TxHash,
-	}
-
-	if err := h.deps.Database.CreateFulfillment(ctx, fulfillment); err != nil {
-		web.ErrInternalServerError(c, errors.Wrap(err, "unable to create fulfillment"))
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Fulfillment created successfully",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "fulfillment created successfully"})
 }
 
 func (h *handler) getFulfillment(c *gin.Context) {
@@ -75,19 +55,19 @@ func (h *handler) getFulfillment(c *gin.Context) {
 		return
 	}
 
-	// Validate bytes32 format
-	if !utils.IsValidBytes32(id) {
-		web.ErrBadRequest(c, errors.New("invalid fulfillment ID"))
-		return
-	}
-
-	fulfillment, err := h.deps.Database.GetFulfillment(ctx, id)
+	service, err := h.resolveFirstFulfillmentService()
 	if err != nil {
-		web.ErrNotFound(c, errors.Wrap(ErrNotFound, "fulfillment"))
+		web.ErrBadRequest(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"fulfillment": fulfillment})
+	fulfillment, err := service.GetFulfillment(ctx, id)
+	if err != nil {
+		web.ErrInternalServerError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, fulfillment)
 }
 
 func (h *handler) listFulfillments(c *gin.Context) {
@@ -99,7 +79,6 @@ func (h *handler) listFulfillments(c *gin.Context) {
 		return
 	}
 
-	// Get fulfillments with pagination using optimized method
 	fulfillments, totalCount, err := h.deps.Database.ListFulfillmentsPaginatedOptimized(ctx, pag.Page, pag.PageSize)
 	if err != nil {
 		web.ErrInternalServerError(c, err)
@@ -111,11 +90,11 @@ func (h *handler) listFulfillments(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
-func (h *handler) resolveFulfillmentService(chainID uint64) (FulfillmentService, error) {
-	s, ok := h.deps.FulfillmentServices[chainID]
-	if !ok {
-		return nil, errors.Wrapf(ErrNotFound, "fulfillment service for chain %d", chainID)
+// just resolve any fulfillment service.
+func (h *handler) resolveFirstFulfillmentService() (FulfillmentService, error) {
+	for _, s := range h.deps.FulfillmentServices {
+		return s, nil
 	}
 
-	return s, nil
+	return nil, errors.Wrap(ErrNotFound, "fulfillment service")
 }

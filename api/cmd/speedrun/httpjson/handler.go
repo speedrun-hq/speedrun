@@ -58,6 +58,7 @@ type IntentService interface {
 
 type FulfillmentService interface {
 	CreateFulfillment(ctx context.Context, id, txHash string) error
+	GetFulfillment(ctx context.Context, id string) (*models.Fulfillment, error)
 }
 
 const (
