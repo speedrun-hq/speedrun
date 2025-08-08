@@ -17,16 +17,10 @@ func (h *handler) setupFulfillmentRoutes(rg *gin.RouterGroup) {
 	ff.GET("", h.listFulfillments)
 }
 
-// CreateFulfillmentRequest represents the request body for creating a fulfillment
-type CreateFulfillmentRequest struct {
-	IntentID string `json:"intent_id" binding:"required"`
-	TxHash   string `json:"tx_hash"   binding:"required"`
-}
-
 func (h *handler) createFulfillment(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var req CreateFulfillmentRequest
+	var req models.CreateFulfillmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		web.ErrBadRequest(c, errors.Wrap(err, "invalid request"))
 		return
