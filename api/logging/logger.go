@@ -11,6 +11,7 @@ import (
 const (
 	FieldChain  = "chain"
 	FieldBlock  = "block_number"
+	FieldIntent = "intent_id"
 	FieldModule = "module"
 )
 

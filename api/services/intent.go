@@ -1153,6 +1153,7 @@ func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Inten
 	s.logger.Debug().
 		Str("intent_id", id).
 		Msg("Successfully retrieved intent from database")
+
 	return intent, nil
 }
 
