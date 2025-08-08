@@ -2,7 +2,6 @@ package httpjson
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -94,33 +93,22 @@ func (h *handler) getFulfillment(c *gin.Context) {
 func (h *handler) listFulfillments(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	page := c.DefaultQuery("page", "1")
-	pageSize := c.DefaultQuery("page_size", "20")
-
-	// Convert to integers
-	pageInt, err := strconv.Atoi(page)
-	if err != nil || pageInt < 1 {
-		web.ErrBadRequest(c, errors.Wrap(err, "invalid page parameter"))
-		return
-	}
-
-	pageSizeInt, err := strconv.Atoi(pageSize)
-	if err != nil || pageSizeInt < 1 || pageSizeInt > 100 {
-		web.ErrBadRequest(c, errors.New("invalid page_size parameter (must be between 1 and 100)"))
+	pag, err := resolvePagination(c)
+	if err != nil {
+		web.ErrBadRequest(c, err)
 		return
 	}
 
 	// Get fulfillments with pagination using optimized method
-	fulfillments, totalCount, err := h.deps.Database.ListFulfillmentsPaginatedOptimized(ctx, pageInt, pageSizeInt)
+	fulfillments, totalCount, err := h.deps.Database.ListFulfillmentsPaginatedOptimized(ctx, pag.Page, pag.PageSize)
 	if err != nil {
 		web.ErrInternalServerError(c, err)
 		return
 	}
 
-	// Create paginated response
-	paginatedResponse := models.NewPaginatedResponse(fulfillments, pageInt, pageSizeInt, totalCount)
+	res := models.NewPaginatedResponse(fulfillments, pag.Page, pag.PageSize, totalCount)
 
-	c.JSON(http.StatusOK, paginatedResponse)
+	c.JSON(http.StatusOK, res)
 }
 
 func (h *handler) resolveFulfillmentService(chainID uint64) (FulfillmentService, error) {

@@ -2,7 +2,6 @@ package httpjson
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -105,39 +104,30 @@ func (h *handler) getIntent(c *gin.Context) {
 func (h *handler) listIntents(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	// todo: refactor to have only ONE service call,
-	// todo: the logic should be hidden under the service layer!
+	status := c.Query("status")
 
-	// Get all intents from the database
-	intents, err := h.deps.Database.ListIntents(ctx)
+	pag, err := resolvePagination(c)
 	if err != nil {
-		web.ErrInternalServerError(c, errors.Wrap(err, "unable to list intents"))
+		web.ErrBadRequest(c, err)
 		return
 	}
 
-	// Convert intents to responses
-	responses := make([]*models.IntentResponse, len(intents))
-	for i, intent := range intents {
-		service, err := h.resolveIntentService(intent.SourceChain)
-		if err != nil {
-			// fallback 1
-			responses[i] = intent.ToResponse()
-			continue
-		}
-
-		updatedIntent, err := service.GetIntent(ctx, intent.ID)
-		if err != nil {
-			// fallback 2
-			responses[i] = intent.ToResponse()
-			continue
-		}
-
-		responses[i] = updatedIntent.ToResponse()
+	// Get intents with pagination and status filter using optimized method
+	intents, totalCount, err := h.deps.Database.ListIntentsPaginatedOptimized(ctx, pag.Page, pag.PageSize, status)
+	if err != nil {
+		web.ErrInternalServerError(c, err)
+		return
 	}
 
-	c.JSON(http.StatusOK, responses)
+	response := make([]*models.IntentResponse, 0, len(intents))
+	for _, intent := range intents {
+		response = append(response, intent.ToResponse())
+	}
+
+	c.JSON(http.StatusOK, models.NewPaginatedResponse(response, pag.Page, pag.PageSize, totalCount))
 }
 
+// GetIntentsBySender handles retrieving intents by sender
 func (h *handler) getIntentsBySender(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -147,25 +137,37 @@ func (h *handler) getIntentsBySender(c *gin.Context) {
 		return
 	}
 
-	if err := utils.ValidateAddress(sender); err != nil {
-		web.ErrBadRequest(c, errors.Wrap(err, "invalid sender address"))
-		return
-	}
-
-	// Get intents by sender from the database
-	intents, err := h.deps.Database.ListIntentsBySender(ctx, sender)
+	pag, err := resolvePagination(c)
 	if err != nil {
-		web.ErrInternalServerError(c, errors.Wrap(err, "unable to list intents by sender"))
+		web.ErrBadRequest(c, err)
 		return
 	}
 
-	// Convert intents to responses
-	responses := make([]*models.IntentResponse, len(intents))
-	for i, intent := range intents {
-		responses[i] = intent.ToResponse()
+	// Validate address format
+	if !utils.IsValidAddress(sender) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sender address format"})
+		return
 	}
 
-	c.JSON(http.StatusOK, responses)
+	intents, totalCount, err := h.deps.Database.ListIntentsBySenderPaginatedOptimized(
+		ctx,
+		sender,
+		pag.Page,
+		pag.PageSize,
+	)
+
+	if err != nil {
+		web.ErrInternalServerError(c, err)
+		return
+	}
+
+	// Convert to response format
+	response := make([]*models.IntentResponse, 0, len(intents))
+	for _, intent := range intents {
+		response = append(response, intent.ToResponse())
+	}
+
+	c.JSON(http.StatusOK, models.NewPaginatedResponse(response, pag.Page, pag.PageSize, totalCount))
 }
 
 func (h *handler) getIntentsByRecipient(c *gin.Context) {
@@ -177,19 +179,9 @@ func (h *handler) getIntentsByRecipient(c *gin.Context) {
 		return
 	}
 
-	// Get pagination parameters
-	page := c.DefaultQuery("page", "1")
-	pageSize := c.DefaultQuery("page_size", "20")
-
-	// Convert to integers
-	pageInt, err := strconv.Atoi(page)
-	if err != nil || pageInt < 1 {
-		web.ErrBadRequest(c, errors.New("invalid page parameter"))
-		return
-	}
-	pageSizeInt, err := strconv.Atoi(pageSize)
-	if err != nil || pageSizeInt < 1 || pageSizeInt > 100 {
-		web.ErrBadRequest(c, errors.New("invalid page_size parameter (must be between 1 and 100)"))
+	pag, err := resolvePagination(c)
+	if err != nil {
+		web.ErrBadRequest(c, err)
 		return
 	}
 
@@ -203,8 +195,8 @@ func (h *handler) getIntentsByRecipient(c *gin.Context) {
 	intents, totalCount, err := h.deps.Database.ListIntentsByRecipientPaginatedOptimized(
 		ctx,
 		recipient,
-		pageInt,
-		pageSizeInt,
+		pag.Page,
+		pag.PageSize,
 	)
 
 	if err != nil {
@@ -213,13 +205,12 @@ func (h *handler) getIntentsByRecipient(c *gin.Context) {
 	}
 
 	// Convert to response format
-	var response []*models.IntentResponse
+	response := make([]*models.IntentResponse, 0, len(intents))
 	for _, intent := range intents {
 		response = append(response, intent.ToResponse())
 	}
 
-	// Create paginated response
-	paginatedResponse := models.NewPaginatedResponse(response, pageInt, pageSizeInt, totalCount)
+	paginatedResponse := models.NewPaginatedResponse(response, pag.Page, pag.PageSize, totalCount)
 
 	c.JSON(http.StatusOK, paginatedResponse)
 }

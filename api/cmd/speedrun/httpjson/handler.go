@@ -2,11 +2,12 @@ package httpjson
 
 import (
 	"context"
-	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/db"
 	web "github.com/speedrun-hq/speedrun/api/http"
@@ -62,6 +63,8 @@ type FulfillmentService interface {
 const (
 	RequestTimeout = 10 * time.Second
 )
+
+const maxPageSize = 100
 
 var (
 	ErrNotFound      = errors.New("not found")
@@ -134,4 +137,33 @@ func (h *handler) getHealthCheck(c *gin.Context) {
 func (h *handler) getMetricsSummary(c *gin.Context) {
 	summary := h.deps.Metrics.GetMetricsSummary()
 	c.JSON(http.StatusOK, summary)
+}
+
+type paginationParams struct {
+	Page     int
+	PageSize int
+}
+
+var errPageSize = errors.Errorf("invalid page_size parameter (must be between 1 and %d)", maxPageSize)
+
+func resolvePagination(c *gin.Context) (paginationParams, error) {
+	var (
+		pageRaw     = c.DefaultQuery("page", "1")
+		pageSizeRaw = c.DefaultQuery("page_size", "20")
+	)
+
+	page, err := strconv.Atoi(pageRaw)
+	if err != nil || page < 1 {
+		return paginationParams{}, errors.New("invalid page parameter")
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeRaw)
+	if err != nil || pageSize < 1 || pageSize > maxPageSize {
+		return paginationParams{}, errPageSize
+	}
+
+	return paginationParams{
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
 }
