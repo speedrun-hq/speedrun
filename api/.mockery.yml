@@ -8,7 +8,7 @@ formatter: goimports
 include-auto-generated: false
 log-level: info
 structname: "{{.InterfaceName}}{{.Mock}}"
-pkgname: 'mocks'
+pkgname: "mocks"
 recursive: false
 require-template-schema-exists: true
 template: testify
@@ -18,5 +18,8 @@ packages:
     config:
       all: true
   github.com/speedrun-hq/speedrun/api/db:
+    config:
+      all: true
+  github.com/speedrun-hq/speedrun/api/services:
     config:
       all: true
