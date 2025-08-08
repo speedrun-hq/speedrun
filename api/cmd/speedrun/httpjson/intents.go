@@ -17,7 +17,7 @@ func (h *handler) setupIntentRoutes(rg *gin.RouterGroup) {
 
 	intents.GET("", h.listIntents)
 	intents.POST("", h.createIntent)
-	intents.GET("/:id", h.getIntent)
+	intents.GET(":id", h.getIntent)
 	intents.GET("/sender/:sender", h.getIntentsBySender)
 	intents.GET("/recipient/:recipient", h.getIntentsByRecipient)
 }

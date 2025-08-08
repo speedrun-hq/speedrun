@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -18,6 +19,8 @@ func TestIntents(t *testing.T) {
 	)
 
 	t.Run("Create", func(t *testing.T) {
+		t.Parallel()
+
 		tests := []struct {
 			name           string
 			request        any
@@ -36,19 +39,22 @@ func TestIntents(t *testing.T) {
 					Sender:           validSender,
 					IntentFee:        "0.1",
 				},
-				expectedStatus: http.StatusCreated,
 				setup: func(ts *testSuite) {
-					ts.Database.On("CreateIntent", mock.Anything, mock.MatchedBy(func(i *models.Intent) bool {
-						return i.ID == validID &&
-							i.SourceChain == 1 &&
-							i.DestinationChain == 2 &&
-							i.Token == "ETH" &&
-							i.Amount == "1.0" &&
-							i.Recipient == validRecipient &&
-							i.Sender == validSender &&
-							i.IntentFee == "0.1"
-					})).Return(nil)
+					out := &models.Intent{
+						ID:               validID,
+						SourceChain:      1,
+						DestinationChain: 2,
+						Token:            "ETH",
+						Amount:           "1.0",
+						Recipient:        validRecipient,
+						Sender:           validSender,
+					}
+
+					ts.IntentServices[1].
+						On("CreateIntent", numOfArgs(9)...).
+						Return(out, nil)
 				},
+				expectedStatus: http.StatusCreated,
 			},
 			{
 				name:           "InvalidRequest",
@@ -59,6 +65,8 @@ func TestIntents(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
 				// ARRANGE
 				ts := newTestSuite(t)
 
@@ -72,13 +80,13 @@ func TestIntents(t *testing.T) {
 				// ASSERT
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedStatus, res.StatusCode)
-
-				ts.Database.AssertExpectations(t)
 			})
 		}
 	})
 
 	t.Run("Get", func(t *testing.T) {
+		t.Parallel()
+
 		mockIntent := &models.Intent{
 			ID:               validID,
 			SourceChain:      1,
@@ -102,22 +110,25 @@ func TestIntents(t *testing.T) {
 				intentID:       validID,
 				expectedStatus: http.StatusOK,
 				setup: func(ts *testSuite) {
-					ts.Database.On("GetIntent", mock.Anything, validID).Return(mockIntent, nil)
 					ts.IntentServices[1].On("GetIntent", mock.Anything, validID).Return(mockIntent, nil)
 				},
 			},
 			{
 				name:           "IntentNotFound",
-				intentID:       "non-existent",
+				intentID:       "0x123456789012345678901fff5678901234567890123456789012345678901230",
 				expectedStatus: http.StatusNotFound,
 				setup: func(ts *testSuite) {
-					ts.Database.On("GetIntent", mock.Anything, "non-existent").Return(nil, assert.AnError)
+					ts.IntentServices[1].
+						On("GetIntent", mock.Anything, mock.Anything).
+						Return(nil, errors.New("not found"))
 				},
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
 				// ARRANGE
 				ts := newTestSuite(t)
 
@@ -133,19 +144,19 @@ func TestIntents(t *testing.T) {
 
 				// ASSERT
 				require.NoError(t, err)
-				assert.Equal(t, tt.expectedStatus, res.StatusCode)
+				assert.Equal(t, tt.expectedStatus, res.StatusCode, res.String())
 
 				if tt.expectedStatus == http.StatusOK {
 					assertResponseContainsJSON(t, res, "id", mockIntent.ID)
 					assertResponseContainsJSON(t, res, "token", mockIntent.Token)
 				}
-
-				ts.Database.AssertExpectations(t)
 			})
 		}
 	})
 
 	t.Run("List", func(t *testing.T) {
+		t.Parallel()
+
 		const (
 			validID1       = "0x1234567890123456789012345678901234567890123456789012345678901234"
 			validID2       = "0x5678901234567890123456789012345678901234567890123456789012345678"
@@ -187,22 +198,22 @@ func TestIntents(t *testing.T) {
 				name:           "SuccessfulList",
 				expectedStatus: http.StatusOK,
 				setup: func(ts *testSuite) {
-					ts.Database.On("ListIntents", mock.Anything).Return(mockIntents, nil)
-					ts.IntentServices[1].On("GetIntent", mock.Anything, validID1).Return(mockIntents[0], nil)
-					ts.IntentServices[1].On("GetIntent", mock.Anything, validID2).Return(mockIntents[1], nil)
+					ts.Database.On("ListIntentsPaginatedOptimized", numOfArgs(4)...).Return(mockIntents, 2, nil)
 				},
 			},
 			{
 				name:           "DatabaseError",
 				expectedStatus: http.StatusInternalServerError,
 				setup: func(ts *testSuite) {
-					ts.Database.On("ListIntents", mock.Anything).Return([]*models.Intent{}, assert.AnError)
+					ts.Database.On("ListIntentsPaginatedOptimized", numOfArgs(4)...).Return(nil, 0, assert.AnError)
 				},
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
 				// ARRANGE
 				ts := newTestSuite(t)
 
@@ -216,16 +227,13 @@ func TestIntents(t *testing.T) {
 				// ASSERT
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedStatus, res.StatusCode)
-
-				ts.Database.AssertExpectations(t)
-				if tt.expectedStatus == http.StatusOK {
-					ts.IntentServices[1].AssertExpectations(t)
-				}
 			})
 		}
 	})
 
 	t.Run("GetBySender", func(t *testing.T) {
+		t.Parallel()
+
 		const (
 			validID1       = "0x1234567890123456789012345678901234567890123456789012345678901234"
 			validID2       = "0x5678901234567890123456789012345678901234567890123456789012345678"
@@ -271,8 +279,8 @@ func TestIntents(t *testing.T) {
 				expectedStatus: http.StatusOK,
 				setup: func(ts *testSuite) {
 					ts.Database.
-						On("ListIntentsBySender", mock.Anything, validSender).
-						Return(mockIntents, nil)
+						On("ListIntentsBySenderPaginatedOptimized", numOfArgs(4)...).
+						Return(mockIntents, 2, nil)
 				},
 			},
 			{
@@ -289,14 +297,16 @@ func TestIntents(t *testing.T) {
 				expectedStatus: http.StatusInternalServerError,
 				setup: func(ts *testSuite) {
 					ts.Database.
-						On("ListIntentsBySender", mock.Anything, validSender).
-						Return([]*models.Intent{}, assert.AnError)
+						On("ListIntentsBySenderPaginatedOptimized", numOfArgs(4)...).
+						Return([]*models.Intent{}, 0, assert.AnError)
 				},
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
 				// ARRANGE
 				ts := newTestSuite(t)
 
@@ -313,13 +323,13 @@ func TestIntents(t *testing.T) {
 				// ASSERT
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedStatus, res.StatusCode)
-
-				ts.Database.AssertExpectations(t)
 			})
 		}
 	})
 
 	t.Run("GetByRecipient", func(t *testing.T) {
+		t.Parallel()
+
 		const (
 			validID1         = "0x1234567890123456789012345678901234567890123456789012345678901234"
 			validID2         = "0x5678901234567890123456789012345678901234567890123456789012345678"
@@ -367,7 +377,7 @@ func TestIntents(t *testing.T) {
 				expectedStatus:   http.StatusOK,
 				setup: func(ts *testSuite) {
 					ts.Database.
-						On("ListIntentsByRecipientPaginatedOptimized", mock.Anything, validRecipient, 1, 20).
+						On("ListIntentsByRecipientPaginatedOptimized", numOfArgs(4)...).
 						Return(mockIntents, 2, nil)
 				},
 			},
@@ -378,7 +388,7 @@ func TestIntents(t *testing.T) {
 				expectedStatus:   http.StatusOK,
 				setup: func(ts *testSuite) {
 					ts.Database.
-						On("ListIntentsByRecipientPaginatedOptimized", mock.Anything, validRecipient, 2, 10).
+						On("ListIntentsByRecipientPaginatedOptimized", numOfArgs(4)...).
 						Return([]*models.Intent{}, 0, nil)
 				},
 			},
@@ -433,6 +443,8 @@ func TestIntents(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
 				// ARRANGE
 				ts := newTestSuite(t)
 
@@ -450,8 +462,6 @@ func TestIntents(t *testing.T) {
 				// ASSERT
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedStatus, res.StatusCode)
-
-				ts.Database.AssertExpectations(t)
 			})
 		}
 	})

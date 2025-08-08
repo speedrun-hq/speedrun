@@ -9,9 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
-	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/logging"
-	"github.com/speedrun-hq/speedrun/api/models"
+	"github.com/speedrun-hq/speedrun/api/testing/mocks"
 	"github.com/speedrun-hq/speedrun/api/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -25,9 +24,9 @@ type testSuite struct {
 
 	Ctx                 context.Context
 	Client              *gentleman.Client
-	Database            *db.MockDB
-	IntentServices      map[uint64]*MockIntentService
-	FulfillmentServices map[uint64]*MockFulfillmentService
+	Database            *mocks.DatabaseMock
+	IntentServices      map[uint64]*mocks.IntentServiceMock
+	FulfillmentServices map[uint64]*mocks.FulfillmentServiceMock
 
 	Logger zerolog.Logger
 }
@@ -36,13 +35,13 @@ func newTestSuite(t *testing.T) *testSuite {
 	gin.SetMode(gin.TestMode)
 
 	var (
-		ctx      = context.Background()
-		logger   = logging.NewTesting(t)
-		router   = gin.New()
-		database = &db.MockDB{}
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+		logger      = logging.NewTesting(t)
+		router      = gin.New()
 
-		ethIntentMock      = &MockIntentService{}
-		ethFulfillmentMock = &MockFulfillmentService{}
+		database           = mocks.NewDatabaseMock(t)
+		ethIntentMock      = mocks.NewIntentServiceMock(t)
+		ethFulfillmentMock = mocks.NewFulfillmentServiceMock(t)
 	)
 
 	cfg := Config{
@@ -62,9 +61,11 @@ func newTestSuite(t *testing.T) *testSuite {
 
 	// Create handler
 	h := newHandler(cfg, router)
+
 	// Run test server
 	server := httptest.NewServer(h)
 	t.Cleanup(server.Close)
+	t.Cleanup(cancel)
 
 	client := gentleman.New()
 	client.BaseURL(server.URL)
@@ -78,82 +79,13 @@ func newTestSuite(t *testing.T) *testSuite {
 		Client:   client,
 		Logger:   logger,
 		Database: database,
-		IntentServices: map[uint64]*MockIntentService{
+		IntentServices: map[uint64]*mocks.IntentServiceMock{
 			1: ethIntentMock,
 		},
-		FulfillmentServices: map[uint64]*MockFulfillmentService{
+		FulfillmentServices: map[uint64]*mocks.FulfillmentServiceMock{
 			1: ethFulfillmentMock,
 		},
 	}
-}
-
-// MockIntentService is a mock implementation of the IntentService
-type MockIntentService struct {
-	mock.Mock
-}
-
-func (m *MockIntentService) GetIntent(ctx context.Context, id string) (*models.Intent, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Intent), args.Error(1)
-}
-
-func (m *MockIntentService) ListIntents(ctx context.Context) ([]*models.Intent, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.Intent), args.Error(1)
-}
-
-func (m *MockIntentService) CreateIntent(
-	ctx context.Context,
-	id string,
-	sourceChain, destinationChain uint64,
-	token, amount, recipient, sender, intentFee string,
-	timestamp ...time.Time,
-) (*models.Intent, error) {
-	args := m.Called(ctx, id, sourceChain, destinationChain, token, amount, recipient, sender, intentFee, timestamp)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.Intent), args.Error(1)
-}
-
-func (m *MockIntentService) GetIntentsByUser(ctx context.Context, userAddress string) ([]*models.Intent, error) {
-	args := m.Called(ctx, userAddress)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.Intent), args.Error(1)
-}
-
-func (m *MockIntentService) GetIntentsByRecipient(ctx context.Context, recipientAddress string) ([]*models.Intent, error) {
-	args := m.Called(ctx, recipientAddress)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.Intent), args.Error(1)
-}
-
-func (m *MockIntentService) GetIntentsBySender(ctx context.Context, senderAddress string) ([]*models.Intent, error) {
-	args := m.Called(ctx, senderAddress)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.Intent), args.Error(1)
-}
-
-// MockFulfillmentService is a mock implementation of the FulfillmentService
-type MockFulfillmentService struct {
-	mock.Mock
-}
-
-func (m *MockFulfillmentService) CreateFulfillment(ctx context.Context, id string, txHash string) error {
-	args := m.Called(ctx, id, txHash)
-	return args.Error(0)
 }
 
 func TestHandler(t *testing.T) {
@@ -175,4 +107,15 @@ func assertResponseContainsJSON(t *testing.T, res *gentleman.Response, path stri
 	r := gjson.GetBytes(res.Bytes(), path)
 
 	assert.Contains(t, r.String(), contains, res.String())
+}
+
+func numOfArgs(v uint) []any {
+	vals := make([]any, 0, v)
+
+	for v > 0 {
+		vals = append(vals, mock.Anything)
+		v--
+	}
+
+	return vals
 }
