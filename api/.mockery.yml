@@ -1,0 +1,22 @@
+# go install github.com/vektra/mockery/v3@v3.5.2
+# Just run `mockery` in the root of the project.
+all: false
+dir: "./testing/mocks"
+filename: "{{.InterfaceName | snakecase }}_mock.go"
+force-file-write: true
+formatter: goimports
+include-auto-generated: false
+log-level: info
+structname: "{{.InterfaceName}}{{.Mock}}"
+pkgname: 'mocks'
+recursive: false
+require-template-schema-exists: true
+template: testify
+template-schema: "{{.Template}}.schema.json"
+packages:
+  github.com/speedrun-hq/speedrun/api/cmd/speedrun/httpjson:
+    config:
+      all: true
+  github.com/speedrun-hq/speedrun/api/db:
+    config:
+      all: true
