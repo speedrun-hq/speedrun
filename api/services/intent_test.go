@@ -10,10 +10,9 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/speedrun-hq/speedrun/api/db"
 	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
-	"github.com/speedrun-hq/speedrun/api/services/mocks"
+	"github.com/speedrun-hq/speedrun/api/testing/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -324,7 +323,7 @@ func TestIntentService_ProcessCallLog(t *testing.T) {
 // TestIntentService_CreateCallIntent tests the CreateCallIntent method
 func TestIntentService_CreateCallIntent(t *testing.T) {
 	// Setup mock database
-	mockDB := new(db.MockDB)
+	mockDB := new(mocks.DatabaseMock)
 
 	// Setup intent service
 	intentService := &IntentService{
@@ -344,11 +343,6 @@ func TestIntentService_CreateCallIntent(t *testing.T) {
 	intentFee := "100000000000000000"
 	callData := "0xabcdef123456"
 	timestamp := time.Now()
-
-	// Mock SQL result - unused in this test but kept for consistency
-	_ = new(db.SQLResultMock)
-
-	// Intent will be created with these fields
 
 	// Mock database CreateIntent
 	mockDB.On("CreateIntent", ctx, mock.MatchedBy(func(i *models.Intent) bool {
@@ -386,20 +380,15 @@ func TestIntentService_CreateCallIntent(t *testing.T) {
 	mockDB.AssertExpectations(t)
 }
 
-// FindSQLResultMockUsage finds where SQLResultMock is actually used
-func FindSQLResultMockUsage(t *testing.T) {
-	_ = new(db.SQLResultMock)
-}
-
 func TestIntentServiceGoroutineCleanup(t *testing.T) {
 	// Create a mock logger
 	logger := logging.NewTesting(t)
 
 	// Create a mock database
-	mockDB := &db.MockDB{}
+	mockDB := mocks.NewDatabaseMock(t)
 
 	// Create a mock client resolver
-	mockResolver := &mocks.MockClientResolver{}
+	mockResolver := mocks.NewClientResolverMock(t)
 
 	// Create intent service
 	intentService, err := NewIntentService(
@@ -473,10 +462,10 @@ func TestIntentServiceShutdownTimeout(t *testing.T) {
 	logger := logging.NewTesting(t)
 
 	// Create a mock database
-	mockDB := &db.MockDB{}
+	mockDB := mocks.NewDatabaseMock(t)
 
 	// Create a mock client resolver
-	mockResolver := &mocks.MockClientResolver{}
+	mockResolver := mocks.NewClientResolverMock(t)
 
 	// Create intent service
 	intentService, err := NewIntentService(
@@ -530,7 +519,7 @@ func TestIntentService_RestartSubscriptionNoGoroutineLeak(t *testing.T) {
 	logger := logging.NewTesting(t)
 
 	// Create mock database
-	mockDB := &db.MockDB{}
+	mockDB := mocks.NewDatabaseMock(t)
 
 	// Create intent service
 	intentService, err := NewIntentService(
@@ -592,10 +581,10 @@ func TestIntentService_MultipleStartListeningNoLeak(t *testing.T) {
 	logger := logging.NewTesting(t)
 
 	// Create a mock database
-	mockDB := &db.MockDB{}
+	mockDB := mocks.NewDatabaseMock(t)
 
 	// Create a mock client resolver
-	mockResolver := &mocks.MockClientResolver{}
+	mockResolver := mocks.NewClientResolverMock(t)
 
 	// Create intent service
 	intentService, err := NewIntentService(
