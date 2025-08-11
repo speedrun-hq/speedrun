@@ -834,7 +834,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	if existingIntent != nil {
 		atomic.AddInt64(&s.eventsSkipped, 1)
 		s.logger.Debug().
-			Str("intent_id", intent.ID).
+			Str(logging.FieldIntent, intent.ID).
 			Msg("Skipped duplicate intent")
 		return nil
 	}
@@ -849,7 +849,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 		if strings.Contains(err.Error(), "duplicate key") {
 			atomic.AddInt64(&s.eventsSkipped, 1)
 			s.logger.Debug().
-				Str("intent_id", intent.ID).
+				Str(logging.FieldIntent, intent.ID).
 				Msg("Skipped duplicate intent during creation")
 			return nil
 		}
@@ -864,7 +864,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	s.mu.Unlock()
 
 	s.logger.Info().
-		Str("intent_id", intent.ID).
+		Str(logging.FieldIntent, intent.ID).
 		Msg("Successfully processed and stored intent")
 	return nil
 }
@@ -961,7 +961,7 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 	event.Asset = common.HexToAddress(vLog.Topics[2].Hex()).Hex()
 
 	s.logger.Debug().
-		Str("intent_id", event.IntentID).
+		Str(logging.FieldIntent, event.IntentID).
 		Str("asset", event.Asset).
 		Msg("Extracted indexed parameters")
 
@@ -1049,7 +1049,7 @@ func (s *IntentService) extractEventData(ctx context.Context, vLog types.Log) (*
 		Msg("Extracted sender")
 
 	s.logger.Debug().
-		Str("intent_id", event.IntentID).
+		Str(logging.FieldIntent, event.IntentID).
 		Msg("Successfully extracted all event data for intent")
 	return event, nil
 }
@@ -1132,7 +1132,7 @@ func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Inten
 		if strings.Contains(err.Error(), "not found") {
 			// Try to check on-chain via RPC if this intent exists
 			s.logger.Error().
-				Str("intent_id", id).
+				Str(logging.FieldIntent, id).
 				Msg("Intent not found in database, attempting to check on-chain")
 
 			// Here you would typically query the blockchain or other sources
@@ -1142,7 +1142,7 @@ func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Inten
 
 		// Log detailed error for debugging
 		s.logger.Error().
-			Str("intent_id", id).
+			Str(logging.FieldIntent, id).
 			Err(err).
 			Msg("Failed to get intent from database")
 
@@ -1151,7 +1151,7 @@ func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Inten
 
 	// Log success
 	s.logger.Debug().
-		Str("intent_id", id).
+		Str(logging.FieldIntent, id).
 		Msg("Successfully retrieved intent from database")
 
 	return intent, nil

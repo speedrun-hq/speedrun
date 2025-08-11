@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/speedrun-hq/speedrun/api/db"
 	web "github.com/speedrun-hq/speedrun/api/http"
+	"github.com/speedrun-hq/speedrun/api/http/timeout"
 	"github.com/speedrun-hq/speedrun/api/logging"
 	"github.com/speedrun-hq/speedrun/api/models"
 	"github.com/speedrun-hq/speedrun/api/services"
@@ -62,10 +63,10 @@ type FulfillmentService interface {
 }
 
 const (
-	RequestTimeout = 10 * time.Second
+	requestTimeout = 10 * time.Second
+	rwTimeout      = 15 * time.Second
+	maxPageSize    = 100
 )
-
-const maxPageSize = 100
 
 var (
 	ErrNotFound      = errors.New("not found")
@@ -78,13 +79,16 @@ func New(cfg Config) *http.Server {
 		Handler: newHandler(cfg, gin.New()),
 
 		// Time to read the request headers/body
-		ReadTimeout: 15 * time.Second,
+		ReadTimeout: rwTimeout,
 
 		// Time to write the response
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: rwTimeout,
 
 		// Time to keep connections alive
 		IdleTimeout: 60 * time.Second,
+
+		// Max header bytes (1MB)
+		MaxHeaderBytes: 1024 * 1024,
 	}
 }
 
@@ -103,7 +107,7 @@ func newHandler(cfg Config, router *gin.Engine) *handler {
 	h.Use(
 		gin.Recovery(),
 		web.Zerolog(cfg.Logger, logLevel),
-		web.Timeout(RequestTimeout, cfg.Logger),
+		timeout.New(requestTimeout, cfg.Logger),
 		web.CORS(cfg.AllowedOrigins),
 	)
 

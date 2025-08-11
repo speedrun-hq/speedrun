@@ -1236,7 +1236,7 @@ func (s *EventCatchupService) catchUpOnIntentEvents(
 						if existingIntent != nil {
 							s.logger.Debug().
 								Str("operation", opName).
-								Str("intent_id", intentID).
+								Str(logging.FieldIntent, intentID).
 								Msg("Skipping existing intent")
 							continue
 						}
@@ -1251,7 +1251,7 @@ func (s *EventCatchupService) catchUpOnIntentEvents(
 							if strings.Contains(err.Error(), "duplicate key") {
 								s.logger.Debug().
 									Str("operation", opName).
-									Str("intent_id", intentID).
+									Str(logging.FieldIntent, intentID).
 									Msg("Skipping duplicate intent")
 								continue
 							}
@@ -1438,7 +1438,7 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(
 							if strings.Contains(err.Error(), "not found") {
 								s.logger.Debug().
 									Str("operation", opName).
-									Str("intent_id", intentID).
+									Str(logging.FieldIntent, intentID).
 									Msg("Skipping fulfillment for non-existent intent")
 								continue
 							}
@@ -1459,7 +1459,7 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(
 							if strings.Contains(err.Error(), "duplicate key") {
 								s.logger.Debug().
 									Str("operation", opName).
-									Str("intent_id", intentID).
+									Str(logging.FieldIntent, intentID).
 									Msg("Skipping duplicate fulfillment")
 								continue
 							}
@@ -1646,7 +1646,7 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(
 							if strings.Contains(err.Error(), "not found") {
 								s.logger.Debug().
 									Str("operation", opName).
-									Str("intent_id", intentID).
+									Str(logging.FieldIntent, intentID).
 									Msg("Skipping settlement for non-existent intent")
 								continue
 							}
@@ -1663,7 +1663,7 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(
 							if strings.Contains(err.Error(), "duplicate key") {
 								s.logger.Debug().
 									Str("operation", opName).
-									Str("intent_id", intentID).
+									Str(logging.FieldIntent, intentID).
 									Msg("Skipping duplicate settlement")
 								continue
 							}
