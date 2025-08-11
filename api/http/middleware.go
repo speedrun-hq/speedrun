@@ -1,9 +1,6 @@
 package http
 
 import (
-	"context"
-	"errors"
-	"net/http"
 	"strings"
 	"time"
 
@@ -59,38 +56,4 @@ func CORS(allowedOrigins string) gin.HandlerFunc {
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
 
 	return cors.New(config)
-}
-
-func Timeout(timeout time.Duration, log zerolog.Logger) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
-		defer cancel()
-
-		c.Request = c.Request.WithContext(ctx)
-
-		done := make(chan struct{})
-
-		go func() {
-			c.Next()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			// ok, no op
-		case <-ctx.Done():
-			if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return
-			}
-
-			log.Warn().
-				Str("http.method", c.Request.Method).
-				Str("http.path", c.Request.URL.Path).
-				Msg("HTTP request timed out")
-
-			c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
-				"error": "Request timeout",
-			})
-		}
-	}
 }

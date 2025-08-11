@@ -29,6 +29,7 @@ func (h *handler) createFulfillment(c *gin.Context) {
 	service, err := h.resolveFirstFulfillmentService()
 	if err != nil {
 		web.ErrBadRequest(c, err)
+		return
 	}
 
 	err = service.CreateFulfillment(ctx, req.IntentID, req.TxHash)
@@ -37,7 +38,7 @@ func (h *handler) createFulfillment(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "fulfillment created successfully"})
+	c.JSON(http.StatusCreated, gin.H{"message": "fulfillment created successfully"})
 }
 
 func (h *handler) getFulfillment(c *gin.Context) {
@@ -57,7 +58,7 @@ func (h *handler) getFulfillment(c *gin.Context) {
 
 	fulfillment, err := service.GetFulfillment(ctx, id)
 	if err != nil {
-		web.ErrInternalServerError(c, err)
+		web.ErrNotFound(c, err)
 		return
 	}
 
