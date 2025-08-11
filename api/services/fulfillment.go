@@ -348,7 +348,7 @@ func (s *FulfillmentService) processLog(ctx context.Context, vLog types.Log) err
 	if err := s.db.CreateFulfillment(ctx, fulfillment); err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
 			s.logger.Debug().
-				Str("intent_id", event.IntentID).
+				Str(logging.FieldIntent, event.IntentID).
 				Msg("Skipping duplicate fulfillment")
 			return nil
 		}
@@ -518,14 +518,14 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 				if err == nil {
 					timestamp = time.Unix(int64(block.Time()), 0)
 					s.logger.Debug().
-						Str("intent_id", intentID).
+						Str(logging.FieldIntent, intentID).
 						Str("timestamp", timestamp.Format(time.RFC3339)).
 						Uint64(logging.FieldBlock, receipt.BlockNumber.Uint64()).
 						Str("tx_hash", txHash).
 						Msg("Using blockchain timestamp for manual fulfillment")
 				} else {
 					s.logger.Warn().
-						Str("intent_id", intentID).
+						Str(logging.FieldIntent, intentID).
 						Str("tx_hash", txHash).
 						Err(err).
 						Msg("Failed to get block for timestamp in manual fulfillment, using current time")
@@ -533,7 +533,7 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 				}
 			} else {
 				s.logger.Warn().
-					Str("intent_id", intentID).
+					Str(logging.FieldIntent, intentID).
 					Str("tx_hash", txHash).
 					Err(err).
 					Msg("Failed to get transaction receipt in manual fulfillment, using current time")
@@ -542,13 +542,13 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 		} else {
 			if err != nil {
 				s.logger.Warn().
-					Str("intent_id", intentID).
+					Str(logging.FieldIntent, intentID).
 					Str("tx_hash", txHash).
 					Err(err).
 					Msg("Failed to get transaction in manual fulfillment, using current time")
 			} else if isPending {
 				s.logger.Warn().
-					Str("intent_id", intentID).
+					Str(logging.FieldIntent, intentID).
 					Str("tx_hash", txHash).
 					Msg("Transaction is still pending in manual fulfillment, using current time")
 			}
@@ -557,7 +557,7 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 	} else {
 		// No valid txHash, use current time
 		s.logger.Warn().
-			Str("intent_id", intentID).
+			Str(logging.FieldIntent, intentID).
 			Msg("No valid transaction hash provided for manual fulfillment, using current time")
 		timestamp = time.Now()
 	}
@@ -657,14 +657,14 @@ func (s *FulfillmentService) CreateCallFulfillment(
 				if err == nil {
 					timestamp = time.Unix(int64(block.Time()), 0)
 					s.logger.Debug().
-						Str("intent_id", intentID).
+						Str(logging.FieldIntent, intentID).
 						Str("timestamp", timestamp.Format(time.RFC3339)).
 						Uint64(logging.FieldBlock, receipt.BlockNumber.Uint64()).
 						Str("tx_hash", txHash).
 						Msg("Using blockchain timestamp for manual fulfillment")
 				} else {
 					s.logger.Warn().
-						Str("intent_id", intentID).
+						Str(logging.FieldIntent, intentID).
 						Str("tx_hash", txHash).
 						Err(err).
 						Msg("Failed to get block for timestamp in manual fulfillment, using current time")
@@ -672,7 +672,7 @@ func (s *FulfillmentService) CreateCallFulfillment(
 				}
 			} else {
 				s.logger.Warn().
-					Str("intent_id", intentID).
+					Str(logging.FieldIntent, intentID).
 					Str("tx_hash", txHash).
 					Err(err).
 					Msg("Failed to get transaction receipt in manual fulfillment, using current time")
@@ -681,13 +681,13 @@ func (s *FulfillmentService) CreateCallFulfillment(
 		} else {
 			if err != nil {
 				s.logger.Warn().
-					Str("intent_id", intentID).
+					Str(logging.FieldIntent, intentID).
 					Str("tx_hash", txHash).
 					Err(err).
 					Msg("Failed to get transaction in manual fulfillment, using current time")
 			} else if isPending {
 				s.logger.Warn().
-					Str("intent_id", intentID).
+					Str(logging.FieldIntent, intentID).
 					Str("tx_hash", txHash).
 					Msg("Transaction is still pending in manual fulfillment, using current time")
 			}
@@ -696,7 +696,7 @@ func (s *FulfillmentService) CreateCallFulfillment(
 	} else {
 		// No valid txHash, use current time
 		s.logger.Warn().
-			Str("intent_id", intentID).
+			Str(logging.FieldIntent, intentID).
 			Msg("No valid transaction hash provided for manual fulfillment, using current time")
 		timestamp = time.Now()
 	}
