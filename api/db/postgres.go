@@ -332,7 +332,7 @@ func (p *PostgresDB) GetTotalFulfilledAmount(ctx context.Context, intentID strin
 // GetSettlement retrieves a settlement by ID
 func (p *PostgresDB) GetSettlement(ctx context.Context, id string) (*models.Settlement, error) {
 	query := `
-		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, created_at, updated_at
+		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, is_call, call_data, created_at, updated_at
 		FROM settlements
 		WHERE id = $1
 	`
@@ -348,6 +348,8 @@ func (p *PostgresDB) GetSettlement(ctx context.Context, id string) (*models.Sett
 		&settlement.ActualAmount,
 		&settlement.PaidTip,
 		&settlement.TxHash,
+		&settlement.IsCall,
+		&settlement.CallData,
 		&settlement.CreatedAt,
 		&settlement.UpdatedAt,
 	)
@@ -363,7 +365,7 @@ func (p *PostgresDB) GetSettlement(ctx context.Context, id string) (*models.Sett
 // ListSettlements retrieves all settlements
 func (p *PostgresDB) ListSettlements(ctx context.Context) ([]*models.Settlement, error) {
 	query := `
-		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, created_at, updated_at
+		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, is_call, call_data, created_at, updated_at
 		FROM settlements
 		ORDER BY created_at DESC
 	`
@@ -391,6 +393,8 @@ func (p *PostgresDB) ListSettlements(ctx context.Context) ([]*models.Settlement,
 			&s.ActualAmount,
 			&s.PaidTip,
 			&s.TxHash,
+			&s.IsCall,
+			&s.CallData,
 			&s.CreatedAt,
 			&s.UpdatedAt,
 		)
@@ -409,8 +413,8 @@ func (p *PostgresDB) ListSettlements(ctx context.Context) ([]*models.Settlement,
 func (p *PostgresDB) CreateSettlement(ctx context.Context, settlement *models.Settlement) error {
 	query := `
 		INSERT INTO settlements (
-			id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, is_call, call_data, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 
 	// Ensure timestamps are set
@@ -433,6 +437,8 @@ func (p *PostgresDB) CreateSettlement(ctx context.Context, settlement *models.Se
 		settlement.ActualAmount,
 		settlement.PaidTip,
 		settlement.TxHash,
+		settlement.IsCall,
+		settlement.CallData,
 		settlement.CreatedAt,
 		settlement.UpdatedAt,
 	)
@@ -1069,7 +1075,7 @@ func (p *PostgresDB) ListSettlementsPaginated(
 
 	// Get paginated results
 	query := `
-		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, created_at, updated_at
+		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, is_call, call_data, created_at, updated_at
 		FROM settlements
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -1098,6 +1104,8 @@ func (p *PostgresDB) ListSettlementsPaginated(
 			&s.ActualAmount,
 			&s.PaidTip,
 			&s.TxHash,
+			&s.IsCall,
+			&s.CallData,
 			&s.CreatedAt,
 			&s.UpdatedAt,
 		)
@@ -1194,6 +1202,8 @@ func (p *PostgresDB) ListSettlementsPaginatedOptimized(
 			&s.ActualAmount,
 			&s.PaidTip,
 			&s.TxHash,
+			&s.IsCall,
+			&s.CallData,
 			&s.CreatedAt,
 			&s.UpdatedAt,
 			&totalCount,
@@ -1315,14 +1325,14 @@ func (p *PostgresDB) PrepareStatements(ctx context.Context) error {
 	p.listSettlementsStmt, err = p.db.PrepareContext(ctx, `
 		WITH data AS (
 			SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, 
-				   paid_tip, tx_hash, created_at, updated_at,
+				   paid_tip, tx_hash, is_call, call_data, created_at, updated_at,
 				   COUNT(*) OVER() AS total_count
 			FROM settlements
 			ORDER BY created_at DESC
 			LIMIT $1 OFFSET $2
 		)
 		SELECT id, asset, amount, receiver, fulfilled, fulfiller, actual_amount,
-			   paid_tip, tx_hash, created_at, updated_at,
+			   paid_tip, tx_hash, is_call, call_data, created_at, updated_at,
 			   total_count
 		FROM data
 	`)

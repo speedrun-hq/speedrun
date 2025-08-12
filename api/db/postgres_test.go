@@ -172,6 +172,8 @@ func TestCreateSettlement(t *testing.T) {
 		ActualAmount: "900000000000000000", // 0.9 ETH
 		PaidTip:      "100000000000000000", // 0.1 ETH
 		TxHash:       "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		IsCall:       false,
+		CallData:     "",
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -188,6 +190,8 @@ func TestCreateSettlement(t *testing.T) {
 			settlement.ActualAmount,
 			settlement.PaidTip,
 			settlement.TxHash,
+			settlement.IsCall,
+			settlement.CallData,
 			settlement.CreatedAt,
 			settlement.UpdatedAt,
 		).
@@ -222,6 +226,8 @@ func TestGetSettlement(t *testing.T) {
 		ActualAmount: "900000000000000000", // 0.9 ETH
 		PaidTip:      "100000000000000000", // 0.1 ETH
 		TxHash:       "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		IsCall:       false,
+		CallData:     "",
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -229,12 +235,13 @@ func TestGetSettlement(t *testing.T) {
 	// Setup the expected rows
 	rows := sqlmock.NewRows([]string{
 		"id", "asset", "amount", "receiver", "fulfilled", "fulfiller",
-		"actual_amount", "paid_tip", "tx_hash", "created_at", "updated_at",
+		"actual_amount", "paid_tip", "tx_hash", "is_call", "call_data", "created_at", "updated_at",
 	}).
 		AddRow(
 			expectedSettlement.ID, expectedSettlement.Asset, expectedSettlement.Amount,
 			expectedSettlement.Receiver, expectedSettlement.Fulfilled, expectedSettlement.Fulfiller,
 			expectedSettlement.ActualAmount, expectedSettlement.PaidTip, expectedSettlement.TxHash,
+			expectedSettlement.IsCall, expectedSettlement.CallData,
 			expectedSettlement.CreatedAt, expectedSettlement.UpdatedAt,
 		)
 

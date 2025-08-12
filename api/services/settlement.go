@@ -442,6 +442,23 @@ func (s *SettlementService) ListSettlements(ctx context.Context) ([]*models.Sett
 
 // CreateSettlement creates a new settlement
 func (s *SettlementService) CreateSettlement(ctx context.Context, settlement *models.Settlement) error {
+	// Check if settlement already exists
+	existingSettlement, err := s.db.GetSettlement(ctx, settlement.ID)
+	if err != nil {
+		// If error is not "not found", return it
+		if !strings.Contains(err.Error(), "settlement not found") {
+			return fmt.Errorf("failed to check existing settlement: %v", err)
+		}
+		// Settlement doesn't exist, proceed with creation
+	} else if existingSettlement != nil {
+		// Settlement already exists, log and return without error
+		s.logger.Debug().
+			Str("settlement_id", settlement.ID).
+			Msg("Settlement already exists, skipping creation")
+		return nil
+	}
+
+	// Create the settlement
 	if err := s.db.CreateSettlement(ctx, settlement); err != nil {
 		return fmt.Errorf("failed to create settlement: %v", err)
 	}
