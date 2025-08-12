@@ -16,6 +16,7 @@ reviews:
 
   # File exclusions
   path_filters:
+    - "**/*"
     - "!**/node_modules/**"
     - "!**/dist/**"
     - "!**/build/**"
