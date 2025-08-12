@@ -1,0 +1,61 @@
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+language: "en-US"
+early_access: false
+chat: { auto_reply: true }
+tone_instructions: >-
+  Maintain a formal tone, highlighting issues, and suggesting production-grade, elegant, and concise solutions.
+
+reviews:
+  profile: chill
+  high_level_summary: true
+
+  poem: false
+
+  collapse_walkthrough: true
+  sequence_diagrams: true
+
+  # File exclusions
+  path_filters:
+    - "**/*"
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
+    - "!**/vendor/**"
+    - "!**/coverage/**"
+    - "!**/*.d.ts"
+    - "!**/generated/**"
+    - "!**/__tests__/**/*.snap"
+
+  path_instructions:
+    - path: '**/*.go'
+      instructions: >-
+        Review the Go code, point out issues relative to principles of clean
+        code, expressiveness, and performance.
+    - path: '**/*.sh'
+      instructions: >-
+        Review the shell scripts, point out issues relative to security,
+        performance, and maintainability.
+    - path: '**/*.ts'
+      instructions: >-
+        Review the TypeScript code, focusing on type safety, proper async/await usage,
+        error handling, and adherence to TypeScript best practices. Check for potential
+        null/undefined issues and proper interface design.
+    - path: '**/*.tsx'
+      instructions: >-
+        Review the React TypeScript code, ensuring proper component patterns, hooks usage,
+        type safety, and performance considerations. Check for proper prop types and
+        component lifecycle management.
+
+  auto_review:
+    drafts: false
+    # disables review for new commits
+    auto_incremental_review: false
+    base_branches:
+      - main
+
+  tools:
+    languagetool:
+      enabled: true
+      level: default
