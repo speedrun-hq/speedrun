@@ -415,6 +415,7 @@ func (p *PostgresDB) CreateSettlement(ctx context.Context, settlement *models.Se
 		INSERT INTO settlements (
 			id, asset, amount, receiver, fulfilled, fulfiller, actual_amount, paid_tip, tx_hash, is_call, call_data, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		ON CONFLICT (id) DO NOTHING
 	`
 
 	// Ensure timestamps are set
