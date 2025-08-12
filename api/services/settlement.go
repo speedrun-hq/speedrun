@@ -445,13 +445,10 @@ func (s *SettlementService) CreateSettlement(ctx context.Context, settlement *mo
 	// Check if settlement already exists
 	existingSettlement, err := s.db.GetSettlement(ctx, settlement.ID)
 	if err != nil {
-		// If error is not "not found", return it
 		if !strings.Contains(err.Error(), "settlement not found") {
-			return fmt.Errorf("failed to check existing settlement: %v", err)
+			return fmt.Errorf("failed to check for existing settlement: %v", err)
 		}
-		// Settlement doesn't exist, proceed with creation
 	} else if existingSettlement != nil {
-		// Settlement already exists, log and return without error
 		s.logger.Debug().
 			Str("settlement_id", settlement.ID).
 			Msg("Settlement already exists, skipping creation")
