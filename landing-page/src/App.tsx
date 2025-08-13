@@ -4,25 +4,34 @@ import speedLogo from '/speed.png'
 function App() {
   return (
     <div className="app">
-      <div className="content">
-        {/* Logo and Title */}
-        <div className="logo-title">
-          <img 
-            src={speedLogo} 
-            alt="Speedrun Logo" 
-            className="logo"
-          />
-          <h1 className="arcade-text title">
-            Speedrun
-          </h1>
-        </div>
-        
-        {/* Subtitle */}
+      {/* Logo and Title - Top Left */}
+      <div className="logo-title">
+        <img 
+          src={speedLogo} 
+          alt="Speedrun Logo" 
+          className="logo"
+        />
+        <h1 className="arcade-text title">
+          Speedrun
+        </h1>
+      </div>
+
+      {/* Centered Content Container */}
+      <div className="centered-content">
+        {/* Subtitle - Centered */}
         <p className="arcade-text subtitle">
-          Blazing Fast Cross-Chain Transactions. Zero Compromise.
+          Blazing Fast Cross-Chain Transactions.<br />
+          Zero Compromise.
         </p>
         
-        {/* Action Buttons */}
+        {/* Description */}
+        <div className="description">
+          <p className="description-text">
+            Speedrun is a novel cross-chain protocol that uses an intent-based architecture to make transactions across chains fast and affordable, powered by ZetaChain for secure and decentralized settlements.
+          </p>
+        </div>
+
+        {/* Action Buttons - Side by Side */}
         <div className="button-container">
           <a 
             href="https://app.speedrun.exchange" 
@@ -42,32 +51,65 @@ function App() {
             Integrate in your App
           </a>
         </div>
+      </div>
 
-        {/* Description */}
-        <div className="description">
-          <p className="description-text">
-            Speedrun is a novel cross-chain protocol that uses an intent-based architecture to make transactions across chains fast and affordable, powered by ZetaChain for secure and decentralized settlements.
-          </p>
-        </div>
+      {/* Section Title */}
+      <div className="section-title">
+        <h2 className="arcade-text section-title-text">Why using Speedrun</h2>
+      </div>
 
-        {/* Characteristics */}
-        <div className="characteristics">
-          <div className="characteristic">
-            <span className="arrow">→</span>
-            <span className="characteristic-label">Fast</span>
-            <span className="characteristic-desc">Cross-chain transfers in under 5 seconds</span>
-          </div>
-          <div className="characteristic">
-            <span className="arrow">→</span>
-            <span className="characteristic-label">Cheap</span>
-            <span className="characteristic-desc">Competitive fulfiller network drives down costs</span>
-          </div>
-          <div className="characteristic">
-            <span className="arrow">→</span>
-            <span className="characteristic-label">Programmable</span>
-            <span className="characteristic-desc">Supports not only asset transfers but also cross-chain messaging</span>
-          </div>
+      {/* Characteristics */}
+      <div className="characteristics">
+        <div className="characteristic">
+          <span className="characteristic-label">Fast</span>
+          <span className="characteristic-desc">Cross-chain transfers in under 5 seconds</span>
         </div>
+        <div className="characteristic">
+          <span className="characteristic-label">Cheap</span>
+          <span className="characteristic-desc">Competitive fulfiller network drives down costs</span>
+        </div>
+        <div className="characteristic">
+          <span className="characteristic-label">Secure</span>
+          <span className="characteristic-desc">ZetaChain robust interoperability protocol ensures settlement of intents</span>
+        </div>
+        <div className="characteristic">
+          <span className="characteristic-label">Custom</span>
+          <span className="characteristic-desc">Supports not only asset transfers but also custom cross-chain messaging</span>
+        </div>
+        <div className="characteristic">
+          <span className="characteristic-label">Global</span>
+          <span className="characteristic-desc">Leverage ZetaChain universal blockchain to connect to non-EVM chains, including Bitcoin</span>
+        </div>
+        <div className="characteristic">
+          <span className="characteristic-label">Low-Risk</span>
+          <span className="characteristic-desc">Unfulfilled intents automatically fall back to ZetaChain settlement with fee refund</span>
+        </div>
+      </div>
+
+      {/* Roadmap Section */}
+      <div className="roadmap-section">
+        <h3 className="arcade-text section-title-text">Roadmap</h3>
+        <p className="roadmap-text">Coming soon...</p>
+      </div>
+
+      {/* Community Section */}
+      <div className="community-section">
+        <h3 className="arcade-text section-title-text">Community</h3>
+        <a 
+          href="https://x.com/speedrun_hq" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="community-link"
+        >
+          Follow us on X
+        </a>
+      </div>
+
+      {/* Footer */}
+      <div className="footer">
+        <p className="footer-text">
+          © 2025 Speedrun
+        </p>
       </div>
     </div>
   )

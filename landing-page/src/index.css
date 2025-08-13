@@ -25,27 +25,22 @@ body {
   min-height: 100vh;
   background-color: black;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   padding: 20px;
-}
-
-.content {
-  text-align: center;
-  max-width: 800px;
 }
 
 .logo-title {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: 12px;
+  margin-bottom: 60px;
+  margin-top: 20px;
+  margin-left: 25%;
 }
 
 .logo {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
 }
 
 .arcade-text {
@@ -55,21 +50,34 @@ body {
 }
 
 .title {
-  font-size: 2.5rem;
+  font-size: 2rem;
   color: #00ff88;
 }
 
+.centered-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  min-height: 100vh;
+}
+
 .subtitle {
-  font-size: 1.125rem;
+  font-size: 1.5rem;
   color: white;
-  margin-bottom: 48px;
+  margin-bottom: 40px;
+  text-align: center;
+  line-height: 1.4;
 }
 
 .button-container {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-items: center;
+  gap: 24px;
+  justify-content: center;
   margin-bottom: 48px;
 }
 
@@ -93,7 +101,7 @@ body {
   animation: borderGlow 3s infinite;
   height: 56px;
   text-decoration: none;
-  width: 320px;
+  width: 280px;
   cursor: pointer;
 }
 
@@ -107,7 +115,8 @@ body {
 }
 
 .description {
-  margin-bottom: 32px;
+  margin-bottom: 48px;
+  text-align: center;
 }
 
 .description-text {
@@ -115,32 +124,39 @@ body {
   font-size: 0.75rem;
   line-height: 1.8;
   color: #cccccc;
-  max-width: 600px;
+  max-width: 800px;
   margin: 0 auto;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.section-title {
+  text-align: left;
+  margin-bottom: 32px;
+  margin-left: 25%;
+}
+
+.section-title-text {
+  font-size: 1.25rem;
+  color: white;
 }
 
 .characteristics {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
+  max-width: 700px;
+  margin-left: 25%;
+  margin-bottom: 60px;
 }
 
 .characteristic {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 8px;
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-}
-
-.arrow {
-  color: #00ff88;
-  font-size: 16px;
-  font-weight: bold;
-  min-width: 20px;
-  text-align: center;
+  width: 100%;
 }
 
 .characteristic-label {
@@ -150,14 +166,75 @@ body {
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  min-width: 120px;
-  text-align: right;
+  width: 160px;
+  text-align: left;
+  flex-shrink: 0;
 }
 
 .characteristic-desc {
-  font-size: 14px;
+  font-family: "Press Start 2P", cursive;
+  font-size: 10px;
   color: #cccccc;
   text-align: left;
+  flex: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.6;
+  margin-left: 24px;
+}
+
+.roadmap-section {
+  text-align: left;
+  margin-bottom: 40px;
+  margin-left: 25%;
+}
+
+.roadmap-text {
+  font-family: "Press Start 2P", cursive;
+  font-size: 1rem;
+  color: #00ff88;
+  margin-top: 16px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.community-section {
+  text-align: left;
+  margin-bottom: 60px;
+  margin-left: 25%;
+}
+
+.community-link {
+  font-family: "Press Start 2P", cursive;
+  font-size: 1rem;
+  color: #00ff88;
+  text-decoration: none;
+  margin-top: 16px;
+  display: inline-block;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: none;
+}
+
+.community-link:hover {
+  color: white;
+  transform: translateY(-1px);
+  transition: none;
+}
+
+.footer {
+  text-align: center;
+  margin-top: auto;
+  padding: 20px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.footer-text {
+  font-family: "Press Start 2P", cursive;
+  font-size: 0.75rem;
+  color: #cccccc;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 @keyframes borderGlow {
