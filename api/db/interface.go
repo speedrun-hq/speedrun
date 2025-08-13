@@ -3,9 +3,15 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/speedrun-hq/speedrun/api/models"
+)
+
+// Common database errors
+var (
+	ErrNotFound = errors.New("not found")
 )
 
 // Database interface defines the methods that a database implementation must provide

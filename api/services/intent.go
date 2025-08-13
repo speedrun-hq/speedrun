@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -826,7 +827,7 @@ func (s *IntentService) processLog(ctx context.Context, vLog types.Log) error {
 	existingIntent, err := s.db.GetIntent(dbCtx, intent.ID)
 	dbCancel()
 
-	if err != nil && !strings.Contains(err.Error(), "not found") {
+	if err != nil && !errors.Is(err, db.ErrNotFound) {
 		return fmt.Errorf("failed to check for existing intent: %v", err)
 	}
 
@@ -1129,7 +1130,7 @@ func (s *IntentService) GetIntent(ctx context.Context, id string) (*models.Inten
 	intent, err := s.db.GetIntent(ctx, id)
 	if err != nil {
 		// Check if the error is "not found"
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, db.ErrNotFound) {
 			// Try to check on-chain via RPC if this intent exists
 			s.logger.Error().
 				Str(logging.FieldIntent, id).

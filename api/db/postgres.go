@@ -128,8 +128,8 @@ func (p *PostgresDB) GetIntent(ctx context.Context, id string) (*models.Intent, 
 		&intent.CreatedAt,
 		&intent.UpdatedAt,
 	)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("intent not found: %s", id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get intent: %v", err)
@@ -194,7 +194,7 @@ func (p *PostgresDB) UpdateIntentStatus(ctx context.Context, id string, status m
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("intent not found: %s", id)
+		return ErrNotFound
 	}
 
 	return nil
@@ -218,8 +218,8 @@ func (p *PostgresDB) GetFulfillment(ctx context.Context, id string) (*models.Ful
 		&fulfillment.CreatedAt,
 		&fulfillment.UpdatedAt,
 	)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("fulfillment not found: %s", id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get fulfillment: %v", err)
@@ -354,7 +354,7 @@ func (p *PostgresDB) GetSettlement(ctx context.Context, id string) (*models.Sett
 		&settlement.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("settlement not found: %s", id)
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get settlement: %v", err)

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -1228,7 +1229,7 @@ func (s *EventCatchupService) catchUpOnIntentEvents(
 						existingIntent, err := s.db.GetIntent(getIntentCtx, intentID)
 						cancel()
 
-						if err != nil && !strings.Contains(err.Error(), "not found") {
+						if err != nil && !errors.Is(err, db.ErrNotFound) {
 							return fmt.Errorf("failed to check for existing intent: %v", err)
 						}
 
@@ -1435,7 +1436,7 @@ func (s *EventCatchupService) catchUpOnFulfillmentEvents(
 						cancel()
 
 						if err != nil {
-							if strings.Contains(err.Error(), "not found") {
+							if errors.Is(err, db.ErrNotFound) {
 								s.logger.Debug().
 									Str("operation", opName).
 									Str(logging.FieldIntent, intentID).
@@ -1643,7 +1644,7 @@ func (s *EventCatchupService) catchUpOnSettlementEvents(
 						cancel()
 
 						if err != nil {
-							if strings.Contains(err.Error(), "not found") {
+							if errors.Is(err, db.ErrNotFound) {
 								s.logger.Debug().
 									Str("operation", opName).
 									Str(logging.FieldIntent, intentID).

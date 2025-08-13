@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -445,7 +446,7 @@ func (s *SettlementService) CreateSettlement(ctx context.Context, settlement *mo
 	// Check if settlement already exists
 	existingSettlement, err := s.db.GetSettlement(ctx, settlement.ID)
 	if err != nil {
-		if !strings.Contains(err.Error(), "settlement not found") {
+		if !errors.Is(err, db.ErrNotFound) {
 			return fmt.Errorf("failed to check for existing settlement: %v", err)
 		}
 	} else if existingSettlement != nil {
@@ -549,10 +550,10 @@ func (s *SettlementService) CreateCallSettlement(
 	// Validate intent exists
 	intent, err := s.db.GetIntent(ctx, intentID)
 	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return fmt.Errorf("intent not found: %s", intentID)
+		}
 		return fmt.Errorf("failed to get intent: %v", err)
-	}
-	if intent == nil {
-		return fmt.Errorf("intent not found: %s", intentID)
 	}
 
 	// Verify this is a call intent
