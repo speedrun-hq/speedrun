@@ -107,9 +107,19 @@ function App() {
 
       {/* Footer */}
       <div className="footer">
-        <p className="footer-text">
-          © 2025 Speedrun
-        </p>
+        <div className="footer-content">
+          <p className="footer-text">
+            © 2025 Speedrun
+          </p>
+          <a 
+            href="https://www.zetachain.com/"
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="footer-link"
+          >
+            Powered by ZetaChain
+          </a>
+        </div>
       </div>
     </div>
   )
