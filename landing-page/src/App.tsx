@@ -4,6 +4,19 @@ import speedLogo from '/speed.png'
 function App() {
   return (
     <div className="app">
+      {/* Floating Chain Images */}
+      <div className="floating-chains">
+        <img src="/chains/eth.png" alt="Ethereum" className="floating-chain eth" />
+        <img src="/chains/btc.png" alt="Bitcoin" className="floating-chain btc" />
+        <img src="/chains/bnb.png" alt="BNB" className="floating-chain bnb" />
+        <img src="/chains/pol.png" alt="Polygon" className="floating-chain pol" />
+        <img src="/chains/base.png" alt="Base" className="floating-chain base" />
+        <img src="/chains/arb.png" alt="Arbitrum" className="floating-chain arb" />
+        <img src="/chains/ava.png" alt="Avalanche" className="floating-chain ava" />
+        <img src="/chains/sol.png" alt="Solana" className="floating-chain sol" />
+        <img src="/chains/zeta.png" alt="ZetaChain" className="floating-chain zeta" />
+      </div>
+
       {/* Logo and Title - Top Left */}
       <div className="logo-title">
         <img 
@@ -27,7 +40,7 @@ function App() {
         {/* Description */}
         <div className="description">
           <p className="description-text">
-            Speedrun is a novel cross-chain protocol that uses an intent-based architecture to make transactions across chains fast and affordable, powered by ZetaChain for secure and decentralized settlements.
+            Speedrun is a cross-chain protocol that uses an intent-based architecture to make transactions across chains fast and affordable, powered by ZetaChain for secure and decentralized settlements.
           </p>
         </div>
 

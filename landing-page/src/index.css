@@ -27,6 +27,125 @@ body {
   display: flex;
   flex-direction: column;
   padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.floating-chains {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.floating-chain {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  opacity: 0.3;
+  animation-duration: 6s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+.floating-chain.eth {
+  top: 15%;
+  left: 10%;
+  animation-name: float1;
+  animation-delay: 0s;
+}
+
+.floating-chain.btc {
+  top: 25%;
+  right: 15%;
+  animation-name: float2;
+  animation-delay: 1s;
+}
+
+.floating-chain.bnb {
+  top: 45%;
+  left: 5%;
+  animation-name: float3;
+  animation-delay: 2s;
+}
+
+.floating-chain.pol {
+  top: 35%;
+  right: 25%;
+  animation-name: float1;
+  animation-delay: 3s;
+}
+
+.floating-chain.base {
+  top: 65%;
+  left: 20%;
+  animation-name: float2;
+  animation-delay: 4s;
+}
+
+.floating-chain.arb {
+  top: 55%;
+  right: 10%;
+  animation-name: float3;
+  animation-delay: 5s;
+}
+
+.floating-chain.ava {
+  top: 75%;
+  left: 35%;
+  animation-name: float1;
+  animation-delay: 1.5s;
+}
+
+.floating-chain.sol {
+  top: 85%;
+  right: 30%;
+  animation-name: float2;
+  animation-delay: 2.5s;
+}
+
+.floating-chain.zeta {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation-name: float3;
+  animation-delay: 0.5s;
+}
+
+@keyframes float1 {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  33% {
+    transform: translateY(-20px) rotate(5deg);
+  }
+  66% {
+    transform: translateY(10px) rotate(-5deg);
+  }
+}
+
+@keyframes float2 {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  33% {
+    transform: translateY(-15px) rotate(-3deg);
+  }
+  66% {
+    transform: translateY(15px) rotate(3deg);
+  }
+}
+
+@keyframes float3 {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-25px) rotate(8deg);
+  }
 }
 
 .logo-title {
@@ -36,6 +155,8 @@ body {
   margin-bottom: 60px;
   margin-top: 20px;
   margin-left: 25%;
+  position: relative;
+  z-index: 10;
 }
 
 .logo {
@@ -64,6 +185,8 @@ body {
   margin: 0 auto;
   width: 100%;
   min-height: 100vh;
+  position: relative;
+  z-index: 10;
 }
 
 .subtitle {
@@ -134,6 +257,8 @@ body {
   text-align: left;
   margin-bottom: 32px;
   margin-left: 25%;
+  position: relative;
+  z-index: 10;
 }
 
 .section-title-text {
@@ -149,6 +274,8 @@ body {
   max-width: 700px;
   margin-left: 25%;
   margin-bottom: 60px;
+  position: relative;
+  z-index: 10;
 }
 
 .characteristic {
@@ -187,6 +314,8 @@ body {
   text-align: left;
   margin-bottom: 40px;
   margin-left: 25%;
+  position: relative;
+  z-index: 10;
 }
 
 .roadmap-text {
@@ -202,6 +331,8 @@ body {
   text-align: left;
   margin-bottom: 60px;
   margin-left: 25%;
+  position: relative;
+  z-index: 10;
 }
 
 .community-link {
@@ -227,6 +358,8 @@ body {
   margin-top: auto;
   padding: 20px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  z-index: 10;
 }
 
 .footer-content {
