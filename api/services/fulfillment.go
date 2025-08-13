@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -473,10 +474,10 @@ func (s *FulfillmentService) CreateFulfillment(ctx context.Context, intentID, tx
 	// Validate intent exists
 	intent, err := s.db.GetIntent(ctx, intentID)
 	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return fmt.Errorf("intent not found: %s", intentID)
+		}
 		return fmt.Errorf("failed to get intent: %v", err)
-	}
-	if intent == nil {
-		return fmt.Errorf("intent not found: %s", intentID)
 	}
 
 	// For API-created fulfillments, try to get the block timestamp from the transaction
@@ -607,10 +608,10 @@ func (s *FulfillmentService) CreateCallFulfillment(
 	// Validate intent exists
 	intent, err := s.db.GetIntent(ctx, intentID)
 	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return fmt.Errorf("intent not found: %s", intentID)
+		}
 		return fmt.Errorf("failed to get intent: %v", err)
-	}
-	if intent == nil {
-		return fmt.Errorf("intent not found: %s", intentID)
 	}
 
 	// Verify this is a call intent
