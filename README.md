@@ -2,6 +2,13 @@
 
 A permissionless intent-based token transfer system built on ZetaChain that enables fast cross-chain transfers through incentivized third-party fulfillers.
 
+This repository is a monorepo that contains the source for the following components of Speedrun:
+
+- `api`: the backend that listens to and index intents for fulfillers
+- `documentation`: general documentation for Speedrun
+- `frontend`: the frontend interface for the Speedrun Exchange platform
+- `landing-page`: landing page for Speedrun platform
+
 ## Overview
 
 Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infrastructure while providing faster transfer execution through a market-driven fulfillment mechanism. Users can initiate transfers with intent fees, allowing third-party agents (fulfillers) to execute transfers early on the destination chain in exchange for compensation.
@@ -81,10 +88,3 @@ Speedrun is a novel cross-chain transfer system that leverages ZetaChain's infra
 - **Intent Fee**: Set by the platform (configurable)
 - **Fulfiller Compensation**: Proportional to fulfilled amount
 - **Refund Policy**: Full refund if no fulfillment occurs
-
-## Future Enhancements
-
-- More token swap integrations
-- Market-based fee determination
-- Additional chain support (Solana, Sui)
-- Advanced automation features
