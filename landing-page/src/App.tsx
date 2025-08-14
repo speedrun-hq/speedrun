@@ -1,5 +1,4 @@
 import './App.css'
-import speedLogo from '/speed.png'
 import logoname from '/logoname.png'
 
 function App() {
