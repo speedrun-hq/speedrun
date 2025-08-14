@@ -46,7 +46,7 @@ const Navigation = () => {
   }, [isMenuOpen]);
 
   return (
-    <nav className="bg-black border-b-4 border-primary-500 relative z-50">
+    <nav className="bg-black border-b-4 border-primary-500 shadow-lg relative z-50">
       <div className="container mx-auto px-2">
         <div className="flex justify-between h-16 items-center">
           <Link
@@ -54,11 +54,10 @@ const Navigation = () => {
             className="arcade-text text-2xl text-primary-500 hover:text-primary-400 relative z-10 font-bold pl-2 flex items-center"
           >
             <img
-              src="/images/speed.png"
-              alt="Speedrun Logo"
-              className="h-10 mr-2"
+              src="/images/logoname.png"
+              alt="Speedrun"
+              className="h-10"
             />
-            SPEEDRUN
           </Link>
 
           {/* Desktop Menu */}
@@ -94,18 +93,13 @@ const Navigation = () => {
 
           {/* Mobile Menu Button */}
           <div className="lg:hidden flex items-center z-20">
-            <div className="relative z-10">
-              <ConnectWallet />
-            </div>
             <button
-              className="hamburger-btn ml-4 p-2 rounded border-2 border-green-400 text-green-400 hover:bg-green-400/20 transition-none z-50 relative cursor-pointer"
               onClick={toggleMenu}
+              className="hamburger-btn p-2 rounded-md text-primary-500 hover:text-primary-400 focus:outline-none"
               aria-label="Toggle menu"
-              type="button"
             >
               <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 pointer-events-none"
+                className="h-6 w-6"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

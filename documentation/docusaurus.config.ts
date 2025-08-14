@@ -57,10 +57,9 @@ const config: Config = {
       respectPrefersColorScheme: false, // Don't respect system preferences
     },
     navbar: {
-      title: "Speedrun",
       logo: {
-        alt: "Speedrun Logo",
-        src: "img/logo1.png", // Placeholder for the logo
+        alt: "Speedrun",
+        src: "img/logoname.png",
       },
       items: [
         {
