@@ -53,11 +53,7 @@ const Navigation = () => {
             href="/"
             className="arcade-text text-2xl text-primary-500 hover:text-primary-400 relative z-10 font-bold pl-2 flex items-center"
           >
-            <img
-              src="/images/logoname.png"
-              alt="Speedrun"
-              className="h-10"
-            />
+            <img src="/images/logoname.png" alt="Speedrun" className="h-10" />
           </Link>
 
           {/* Desktop Menu */}
