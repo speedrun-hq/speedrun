@@ -6,7 +6,7 @@ A simple landing page for the Speedrun project built with Vite and React TypeScr
 
 ### Prerequisites
 
-- Node.js (version 16 or higher)
+- Node.js (version 18 or higher)
 - npm
 
 ### Installation
