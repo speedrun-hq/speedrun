@@ -151,7 +151,6 @@ body {
 .logo-title {
   display: flex;
   align-items: center;
-  gap: 12px;
   margin-bottom: 60px;
   margin-top: 20px;
   margin-left: 25%;
@@ -159,9 +158,9 @@ body {
   z-index: 10;
 }
 
-.logo {
-  width: 36px;
-  height: 36px;
+.logoname {
+  height: 40px;
+  width: auto;
 }
 
 .arcade-text {

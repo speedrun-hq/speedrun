@@ -1,5 +1,6 @@
 import './App.css'
 import speedLogo from '/speed.png'
+import logoname from '/logoname.png'
 
 function App() {
   return (
@@ -20,13 +21,10 @@ function App() {
       {/* Logo and Title - Top Left */}
       <div className="logo-title">
         <img 
-          src={speedLogo} 
-          alt="Speedrun Logo" 
-          className="logo"
+          src={logoname} 
+          alt="Speedrun" 
+          className="logoname"
         />
-        <h1 className="arcade-text title">
-          Speedrun
-        </h1>
       </div>
 
       {/* Centered Content Container */}
