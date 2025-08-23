@@ -461,12 +461,8 @@ func (s *SettlementService) CreateSettlement(ctx context.Context, settlement *mo
 		return fmt.Errorf("failed to create settlement: %v", err)
 	}
 
-	// Mark failed if settlement indicates unsuccessful fulfillment; otherwise settled
-	status := models.IntentStatusSettled
-	if !settlement.Fulfilled {
-		status = models.IntentStatusFailed
-	}
-	if err := s.db.UpdateIntentStatus(ctx, settlement.ID, status); err != nil {
+	// Update intent status
+	if err := s.db.UpdateIntentStatus(ctx, settlement.ID, models.IntentStatusSettled); err != nil {
 		return fmt.Errorf("failed to update intent status: %v", err)
 	}
 
