@@ -54,9 +54,6 @@ const (
 
 	// IntentStatusSettled indicates the intent has been settled on the target chain
 	IntentStatusSettled IntentStatus = "settled"
-
-	// IntentStatusFailed indicates the cross-chain transaction failed
-	IntentStatusFailed IntentStatus = "failed"
 )
 
 // ToResponse converts an Intent to an IntentResponse
